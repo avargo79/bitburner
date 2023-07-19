@@ -59,10 +59,11 @@ export async function main(ns: NS): Promise<void> {
 		const total_batches = Math.floor(total_server_threads / total_attack_threads) || 1;
 
 		ns.clearLog();
-		ns.print("Excuting batches...");
 		const wkTime = ns.getWeakenTime(target.id);
 		const last_attack = performance.now() + wkTime;
 		for (let i = 0; i < total_batches; i++) {
+			ns.clearLog();
+			ns.print("Excuting batches... ", i + 1);
 			const batch: Strategy = new Strategy(ns, target);
 			batch.LandTime = last_attack + batch_offset;
 
