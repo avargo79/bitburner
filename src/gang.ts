@@ -34,7 +34,7 @@ export async function main(ns: NS): Promise<void> {
 
 		members.forEach((member, i) => {
 			tryAscend(ns, gang, member);
-			if (i % 2 == 1 && (myGang.wantedPenalty < 0.995 || myGang.wantedLevel > 1000)) {
+			if (i % 2 == 1 && myGang.wantedPenalty < 0.95 && myGang.wantedLevel > 1000) {
 				ns.gang.setMemberTask(member.name, "Vigilante Justice");
 			} else if (member.isAscend(TASK_WARFARE.minAscend) && member.canDoTask(TASK_WARFARE) && chanceToWinClash <= 0.9) {
 				if (member.data.task !== TASK_WARFARE.taskName) gang.setMemberTask(member.name, TASK_WARFARE.taskName);
