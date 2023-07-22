@@ -7,6 +7,17 @@ import PrettyTable from "./prettytable.js";
 export { autocomplete } from "./utils.js";
 
 const attack_script = "bin.wgh.js";
+const scripts_repo = "home";
+
+// Extra time to wait for all attacks to finsih before killing
+const time_to_live = -5000;
+
+// Batch execution offsets
+const batch_offset = 200;
+const hk_time_offset = 20;
+const wk1_time_offset = 40;
+const gr_time_offset = 60;
+const wk2_time_offset = 80;
 
 export async function main(ns: NS): Promise<void> {
 	ns.disableLog("ALL");
@@ -36,7 +47,7 @@ export async function main(ns: NS): Promise<void> {
 
 		servers = getServerList(ns).map((s) => new BaseServer(ns, s));
 		servers.filter((s) => !s.admin).forEach((s) => s.sudo());
-		servers.forEach((s) => ns.scp([attack_script], s.id, "home"));
+		servers.forEach((s) => ns.scp([attack_script], s.id, scripts_repo));
 
 		const attackers = servers.filter((s) => s.isAttacker);
 		attackers.forEach((s) => attacker_threads.set(s.id, s.threadCount(scriptRam)));
@@ -44,7 +55,7 @@ export async function main(ns: NS): Promise<void> {
 		await prepareTarget(target, ns, scriptRam, attackers, attacker_threads);
 
 		const batches: Strategy[] = [];
-		let batch_offset = 200;
+		let offset = batch_offset;
 		const strat: Strategy = new Strategy(ns, target);
 		const total_attack_threads = strat.HackThreads + strat.WeakThreads1 + strat.GrowThreads + strat.WeakThreads2;
 		const total_server_threads = attackers.reduce((acc, s) => (acc += s.threadCount(scriptRam)), 0);
@@ -56,19 +67,19 @@ export async function main(ns: NS): Promise<void> {
 		const last_attack = performance.now() + wkTime;
 		for (let i = 0; i < total_batches; i++) {
 			const batch: Strategy = new Strategy(ns, target);
-			batch.LandTime = last_attack + batch_offset;
+			batch.LandTime = last_attack + offset;
 
 			prepareStrategy(ns, batch, scriptRam, attackers, attacker_threads);
 			executeStrategy(ns, batch, attack_script);
 			batches.push(batch);
-			batch_offset += 160;
+			offset += 160;
 		}
 
 		const last_land_time = batches.map((a) => a.LandTime).reduce((acc, land_time) => (acc = land_time > acc ? land_time : acc), 0);
 		do {
 			ns.clearLog();
 			printLog(ns, target, "Executing - (" + batches.length + ") " + ns.tFormat(last_land_time - performance.now()));
-			if (last_land_time - performance.now() < -5000) stopAttack(ns);
+			if (last_land_time - performance.now() < time_to_live) stopAttack(ns);
 			await ns.sleep(10);
 		} while (scriptsRunning(ns, attackers, attack_script) > 0);
 
@@ -154,8 +165,8 @@ function executeStrategy(ns: NS, batch: Strategy, script: string) {
 	const grTime = Math.ceil(ns.getGrowTime(batch.Target.id));
 	const hkTime = Math.ceil(ns.getHackTime(batch.Target.id));
 
-	batch.Attacks.filter((a) => a.type == "h").forEach((a) => ns.exec(script, a.id, a.threads, batch.Target.id, "h", batch.LandTime - hkTime + 20));
-	batch.Attacks.filter((a) => a.type == "w1").forEach((a) => ns.exec(script, a.id, a.threads, batch.Target.id, "w", batch.LandTime - wkTime + 40));
-	batch.Attacks.filter((a) => a.type == "g").forEach((a) => ns.exec(script, a.id, a.threads, batch.Target.id, "g", batch.LandTime - grTime + 60));
-	batch.Attacks.filter((a) => a.type == "w2").forEach((a) => ns.exec(script, a.id, a.threads, batch.Target.id, "w", batch.LandTime - wkTime + 80));
+	batch.Attacks.filter((a) => a.type == "h").forEach((a) => ns.exec(script, a.id, a.threads, batch.Target.id, "h", batch.LandTime - hkTime + hk_time_offset));
+	batch.Attacks.filter((a) => a.type == "w1").forEach((a) => ns.exec(script, a.id, a.threads, batch.Target.id, "w", batch.LandTime - wkTime + wk1_time_offset));
+	batch.Attacks.filter((a) => a.type == "g").forEach((a) => ns.exec(script, a.id, a.threads, batch.Target.id, "g", batch.LandTime - grTime + gr_time_offset));
+	batch.Attacks.filter((a) => a.type == "w2").forEach((a) => ns.exec(script, a.id, a.threads, batch.Target.id, "w", batch.LandTime - wkTime + wk2_time_offset));
 }
