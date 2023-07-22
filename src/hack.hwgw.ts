@@ -9,21 +9,14 @@ export { autocomplete } from "./utils.js";
 const attack_script = "bin.wgh.js";
 
 export async function main(ns: NS): Promise<void> {
+	ns.disableLog("ALL");
+	ns.clearLog();
+
 	const data = ns.flags([
 		["tail", false],
 		["dry-run", false],
 		["target", ""],
 	]);
-
-	ns.disableLog("ALL");
-	ns.clearLog();
-
-	if (data["dry-run"]) {
-		printTargets(ns);
-		ns.exit();
-	}
-
-	if (data["tail"]) ns.tail();
 
 	const hostname = data["target"] as string;
 	if (!hostname) {
@@ -33,7 +26,7 @@ export async function main(ns: NS): Promise<void> {
 
 	const scriptRam = ns.getScriptRam(attack_script);
 	let servers = getServerList(ns).map((s) => new BaseServer(ns, s));
-	ns.atExit(() => killScripts(ns, attack_script, servers));
+	ns.atExit(() => stopAttack(ns));
 
 	const attacker_threads = new Map<string, number>();
 	const target = new BaseServer(ns, hostname);
@@ -48,7 +41,6 @@ export async function main(ns: NS): Promise<void> {
 		const attackers = servers.filter((s) => s.isAttacker);
 		attackers.forEach((s) => attacker_threads.set(s.id, s.threadCount(scriptRam)));
 
-		ns.print("Preparing target...");
 		await prepareTarget(target, ns, scriptRam, attackers, attacker_threads);
 
 		const batches: Strategy[] = [];
@@ -59,22 +51,19 @@ export async function main(ns: NS): Promise<void> {
 		const total_batches = Math.floor(total_server_threads / total_attack_threads) || 1;
 
 		ns.clearLog();
+		ns.print("Excuting batches... ", total_batches);
 		const wkTime = ns.getWeakenTime(target.id);
 		const last_attack = performance.now() + wkTime;
 		for (let i = 0; i < total_batches; i++) {
-			ns.clearLog();
-			ns.print("Excuting batches... ", i + 1);
 			const batch: Strategy = new Strategy(ns, target);
 			batch.LandTime = last_attack + batch_offset;
 
 			prepareStrategy(ns, batch, scriptRam, attackers, attacker_threads);
 			executeStrategy(ns, batch, attack_script);
 			batches.push(batch);
-			await ns.sleep(1);
-			batch_offset += 200;
+			batch_offset += 160;
 		}
 
-		ns.print("Waiting for batches to complete...");
 		const last_land_time = batches.map((a) => a.LandTime).reduce((acc, land_time) => (acc = land_time > acc ? land_time : acc), 0);
 		do {
 			ns.clearLog();
@@ -169,38 +158,4 @@ function executeStrategy(ns: NS, batch: Strategy, script: string) {
 	batch.Attacks.filter((a) => a.type == "w1").forEach((a) => ns.exec(script, a.id, a.threads, batch.Target.id, "w", batch.LandTime - wkTime + 40));
 	batch.Attacks.filter((a) => a.type == "g").forEach((a) => ns.exec(script, a.id, a.threads, batch.Target.id, "g", batch.LandTime - grTime + 60));
 	batch.Attacks.filter((a) => a.type == "w2").forEach((a) => ns.exec(script, a.id, a.threads, batch.Target.id, "w", batch.LandTime - wkTime + 80));
-}
-
-function killScripts(ns: NS, scriptName: string, servers: BaseServer[]) {
-	servers.forEach((s) => ns.scriptKill(scriptName, s.id));
-}
-
-function printTargets(ns: NS) {
-	const servers = getServerList(ns).map((s) => new BaseServer(ns, s));
-	servers.filter((s) => !s.admin).forEach((s) => s.sudo);
-	const totalThreads = servers.filter((s) => s.isAttacker).reduce((acc, s) => (acc += s.threadCount(2)), 0);
-
-	const targets = servers.filter((s) => s.isTarget);
-	targets.sort((a, b) => b.money.max - a.money.max);
-	const results = [];
-	for (const target of targets) {
-		const strat = new Strategy(ns, target);
-		if (totalThreads >= strat.TotalThreads) {
-			const numberOfBatches = Math.floor(totalThreads / strat.TotalThreads);
-			const weakenSeconds = Math.ceil(ns.getWeakenTime(target.id) / 1000);
-			const total_value = target.money.max * numberOfBatches;
-			const batch_run_value = (total_value / weakenSeconds) * ns.hackAnalyzeChance(target.id);
-			results.push({ server: target, batches: numberOfBatches, money: batch_run_value, total_money: formatMoney(target.money.max * numberOfBatches), hack_perc: ns.hackAnalyzeChance(target.id) });
-		}
-	}
-	results.sort((a, b) => a.money - b.money);
-
-	const pt = new PrettyTable();
-	const headers = ["SERVERNAME", "LEVEL", "TOTAL_BATCHES", "TOTAL_GAIN", "POTENTIAL", "HACK%"];
-	const rows = results.map((s) => [s.server.id, s.server.level, s.batches, s.total_money, formatMoney(s.money), (s.hack_perc * 100).toFixed(2) + "%"]);
-
-	pt.create(headers, rows);
-
-	ns.tprint(pt.print());
-	ns.tprint("Total Reslts: ", servers.length);
 }
