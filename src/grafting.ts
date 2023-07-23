@@ -7,7 +7,7 @@ export async function main(ns: NS): Promise<void> {
 
 	do {
 		avail_augs = getAugments(ns);
-		avail_augs.sort((a, b) => a.cost - b.cost || a.cost - b.cost);
+		avail_augs.sort((a, b) => a.time - b.time || a.cost - b.cost);
 
 		if (avail_augs.some((a) => a.name == "nickofolas Congruity Implant")) {
 			await graftAugmentation(ns, <IAugmentation>avail_augs.find((a) => a.name == "nickofolas Congruity Implant"));
