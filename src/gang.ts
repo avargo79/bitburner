@@ -34,6 +34,7 @@ export async function main(ns: NS): Promise<void> {
 
 		members.forEach((member, i) => {
 			tryAscend(ns, gang, member);
+
 			if (i % 2 == 1 && myGang.wantedPenalty < 0.95 && myGang.wantedLevel > 1000) {
 				ns.gang.setMemberTask(member.name, "Vigilante Justice");
 			} else if (member.isAscend(TASK_WARFARE.minAscend) && member.canDoTask(TASK_WARFARE) && chanceToWinClash <= 0.9) {
@@ -44,7 +45,6 @@ export async function main(ns: NS): Promise<void> {
 				if (member.data.task !== "Train Combat") gang.setMemberTask(member.name, "Train Combat");
 			}
 		});
-		ns.print("Wanted: ", myGang.wantedLevel, " - ", myGang.wantedPenalty);
 
 		chanceToWinClash = tryTerritoryWar(ns);
 		await ns.sleep(1000);
@@ -53,7 +53,7 @@ export async function main(ns: NS): Promise<void> {
 
 async function recruit(gang: Gang) {
 	const members = gang.getMemberNames();
-	const name = `Thug${members.length + 1}`;
+	const name = `Thug${Math.floor(Math.random() * 100 + members.length)}`;
 	gang.recruitMember(name);
 	gang.setMemberTask(name, "Train Combat");
 }
@@ -94,10 +94,7 @@ function tryAscend(ns: NS, gang: Gang, member: PlayerGangMember) {
 				ns.gang.ascendMember(member.name);
 			}
 		}
-		ns.print(member.name + ": " + result.toFixed(3));
-	} catch {
-		ns.print(member.name + ": can't ascend");
-	}
+	} catch {}
 }
 
 function tryTerritoryWar(ns: NS) {
