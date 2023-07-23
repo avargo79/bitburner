@@ -1,109 +1,133 @@
-//
-//Stock market bot for bitburner, primary written by steamid / Meng - https://danielyxie.github.io/bitburner/
-// Modified by Tonalnan https://steamcommunity.com/profiles/76561198152627199/
+// https://github.com/chrisrabe/bitburner-automation/blob/main/_stable/diamond-hands.js
 
 import { NS } from "../NetscriptDefinitions";
+import { formatMoney } from "./utils";
+
+const fees = 100000; // 100k commission
+const tradeFees = 2 * fees; // buy + sell transactions
+const tickDuration = 5 * 1000; // ~4s offline, ~6s online (5s compromise)
 
 /** @param {NS} ns **/
 export async function main(ns: NS) {
-	ns.disableLog("sleep");
-	ns.disableLog("getServerMoneyAvailable");
-	const stockSymbols = ns.stock.getSymbols(); // all symbols
-	const portfolio: Stock[] = []; // init portfolio
-
-	//~~~~~~~~~~~~~~~~~~~~~You can edit these~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	const FORECAST_THRESH = 0.6; // buy above this forecast value, 0.6=60% (0.6 default)
-	const MIN_CASH = 200000; // minimum cash to keep (0 default)
-	const SELL_THRESH = 0.5; // sell belove this forecast value, 0.5=50% (0.5 default)
-	const SPEND_RATIO = 1; // spends up to this ratio of your total money to buy stocks (minus your min_cash set), 1=100% (1 default)
-	const MIN_SPEND = 100000000; // minimum available money to buy stocks, limited due to 100k commission fees, 100000000=100m (100000000 default)
-	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-	ns.print("Starting run - Do we own any stocks?"); //Finds and adds any stocks we already own
-	for (const stock of stockSymbols) {
-		const pos = ns.stock.getPosition(stock);
-		if (pos[0] > 0) {
-			portfolio.push({ sym: stock, value: pos[1], shares: pos[0] });
-			ns.print("Detected: " + stock + ", quant: " + pos[0] + " @ " + pos[1]);
-		}
-	}
-
-	if (ns.getServerMoneyAvailable("home") < MIN_CASH) {
-		ns.print("Stockbot has no money to play with!");
-		ns.print("Stockbot will nap for 5 mins while you make some money");
-		await ns.sleep(300000);
-	}
+	ns.disableLog("ALL");
 
 	while (true) {
-		const goodoffers: StockOffer[] = [];
-		let lenght = 0;
-		for (const stock of stockSymbols) {
-			// for each stock symbol
-			if (portfolio.findIndex((obj) => obj.sym === stock) !== -1) {
-				//if we own the stock...
-				if (ns.stock.getForecast(stock) < SELL_THRESH) {
-					//...look at forecast to decide sell it
-					sellStock(stock);
+		let overallValue = 0;
+		const stocks = getStocks(ns);
+		overallValue = takeTendies(ns, stocks, overallValue);
+		yolo(ns, stocks);
+		ns.print("Stock value: " + formatMoney(overallValue));
+		ns.print("");
+		// @TODO - Extend for market manipulation
+		// - hack -> makes stock more likely to go down
+		// - grow -> makes stock more likely to go up
+		await ns.sleep(tickDuration);
+	}
+}
+
+interface IStock {
+	symbol: string;
+	longShares: number;
+	longPrice: number;
+	shortShares: number;
+	shortPrice: number;
+	forecast: number;
+	volatility: number;
+	askPrice: number;
+	bidPrice: number;
+	maxShares: number;
+	profit: number;
+	cost: number;
+	shares: number;
+	profitPotential: number;
+	summary: string;
+}
+
+function getStocks(ns: NS) {
+	const stockSymbols = ns.stock.getSymbols();
+	const stocks: IStock[] = [];
+	for (const symbol of stockSymbols) {
+		const pos = ns.stock.getPosition(symbol);
+		const stock: IStock = {
+			symbol,
+			longShares: pos[0],
+			longPrice: pos[1],
+			shortShares: pos[2],
+			shortPrice: pos[3],
+			forecast: ns.stock.getForecast(symbol),
+			volatility: ns.stock.getVolatility(symbol),
+			askPrice: ns.stock.getAskPrice(symbol),
+			bidPrice: ns.stock.getBidPrice(symbol),
+			maxShares: ns.stock.getMaxShares(symbol),
+			profit: 0,
+			cost: 0,
+			shares: 0,
+			profitPotential: 0,
+			summary: "",
+		};
+		const longProfit = stock.longShares * (stock.bidPrice - stock.longPrice) - tradeFees;
+		const shortProfit = stock.shortPrice * (stock.shortPrice - stock.askPrice) - tradeFees;
+		stock.profit = longProfit + shortProfit;
+
+		const longCost = stock.longShares * stock.longPrice;
+		const shortCost = stock.shortShares * stock.shortPrice;
+		stock.cost = longCost + shortCost;
+		// 0.6 -> 0.1 (10% - LONG)
+		// 0.4 -> 0.1 (10% - SHORT)
+		const profitChance = Math.abs(stock.forecast - 0.5); // chance to make profit for either positions
+		stock.profitPotential = stock.volatility * profitChance; // potential to get the price movement
+
+		stock.summary = `${stock.symbol}: ${stock.forecast.toFixed(3)} +/- ${stock.volatility.toFixed(3)}`;
+		stocks.push(stock);
+	}
+
+	// Sort by profit potential
+	return stocks.sort((a, b) => b.profitPotential - a.profitPotential);
+}
+
+function takeLongTendies(ns: NS, stock: IStock, overallValue: number) {
+	if (stock.forecast > 0.5) {
+		// HOLD
+		const curValue = stock.cost + stock.profit;
+		const roi = ns.formatNumber(100 * (stock.profit / stock.cost), 2);
+		ns.print(`INFO\t ${stock.summary} LONG ${formatMoney(curValue)} ${roi}%`);
+		overallValue += curValue;
+	} else {
+		// Take tendies!
+		const salePrice = ns.stock.sellStock(stock.symbol, stock.longShares);
+		const saleTotal = salePrice * stock.longShares;
+		const saleCost = stock.longPrice * stock.longShares;
+		const saleProfit = saleTotal - saleCost - tradeFees;
+		stock.shares = 0;
+		ns.print(`WARN\t${stock.summary} SOLD for ${formatMoney(saleProfit)} profit`);
+	}
+
+	return overallValue;
+}
+
+function takeTendies(ns: NS, stocks: IStock[], overallValue: number) {
+	for (const stock of stocks) {
+		if (stock.longShares > 0) {
+			overallValue = takeLongTendies(ns, stock, overallValue);
+		}
+		// @TODO - Implement takeShortTendies when we have access (BN8)
+	}
+	return overallValue;
+}
+
+function yolo(ns: NS, stocks: IStock[]) {
+	const riskThresh = 20 * fees;
+	for (const stock of stocks) {
+		const money = ns.getPlayer().money * 0.25; //Limit the money used to 25% of player funds
+		if (stock.forecast > 0.55) {
+			if (money > riskThresh) {
+				const sharesWeCanBuy = Math.floor((money - fees) / stock.askPrice);
+				const sharesToBuy = Math.min(stock.maxShares, sharesWeCanBuy);
+				if (ns.stock.buyStock(stock.symbol, sharesToBuy) > 0) {
+					ns.print(`WARN\t${stock.summary}\t- LONG @ ${formatMoney(sharesToBuy)}`);
 				}
 			}
-			if (ns.stock.getForecast(stock) >= FORECAST_THRESH) {
-				//if the forecast is better than threshold then...
-				goodoffers.push({ symbol: stock, value: (ns.stock.getForecast(stock) - 0.5) * ns.stock.getVolatility(stock) }); //...record it to stock massive with information about profitability
-				lenght += 1;
-			}
 		}
-
-		goodoffers.sort((a, b) => b.value - a.value); //standart js-optimized sort of quicksort, google for more info, do the same as bubble sort below
-
-		for (let i = 0; i < lenght; i++) {
-			//buy stocks from most profitable to less
-			if ((ns.getServerMoneyAvailable("home") - MIN_CASH - 100000) * SPEND_RATIO > MIN_SPEND && ns.stock.getMaxShares(goodoffers[i].symbol) > ns.stock.getPosition(goodoffers[i].symbol)[0]) {
-				buyStock(goodoffers[i].symbol);
-			}
-		}
-
-		await ns.sleep(6000); //wait for stocks update
+		// @TODO sell short when we have access (BN8)
 	}
-
-	function buyStock(stock: string) {
-		const stockPrice = ns.stock.getAskPrice(stock); // Get the stockprice
-		const shares = stockBuyQuantCalc(stockPrice, stock); // calculate the shares to buy using stockBuyQuantCalc
-		ns.stock.buyStock(stock, shares);
-		ns.print("Bought: " + stock + ", quant: " + Math.round(shares) + " @ $" + Math.round(stockPrice));
-		portfolio.push({ sym: stock, value: stockPrice, shares: shares }); //store the purchase info in portfolio
-	}
-
-	function sellStock(stock: string) {
-		const position = ns.stock.getPosition(stock);
-		const stockPrice = ns.stock.getAskPrice(stock);
-		const i = portfolio.findIndex((obj) => obj.sym === stock); //Find the stock info in the portfolio
-		ns.print("SOLD: " + stock + ", quant: " + Math.round(portfolio[i].shares) + " @ $" + Math.round(stockPrice) + " - bought at $" + Math.round(portfolio[i].value));
-		portfolio.splice(i, 1); // Remove the stock from portfolio
-		ns.stock.sellStock(stock, position[0]);
-	}
-
-	function stockBuyQuantCalc(stockPrice: number, stock: string) {
-		// Calculates how many shares to buy
-		const playerMoney = ns.getServerMoneyAvailable("home") - MIN_CASH - 100000;
-		const maxSpend = playerMoney * SPEND_RATIO;
-		const calcShares = Math.floor(maxSpend / stockPrice);
-		const position = ns.stock.getPosition(stock);
-		const avShares = ns.stock.getMaxShares(stock) - position[0];
-		if (calcShares > avShares) {
-			return avShares;
-		} else {
-			return calcShares;
-		}
-	}
-}
-
-interface Stock {
-	sym: string;
-	value: number;
-	shares: number;
-}
-
-interface StockOffer {
-	symbol: string;
-	value: number;
 }
