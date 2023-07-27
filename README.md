@@ -20,6 +20,7 @@ Due to the usage of the RFA system, it works with Web and Electron versions of t
 ## Quick start
 
 Download the template to your computer and install everything it requires:
+
 ```
 git clone https://github.com/bitburner-official/typescript-template
 cd typescript-template
@@ -39,6 +40,7 @@ in the Remote API section of the game settings, and press the connect button.
 [See here for step by step installation](BeginnersGuide.md) if you'd like help with installing Node and/or connecting to the game.
 
 ## Advanced
+
 ### Imports
 
 To ensure both the game and typescript have no issues with import paths, your import statements should follow a few formatting rules:
@@ -70,3 +72,11 @@ import { someFunction } from "main";
 ### Debugging
 
 For debugging bitburner on Steam you will need to enable a remote debugging port. This can be done by rightclicking bitburner in your Steam library and selecting properties. There you need to add `--remote-debugging-port=9222` [Thanks @DarkMio]
+
+### References used
+
+- https://github.com/bitburner-official
+- https://github.com/trhr/lets-play-bitburner
+- https://github.com/moriakaice/bitburner
+- https://github.com/chrisrabe/bitburner-automation/tree/main
+- https://github.com/Mughur/BBScripts
