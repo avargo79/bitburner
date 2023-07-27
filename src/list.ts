@@ -63,5 +63,5 @@ export async function main(ns: NS) {
 	pt.create(headers, rows);
 
 	ns.tprint(pt.print());
-	ns.tprint("Total Reslts: ", servers.length);
+	ns.tprint("Total Results: ", servers.length);
 }
