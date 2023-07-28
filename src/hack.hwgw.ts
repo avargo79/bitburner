@@ -73,6 +73,7 @@ export async function main(ns: NS): Promise<void> {
 			executeStrategy(ns, batch, attack_script);
 			batches.push(batch);
 			offset += 160;
+			await ns.sleep(0);
 		}
 
 		const last_land_time = batches.map((a) => a.LandTime).reduce((acc, land_time) => (acc = land_time > acc ? land_time : acc), 0);
