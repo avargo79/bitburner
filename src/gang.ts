@@ -22,18 +22,22 @@ export async function main(ns: NS): Promise<void> {
 
 	TASK_XREF.sort((a, b) => a.maxMembers - b.maxMembers);
 	let chanceToWinClash = 1;
+	const ALL_EQUIPMENT = ns.gang.getEquipmentNames();
+
 	while (true) {
 		ns.clearLog();
 
-		if (myGang.canRecruit) {
-			recruit(gang);
-		}
+		if (myGang.canRecruit) recruit(gang);
 		const members = myGang.members;
 		const task = <TaskInfo>TASK_XREF.find((t) => members.length <= t.maxMembers);
 		ns.print("Selected: ", task.taskName, ": ", task.maxMembers, " - ", members.length);
 
 		members.forEach((member, i) => {
-			tryAscend(ns, gang, member);
+			tryAscend(ns, member);
+
+			if (myGang.territory > 0.84) {
+				tryBuyEquipment(ns, member, ALL_EQUIPMENT);
+			}
 
 			if (i % 2 == 1 && myGang.wantedPenalty < 0.95 && myGang.wantedLevel > 1000) {
 				ns.gang.setMemberTask(member.name, "Vigilante Justice");
@@ -58,11 +62,11 @@ async function recruit(gang: Gang) {
 	gang.setMemberTask(name, "Train Combat");
 }
 
-function tryAscend(ns: NS, gang: Gang, member: PlayerGangMember) {
+function tryAscend(ns: NS, member: PlayerGangMember) {
 	const asc = ns.gang.getAscensionResult(member.name);
 	if (!asc) return;
 
-	const memberNames = gang.getMemberNames();
+	const memberNames = ns.gang.getMemberNames();
 
 	try {
 		const stats = ns.gang.getMemberInformation(member.name);
@@ -95,6 +99,17 @@ function tryAscend(ns: NS, gang: Gang, member: PlayerGangMember) {
 			}
 		}
 	} catch {}
+}
+
+function tryBuyEquipment(ns: NS, member: PlayerGangMember, equipmentList: string[]) {
+	let buyList = equipmentList.filter((e) => !member.data.augmentations.includes(e));
+	buyList = equipmentList.filter((e) => !member.data.upgrades.includes(e));
+
+	for (const equipment of buyList) {
+		if (ns.getServerMoneyAvailable("home") < ns.gang.getEquipmentCost(equipment)) continue;
+		const bought = ns.gang.purchaseEquipment(member.name, equipment);
+		if (bought) ns.print(member.name, " bought ", buyList[0]);
+	}
 }
 
 function tryTerritoryWar(ns: NS) {

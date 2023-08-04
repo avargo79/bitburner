@@ -2,6 +2,8 @@ import { NS } from "@ns";
 import { getServerList, scriptsRunning } from "./utils.js";
 import BaseServer from "./server.js";
 
+export { autocomplete } from "utils.js";
+
 export async function main(ns: NS): Promise<void> {
 	ns.disableLog("ALL");
 
@@ -14,8 +16,12 @@ export async function main(ns: NS): Promise<void> {
 
 	const attackers = servers.filter((s) => s.isAttacker);
 	attackers.sort((a, b) => b.ram.free - a.ram.free);
-	const targets = servers.filter((s) => s.isTarget && s.needsPrep);
+	let targets = servers.filter((s) => s.isTarget && s.needsPrep);
 	targets.sort((a, b) => a.level - b.level);
+
+	if (ns.args[0]) {
+		targets = targets.filter((s) => s.hostname == ns.args[0]);
+	}
 
 	do {
 		for (const target of targets) {

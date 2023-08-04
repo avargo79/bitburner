@@ -38,32 +38,50 @@ export async function main(ns: NS): Promise<void> {
 				continue;
 			}
 
-			const lowestStat = Math.min(sleeve.skills.strength, sleeve.skills.defense, sleeve.skills.dexterity, sleeve.skills.agility);
-			if (lowestStat > 49 && ns.heart.break() > -54000) {
-				ns.sleeve.setToCommitCrime(i, "Homicide");
-				ns.print("Commiting Homicide ", i);
-			} else if (lowestStat == sleeve.skills.strength) {
-				ns.sleeve.setToGymWorkout(i, "Powerhouse Gym", "Strength");
-				ns.print("Training Strength ", i);
-			} else if (lowestStat == sleeve.skills.defense) {
-				ns.sleeve.setToGymWorkout(i, "Powerhouse Gym", "Defense");
-				ns.print("Training Defense ", i);
-			} else if (lowestStat == sleeve.skills.dexterity) {
-				ns.sleeve.setToGymWorkout(i, "Powerhouse Gym", "Dexterity");
-				ns.print("Training Dexterity ", i);
-			} else if (lowestStat == sleeve.skills.agility) {
-				ns.sleeve.setToGymWorkout(i, "Powerhouse Gym", "Agility");
-				ns.print("Training Agility ", i);
+			buyAugments(ns, i);
+
+			if (sleeve.city != "Sector-12") {
+				ns.sleeve.travel(i, "Sector-12");
 			}
-			// } else if (lowestStat == sleeve.skills.charisma) {
-			// 	ns.sleeve.setToUniversityCourse(i, "Rothman University", "Leadership");
-			// 	ns.print("Training Charisma ", i);
-			// }
-			// } else if (lowestStat == sleeve.skills.hacking) {
-			// 		ns.sleeve.setToUniversityCourse(i, "Rothman University", "Study Computer Science");
-			// 		ns.print("Training Charisma ", i);
-			// }
+
+			const lowestStat = Math.min(sleeve.skills.hacking, sleeve.skills.charisma, sleeve.skills.strength, sleeve.skills.defense, sleeve.skills.dexterity, sleeve.skills.agility);
+
+			// Grind karma to start a gang
+			const grindKarma = ns.getResetInfo().currentNode !== 2 && lowestStat > 49 && ns.heart.break() > -54000;
+			if (grindKarma) {
+				ns.sleeve.setToCommitCrime(i, "Homicide");
+				ns.print("Commiting Homicide to loss karma ", i);
+			} else {
+				// Grind stats
+				if (lowestStat == sleeve.skills.strength) {
+					ns.sleeve.setToGymWorkout(i, "Powerhouse Gym", "Strength");
+					ns.print("Training Strength ", i);
+				} else if (lowestStat == sleeve.skills.defense) {
+					ns.sleeve.setToGymWorkout(i, "Powerhouse Gym", "Defense");
+					ns.print("Training Defense ", i);
+				} else if (lowestStat == sleeve.skills.dexterity) {
+					ns.sleeve.setToGymWorkout(i, "Powerhouse Gym", "Dexterity");
+					ns.print("Training Dexterity ", i);
+				} else if (lowestStat == sleeve.skills.agility) {
+					ns.sleeve.setToGymWorkout(i, "Powerhouse Gym", "Agility");
+					ns.print("Training Agility ", i);
+				} else if (lowestStat == sleeve.skills.charisma) {
+					ns.sleeve.setToUniversityCourse(i, "Rothman University", "Leadership");
+					ns.print("Training Charisma ", i);
+				} else if (lowestStat == sleeve.skills.hacking) {
+					ns.sleeve.setToUniversityCourse(i, "Rothman University", "Algorithms");
+					ns.print("Training Hacking ", i);
+				}
+			}
 		}
 		await ns.sleep(10);
+	}
+}
+function buyAugments(ns: NS, i: number) {
+	const augs = ns.sleeve.getSleevePurchasableAugs(i);
+	augs.sort((a, b) => a.cost - b.cost);
+	for (const aug of augs) {
+		if (aug.cost > ns.getServerMoneyAvailable("home")) break;
+		ns.sleeve.purchaseSleeveAug(i, aug.name);
 	}
 }

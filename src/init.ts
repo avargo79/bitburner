@@ -10,11 +10,17 @@ export async function main(ns: NS): Promise<void> {
 	await ns.sleep(10);
 
 	ns.run("hnet.js");
-	ns.run("pserver.js");
 
-	if (currentRam < 32) {
-		ns.run("hack.early.js", 1, "--tail", "--target", "n00dles");
+	if (currentRam < 64) {
+		// const pid = ns.run("hack.early.js", 1, "--target", "n00dles");
+		// ns.tail(pid);
+		ns.run("pserver.js");
 	} else {
-		ns.run("hack.hwgw.js", 1, "--tail", "--target", "n00dles");
+		// const pid = ns.run("hack.hwgw.js", 1, "--target", "n00dles");
+		// ns.tail(pid);
+		// ns.run("pserver.js", 1, "--max-power", "21");
+		ns.run("pserver.js");
+		ns.run("gang.js");
+		ns.run("sleeve.js");
 	}
 }
