@@ -38,13 +38,16 @@ export async function main(ns: NS): Promise<void> {
 				continue;
 			}
 
-			buyAugments(ns, i);
-
 			if (sleeve.city != "Sector-12") {
 				ns.sleeve.travel(i, "Sector-12");
 			}
 
 			const lowestStat = Math.min(sleeve.skills.hacking, sleeve.skills.charisma, sleeve.skills.strength, sleeve.skills.defense, sleeve.skills.dexterity, sleeve.skills.agility);
+
+			// only buy an augment every time stats >= 175 to grind int
+			if (lowestStat >= 175) {
+				buyAugments(ns, i);
+			}
 
 			// Grind karma to start a gang
 			const targetStats = 100;
@@ -83,6 +86,6 @@ function buyAugments(ns: NS, i: number) {
 	augs.sort((a, b) => a.cost - b.cost);
 	for (const aug of augs) {
 		if (aug.cost > ns.getServerMoneyAvailable("home")) break;
-		ns.sleeve.purchaseSleeveAug(i, aug.name);
+		if (ns.sleeve.purchaseSleeveAug(i, aug.name)) break;
 	}
 }
