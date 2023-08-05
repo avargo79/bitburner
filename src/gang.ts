@@ -35,7 +35,7 @@ export async function main(ns: NS): Promise<void> {
 		members.forEach((member, i) => {
 			tryAscend(ns, member);
 
-			if (myGang.territory > 0.84) {
+			if (myGang.territory > 0.74) {
 				tryBuyEquipment(ns, member, ALL_EQUIPMENT);
 			}
 

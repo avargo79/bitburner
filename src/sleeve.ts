@@ -47,9 +47,10 @@ export async function main(ns: NS): Promise<void> {
 			const lowestStat = Math.min(sleeve.skills.hacking, sleeve.skills.charisma, sleeve.skills.strength, sleeve.skills.defense, sleeve.skills.dexterity, sleeve.skills.agility);
 
 			// Grind karma to start a gang
-			const grindKarma = ns.getResetInfo().currentNode !== 2 && lowestStat > 49 && ns.heart.break() > -54000;
+			const targetStats = 100;
+			const grindKarma = ns.getResetInfo().currentNode !== 2 && lowestStat >= targetStats && ns.heart.break() > -54000;
 			if (grindKarma) {
-				ns.sleeve.setToCommitCrime(i, "Homicide");
+				if (ns.sleeve.getTask(i)?.type != "CRIME") ns.sleeve.setToCommitCrime(i, "Homicide");
 				ns.print("Commiting Homicide to loss karma ", i);
 			} else {
 				// Grind stats
