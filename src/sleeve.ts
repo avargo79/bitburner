@@ -1,5 +1,9 @@
 import { NS } from "@ns";
 
+const BUY_AUG_TARGET_STATS = 200;
+const MIN_CRIME_STATS = 100;
+const GANG_REQUIRED_KARMA = -54000;
+
 export async function main(ns: NS): Promise<void> {
 	ns.disableLog("ALL");
 
@@ -42,16 +46,23 @@ export async function main(ns: NS): Promise<void> {
 				ns.sleeve.travel(i, "Sector-12");
 			}
 
-			const lowestStat = Math.min(sleeve.skills.hacking, sleeve.skills.charisma, sleeve.skills.strength, sleeve.skills.defense, sleeve.skills.dexterity, sleeve.skills.agility);
+			const lowestStat = Math.min(
+				sleeve.skills.hacking,
+				sleeve.skills.charisma,
+				sleeve.skills.strength,
+				sleeve.skills.defense,
+				sleeve.skills.dexterity,
+				sleeve.skills.agility
+			);
 
-			// only buy an augment every time stats >= 175 to grind int
-			if (lowestStat >= 175) {
-				buyAugments(ns, i);
-			}
+			// only buy an augment every time stats hit a limit to grind int
+			// if (lowestStat >= BUY_AUG_TARGET_STATS) {
+			// 	buyAugments(ns, i);
+			// }
 
 			// Grind karma to start a gang
-			const targetStats = 100;
-			const grindKarma = ns.getResetInfo().currentNode !== 2 && lowestStat >= targetStats && ns.heart.break() > -54000;
+			const grindKarma =
+				ns.getResetInfo().currentNode !== 2 && lowestStat >= MIN_CRIME_STATS && ns.heart.break() > GANG_REQUIRED_KARMA;
 			if (grindKarma) {
 				if (ns.sleeve.getTask(i)?.type != "CRIME") ns.sleeve.setToCommitCrime(i, "Homicide");
 				ns.print("Commiting Homicide to loss karma ", i);
