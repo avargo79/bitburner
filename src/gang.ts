@@ -3,12 +3,42 @@ import { Gang, NS } from "@ns";
 const factionName = "Slum Snakes";
 
 const TASK_XREF: TaskInfo[] = [
-	{ taskName: "Mug People", maxMembers: 5, minStats: 25, minAscend: 1, chanceToWinClash: 0 },
-	{ taskName: "Terrorism", maxMembers: 9, minStats: 100, minAscend: 4, chanceToWinClash: 0 },
-	{ taskName: "Terrorism", maxMembers: 11, minStats: 100, minAscend: 16, chanceToWinClash: 0 },
-	{ taskName: "Human Trafficking", maxMembers: 12, minStats: 100, minAscend: 16, chanceToWinClash: 0 },
+	{
+		taskName: "Mug People",
+		maxMembers: 5,
+		minStats: 25,
+		minAscend: 1,
+		chanceToWinClash: 0,
+	},
+	{
+		taskName: "Terrorism",
+		maxMembers: 9,
+		minStats: 100,
+		minAscend: 4,
+		chanceToWinClash: 0,
+	},
+	{
+		taskName: "Terrorism",
+		maxMembers: 11,
+		minStats: 100,
+		minAscend: 16,
+		chanceToWinClash: 0,
+	},
+	{
+		taskName: "Human Trafficking",
+		maxMembers: 12,
+		minStats: 100,
+		minAscend: 16,
+		chanceToWinClash: 0,
+	},
 ];
-const TASK_WARFARE: TaskInfo = { taskName: "Territory Warfare", maxMembers: 12, minStats: 100, minAscend: 16, chanceToWinClash: 0.9 }; // based on chance to win
+const TASK_WARFARE: TaskInfo = {
+	taskName: "Territory Warfare",
+	maxMembers: 12,
+	minStats: 100,
+	minAscend: 16,
+	chanceToWinClash: 0.9,
+}; // based on chance to win
 
 export async function main(ns: NS): Promise<void> {
 	ns.disableLog("ALL");
@@ -35,9 +65,9 @@ export async function main(ns: NS): Promise<void> {
 		members.forEach((member, i) => {
 			tryAscend(ns, member);
 
-			if (myGang.territory > 0.74) {
-				tryBuyEquipment(ns, member, ALL_EQUIPMENT);
-			}
+			// if (myGang.territory > 0.74) {
+			// 	tryBuyEquipment(ns, member, ALL_EQUIPMENT);
+			// }
 
 			if (i % 2 == 1 && myGang.wantedPenalty < 0.95 && myGang.wantedLevel > 1000) {
 				ns.gang.setMemberTask(member.name, "Vigilante Justice");
@@ -71,7 +101,13 @@ function tryAscend(ns: NS, member: PlayerGangMember) {
 	try {
 		const stats = ns.gang.getMemberInformation(member.name);
 		const result = Math.max(asc.cha, asc.def, asc.dex, asc.hack, asc.str);
-		const highest = Math.max(stats.cha_asc_mult, stats.def_asc_mult, stats.dex_asc_mult, stats.hack_asc_mult, stats.str_asc_mult);
+		const highest = Math.max(
+			stats.cha_asc_mult,
+			stats.def_asc_mult,
+			stats.dex_asc_mult,
+			stats.hack_asc_mult,
+			stats.str_asc_mult
+		);
 
 		if (result >= 1.2 && (memberNames.length < 10 || memberNames.length == 12)) {
 			ns.gang.ascendMember(member.name);
@@ -102,8 +138,9 @@ function tryAscend(ns: NS, member: PlayerGangMember) {
 }
 
 function tryBuyEquipment(ns: NS, member: PlayerGangMember, equipmentList: string[]) {
-	let buyList = equipmentList.filter((e) => !member.data.augmentations.includes(e));
-	buyList = equipmentList.filter((e) => !member.data.upgrades.includes(e));
+	const buyList = equipmentList
+		.filter((e) => !member.data.augmentations.includes(e))
+		.filter((e) => !member.data.upgrades.includes(e));
 
 	for (const equipment of buyList) {
 		if (ns.getServerMoneyAvailable("home") < ns.gang.getEquipmentCost(equipment)) continue;
@@ -116,7 +153,10 @@ function tryTerritoryWar(ns: NS) {
 	const otherGangsInfo = ns.gang.getOtherGangInformation();
 	const otherGangNames = Object.keys(otherGangsInfo);
 	const otherGangData = Object.values(otherGangsInfo);
-	const otherGangs = otherGangNames.map((gangName, index) => ({ name: gangName, ...otherGangData[index] }));
+	const otherGangs = otherGangNames.map((gangName, index) => ({
+		name: gangName,
+		...otherGangData[index],
+	}));
 
 	let min = 1;
 	for (const otherGang of otherGangs) {
@@ -181,7 +221,10 @@ class PlayerGang {
 		const otherGangsInfo = this.ns.gang.getOtherGangInformation();
 		const otherGangNames = Object.keys(otherGangsInfo);
 		const otherGangData = Object.values(otherGangsInfo);
-		return otherGangNames.map((gangName, index) => ({ name: gangName, ...otherGangData[index] }));
+		return otherGangNames.map((gangName, index) => ({
+			name: gangName,
+			...otherGangData[index],
+		}));
 	}
 
 	createGang(factionName: string) {
@@ -257,7 +300,16 @@ class PlayerGangMember {
 	}
 
 	isAscend(goal: number) {
-		return Math.max(this.stats.agi.asc_mult, this.stats.cha.asc_mult, this.stats.def.asc_mult, this.stats.dex.asc_mult, this.stats.hack.asc_mult, this.stats.str.asc_mult) >= goal;
+		return (
+			Math.max(
+				this.stats.agi.asc_mult,
+				this.stats.cha.asc_mult,
+				this.stats.def.asc_mult,
+				this.stats.dex.asc_mult,
+				this.stats.hack.asc_mult,
+				this.stats.str.asc_mult
+			) >= goal
+		);
 	}
 }
 
