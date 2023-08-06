@@ -36,6 +36,15 @@ export async function main(ns: NS) {
 	recursiveScan(ns, "", "home", server, route);
 
 	const cmd = "connect " + route.join("; connect ") + "; backdoor";
-	navigator.clipboard.writeText(cmd);
-	ns.tprint("Route was added to the clipboard.");
+	const terminalInput = document.getElementById("terminal-input");
+	if (!terminalInput) {
+		navigator.clipboard.writeText(cmd);
+		ns.tprint("Route was added to the clipboard.");
+		return;
+	}
+
+	terminalInput.value = cmd;
+	const handler = Object.keys(terminalInput)[1];
+	terminalInput[handler].onChange({ target: terminalInput });
+	terminalInput[handler].onKeyDown({ key: "Enter", preventDefault: () => null });
 }
