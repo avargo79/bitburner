@@ -65,9 +65,9 @@ export async function main(ns: NS): Promise<void> {
 		members.forEach((member, i) => {
 			tryAscend(ns, member);
 
-			// if (myGang.territory > 0.74) {
-			// 	tryBuyEquipment(ns, member, ALL_EQUIPMENT);
-			// }
+			if (myGang.territory > 0.89) {
+				tryBuyEquipment(ns, member, ALL_EQUIPMENT);
+			}
 
 			if (i % 2 == 1 && myGang.wantedPenalty < 0.95 && myGang.wantedLevel > 1000) {
 				ns.gang.setMemberTask(member.name, "Vigilante Justice");
