@@ -7,7 +7,8 @@
         "eslint:recommended",
         "plugin:@typescript-eslint/recommended"
     ],
-    "overrides": [],
+    "overrides": [
+    ],
     "parser": "@typescript-eslint/parser",
     "parserOptions": {
         "ecmaVersion": "latest",
@@ -23,7 +24,5 @@
         "NetscriptDefinitions.d.ts"
     ],
     "rules": {
-        "no-empty": "off",
-        "no-constant-condition": "off"
     }
 }
