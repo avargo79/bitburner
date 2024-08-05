@@ -5,7 +5,7 @@ import { IScriptTask, ScriptTask } from "/lib/tasks";
 import UpdatePlayerTask from "./tasks/updatePlayerTask";
 import UpdateServersTask from "./tasks/updateServersTask";
 import UpdateResetInfoTask from "./tasks/updateResetInfoTask";
-import SolverContractsTask from "./tasks/solveContractsTask";
+import SolveContractsTask from "./tasks/solveContractsTask";
 import RootServersTask from "./tasks/rootServersTask";
 
 const sleepInterval = 100;
@@ -23,11 +23,12 @@ const Tasks: Record<string, ScriptTask> = {
     [TaskNames.UpdatePlayer]: UpdatePlayerTask(TaskNames.UpdatePlayer),
     [TaskNames.UpdateServers]: UpdateServersTask(TaskNames.UpdateServers),
     [TaskNames.UpdateResetInfo]: UpdateResetInfoTask(TaskNames.UpdateResetInfo),
-    [TaskNames.SolveContracts]: SolverContractsTask(TaskNames.SolveContracts),
+    [TaskNames.SolveContracts]: SolveContractsTask(TaskNames.SolveContracts),
     [TaskNames.RootServers]: RootServersTask(TaskNames.RootServers),
 };
 
 export async function main(ns: NS): Promise<void> {
+    ns.clearLog();
     ns.disableLog('sleep');
     ns.disableLog('getServerMaxRam');
     ns.disableLog('getServerUsedRam');
