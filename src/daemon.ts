@@ -34,7 +34,7 @@ export async function main(ns: NS): Promise<void> {
     ns.disableLog('sleep');
     ns.disableLog('getServerMaxRam');
     ns.disableLog('getServerUsedRam');
-    if (ns.ps().find(p => p.filename === 'datamanager.js' && p.pid !== ns.getRunningScript()?.pid)) return;
+    if (ns.ps().find(p => p.filename === ns.getScriptName() && p.pid !== ns.getRunningScript()?.pid)) return;
 
     const database = new Database();
     await database.open();
