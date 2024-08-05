@@ -6,11 +6,12 @@ export interface IScriptPlayer extends Player {
 
 export interface IScriptServer extends Server {
     files: string[];
+    pids: { filename: string, threads: number, args: any[], pid: number, temporary: boolean }[];
     hack: {
         wkTime: number;
         grTime: number;
         hkTime: number;
-    }
+    };
 }
 
 export interface IScriptResetInfo extends ResetInfo {
