@@ -1,13 +1,7 @@
 import { NS } from "@ns";
-import PrettyTable from "./prettytable";
-import { formatMoney, getServerList } from "./utils";
-import BaseServer from "./server";
 
-/** @param {NS} ns **/
-export async function main(ns: NS) {
-	ns.disableLog("ALL");
-	ns.clearLog();
-
-	const servers = getServerList(ns).map((s) => new BaseServer(ns, s));
-	servers.filter((s) => !s.admin).forEach((s) => s.sudo());
+export async function main(ns: NS): Promise<void> {
+    const hostname = '';
+    try{ ns.brutessh(hostname); ns.ftpcrack(hostname); ns.relaysmtp(hostname); ns.httpworm(hostname); ns.sqlinject(hostname); } catch(e){}
+    try{ ns.nuke(hostname); } catch(e){}
 }
