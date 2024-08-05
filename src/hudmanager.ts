@@ -1,5 +1,5 @@
 import { NS } from "@ns";
-import { IScriptPlayer, IScriptServer, IScriptResetInfo } from "/lib/models";
+import { IScriptPlayer } from "/lib/models";
 import { Database } from "/lib/database";
 
 export async function main(ns: NS): Promise<void> {
