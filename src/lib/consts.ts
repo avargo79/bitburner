@@ -1,4 +1,3 @@
-
 export enum FactionName {
     Illuminati = "Illuminati",
     Daedalus = "Daedalus",

@@ -13,7 +13,7 @@ export class Database {
         { name: DatabaseStoreName.Servers, key: "hostname" },
         { name: DatabaseStoreName.NS_Data, key: "command" },
         { name: DatabaseStoreName.Contracts, key: "id", options: { autoIncrement: true } },
-        { name: DatabaseStoreName.Tasks, key: "name"},
+        { name: DatabaseStoreName.Tasks, key: "name" },
     ];
 
     constructor(public name: string = 'ScriptDb', public version = 1) {

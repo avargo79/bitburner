@@ -1,8 +1,31 @@
 import { NS } from "@ns";
 import { Database } from "/lib/database";
-import Tasks, { initializeTaskDatabase, IScriptTask } from "/lib/tasks";
+import { IScriptTask, ScriptTask } from "/lib/tasks";
+
+import UpdatePlayerTask from "./tasks/updatePlayerTask";
+import UpdateServersTask from "./tasks/updateServersTask";
+import UpdateResetInfoTask from "./tasks/updateResetInfoTask";
+import SolverContractsTask from "./tasks/solveContractsTask";
+import RootServersTask from "./tasks/rootServersTask";
 
 const sleepInterval = 100;
+
+export enum TaskNames {
+    RootServers = 'RootServers',
+    UpdatePlayer = 'UpdatePlayer',
+    UpdateServers = 'UpdateServers',
+    UpdateResetInfo = 'UpdateResetInfo',
+    SolveContracts = 'SolveContracts',
+    PurchasedServers = 'PurchasedServers',
+};
+
+const Tasks: Record<string, ScriptTask> = {
+    [TaskNames.UpdatePlayer]: UpdatePlayerTask(TaskNames.UpdatePlayer),
+    [TaskNames.UpdateServers]: UpdateServersTask(TaskNames.UpdateServers),
+    [TaskNames.UpdateResetInfo]: UpdateResetInfoTask(TaskNames.UpdateResetInfo),
+    [TaskNames.SolveContracts]: SolverContractsTask(TaskNames.SolveContracts),
+    [TaskNames.RootServers]: RootServersTask(TaskNames.RootServers),
+};
 
 export async function main(ns: NS): Promise<void> {
     ns.disableLog('sleep');
@@ -12,18 +35,32 @@ export async function main(ns: NS): Promise<void> {
 
     const database = new Database();
     await database.open();
-    await initializeTaskDatabase(database);
-    
+    await initializeTaskDatabase(ns, database);
+
     while (true) {
         const tasks = await database.getAll<IScriptTask>('tasks');
         tasks.sort((a, b) => b.priority - a.priority);
         for (const task of tasks.filter(task => task.enabled && task.lastRun + task.interval < Date.now())) {
             await Tasks[task.name].run(ns, false);
-            await database.saveRecord('tasks', {...task, lastRun: Date.now()});
+            await database.saveRecord('tasks', { ...task, lastRun: Date.now() });
         }
 
         await ns.sleep(sleepInterval);
     }
 }
 
-function runTask() { }
+
+async function initializeTaskDatabase(ns: NS, database: Database) {
+    for (const taskName in Tasks) {
+        if (await database.get<IScriptTask>('tasks', taskName)) continue;
+        ns.print('\tCreating task database record: ' + taskName);
+        const taskRecord: IScriptTask = {
+            name: taskName,
+            priority: Tasks[taskName].priority,
+            lastRun: Tasks[taskName].lastRun,
+            interval: Tasks[taskName].interval,
+            enabled: Tasks[taskName].enabled
+        };
+        database.saveRecord('tasks', taskRecord);
+    }
+}
