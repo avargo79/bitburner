@@ -1,6 +1,6 @@
 import { NS } from "@ns";
 import { Database } from "/lib/database";
-import { IScriptTask, ScriptTask } from "/lib/tasks";
+import { IScriptTask, ScriptTask } from "/lib/models";
 
 import UpdatePlayerTask from "./tasks/updatePlayerTask";
 import UpdateServersTask from "./tasks/updateServersTask";
