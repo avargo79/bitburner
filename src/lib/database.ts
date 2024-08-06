@@ -3,6 +3,7 @@ export enum DatabaseStoreName {
     NS_Data = 'ns_data',
     Contracts = 'contracts',
     Tasks = 'tasks',
+    Configuration = 'config',
 }
 
 export class Database {
@@ -26,6 +27,7 @@ export class Database {
         { name: DatabaseStoreName.NS_Data, key: "command" },
         { name: DatabaseStoreName.Contracts, key: "id", options: { autoIncrement: true } },
         { name: DatabaseStoreName.Tasks, key: "name" },
+        { name: DatabaseStoreName.Configuration, key: "key" },
     ];
 
     async open() {
