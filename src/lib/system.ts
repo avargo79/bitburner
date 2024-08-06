@@ -18,6 +18,8 @@ export class DynamicScript {
                 ${this.includes.join('\n')}
 
                 export async function main(ns) {
+                    if (ns.ps().find(p => p.filename === ns.getScriptName() && p.pid !== ns.getRunningScript()?.pid)) return;
+                    
                     const database = await Database.getInstance();
                     await database.open();
                     ${this.commandToWrite}
