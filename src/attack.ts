@@ -1,12 +1,12 @@
 import { NS } from "@ns";
-import { Database } from "/lib/database";
+import { Database, DatabaseStoreName } from "/lib/database";
 import { ScriptServer, IScriptServer } from "/lib/models";
 
 export async function main(ns: NS): Promise<void> {
-    const database = new Database();
+    const database = await Database.getInstance();
     await database.open();
 
-    const servers = (await database.getAll<IScriptServer>('servers')).map(s => new ScriptServer(s));
+    const servers = (await database.getAll<IScriptServer>(DatabaseStoreName.Servers)).map(s => new ScriptServer(s));
     const homeServer = servers.find(s => s.hostname === 'home') as ScriptServer;
     const remoteFiles = homeServer.files.filter(f => f.startsWith('remote/'));
 
@@ -21,7 +21,7 @@ export async function main(ns: NS): Promise<void> {
     // const canAttack = targets.filter(t => !t.needsPrep);
 
     for (const target of needsPrep) {
-        let attacker = new ScriptServer(await database.get<IScriptServer>('servers', 'home'));
+        let attacker = new ScriptServer(await database.get<IScriptServer>(DatabaseStoreName.Servers, 'home'));
 
         // remote/hwgw.weaken 1.75GB
         // remote/hwgw.grow 1.75GB
@@ -35,7 +35,7 @@ export async function main(ns: NS): Promise<void> {
             ns.exec('remote/hwgw.weaken.js', attacker.hostname, weakenTheads, target.hostname, 0);
         }
 
-        attacker = new ScriptServer(await database.get<IScriptServer>('servers', 'home'))
+        attacker = new ScriptServer(await database.get<IScriptServer>(DatabaseStoreName.Servers, 'home'))
         let money = target.money.max / target.money.current;
         if (money == Infinity) money = target.money.max;
         let growThreads = Math.ceil(ns.growthAnalyze(target.hostname, money));

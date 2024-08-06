@@ -1,7 +1,7 @@
 import { NS } from "@ns";
 import PrettyTable from "./lib/prettytable";
 
-import { Database } from "/lib/database";
+import { Database, DatabaseStoreName } from "/lib/database";
 import { IScriptServer, IScriptPlayer, ScriptServer } from "/lib/models";
 
 export function autocomplete(data: { servers: any }, args: any) {
@@ -10,10 +10,10 @@ export function autocomplete(data: { servers: any }, args: any) {
 
 export async function main(ns: NS): Promise<void> {
     ns.disableLog("ALL");
-    
-    const database = new Database();
+
+    const database = await Database.getInstance();
     await database.open();
-    
+
     const data = ns.flags([
         ["value", false],
         ["money", false],
@@ -29,13 +29,13 @@ export async function main(ns: NS): Promise<void> {
     ]);
 
     const printFn = data["monitor"] ? ns.print : ns.tprint;
-    if(data["monitor"]) ns.tail();
+    if (data["monitor"]) ns.tail();
 
     do {
-        if(data["monitor"]) ns.clearLog();
-    
-        const player = await database.get<IScriptPlayer>("ns_data", "ns.getPlayer");
-        let servers = (await database.getAll<IScriptServer>('servers')).map(s => new ScriptServer(s));
+        if (data["monitor"]) ns.clearLog();
+
+        const player = await database.get<IScriptPlayer>(DatabaseStoreName.NS_Data, "ns.getPlayer");
+        let servers = (await database.getAll<IScriptServer>(DatabaseStoreName.Servers)).map(s => new ScriptServer(s));
 
         if (data["purchased"]) {
             servers = servers.filter((s) => s.purchasedByPlayer || s.hostname === "home");
@@ -47,7 +47,7 @@ export async function main(ns: NS): Promise<void> {
             servers = servers.filter((s) => s.isTarget && (s.security.current > s.security.min || s.money.current < s.money.max));
         } else if (!data["all"]) {
             servers = servers.filter((s) => player.skills.hacking >= s.requiredHackingSkill);
-        }  
+        }
 
         if (data["value"]) {
             servers.sort((a, b) => Math.floor(a.money.max / ns.getWeakenTime(a.hostname)) - Math.floor(b.money.max / ns.getWeakenTime(b.hostname)));
@@ -88,5 +88,5 @@ export async function main(ns: NS): Promise<void> {
 }
 
 function formatMoney(val: number): string {
-	return val.toLocaleString("en-US", { style: "currency", currency: "USD" });
+    return val.toLocaleString("en-US", { style: "currency", currency: "USD" });
 }

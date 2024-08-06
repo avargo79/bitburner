@@ -1,5 +1,5 @@
 import { NS } from "@ns";
-import { Database } from "/lib/database";
+import { Database, DatabaseStoreName } from "/lib/database";
 import { IScriptTask, ScriptTask } from "/lib/models";
 
 import UpdatePlayerTask from "./tasks/updatePlayerTask";
@@ -36,16 +36,16 @@ export async function main(ns: NS): Promise<void> {
     ns.disableLog('getServerUsedRam');
     if (ns.ps().find(p => p.filename === ns.getScriptName() && p.pid !== ns.getRunningScript()?.pid)) return;
 
-    const database = new Database();
+    const database = await Database.getInstance();
     await database.open();
     await initializeTaskDatabase(ns, database);
 
     while (true) {
-        const tasks = await database.getAll<IScriptTask>('tasks');
+        const tasks = await database.getAll<IScriptTask>(DatabaseStoreName.Tasks);
         tasks.sort((a, b) => b.priority - a.priority);
         for (const task of tasks.filter(task => task.enabled && task.lastRun + task.interval < Date.now())) {
             await Tasks[task.name].run(ns, false);
-            await database.saveRecord('tasks', { ...task, lastRun: Date.now() });
+            await database.saveRecord(DatabaseStoreName.Tasks, { ...task, lastRun: Date.now() });
         }
 
         await ns.sleep(sleepInterval);
@@ -55,7 +55,7 @@ export async function main(ns: NS): Promise<void> {
 
 async function initializeTaskDatabase(ns: NS, database: Database) {
     for (const taskName in Tasks) {
-        if (await database.get<IScriptTask>('tasks', taskName)) continue;
+        if (await database.get<IScriptTask>(DatabaseStoreName.Tasks, taskName)) continue;
         ns.print('\tCreating task database record: ' + taskName);
         const taskRecord: IScriptTask = {
             name: taskName,
@@ -64,6 +64,6 @@ async function initializeTaskDatabase(ns: NS, database: Database) {
             interval: Tasks[taskName].interval,
             enabled: Tasks[taskName].enabled
         };
-        database.saveRecord('tasks', taskRecord);
+        database.saveRecord(DatabaseStoreName.Tasks, taskRecord);
     }
 }

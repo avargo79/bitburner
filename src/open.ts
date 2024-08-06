@@ -1,5 +1,5 @@
 import { NS } from "@ns";
-import { Database } from "/lib/database";
+import { Database, DatabaseStoreName } from "/lib/database";
 import { IScriptPlayer, IScriptServer } from "/lib/models";
 
 export function autocomplete(data: { servers: any }, args: any) {
@@ -38,11 +38,11 @@ export async function main(ns: NS) {
         return;
     }
 
-    const database = new Database();
+    const database = await Database.getInstance();
     await database.open();
 
-    const target = await database.get<IScriptServer>("servers", server);
-    const player = await database.get<IScriptPlayer>("ns_data", "ns.getPlayer");
+    const target = await database.get<IScriptServer>(DatabaseStoreName.Servers, server);
+    const player = await database.get<IScriptPlayer>(DatabaseStoreName.NS_Data, "ns.getPlayer");
 
     recursiveScan(ns, "", "home", server, route);
 

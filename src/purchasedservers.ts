@@ -1,28 +1,29 @@
 import { NS } from "@ns";
-import { Database } from "/lib/database";
+import { Database, DatabaseStoreName } from "/lib/database";
 import { DynamicScript, getDynamicScriptContent } from "/lib/system";
 import { IScriptPlayer, IScriptServer, ScriptServer } from "/lib/models";
 
 export async function main(ns: NS): Promise<void> {
-    const database = new Database();
+    const database = await Database.getInstance();
     await database.open();
 
-    database.saveRecord('ns_data', { command: 'ns.getPurchasedServerLimit', result: ns.getPurchasedServerLimit() });
-    database.saveRecord('ns_data', { command: 'ns.getPurchasedServerMaxRam', result: ns.getPurchasedServerMaxRam() });
-    database.saveRecord('ns_data', { command: 'ns.getPurchasedServerCost(2)', result: ns.getPurchasedServerCost(2) });
+    database.saveRecord(DatabaseStoreName.NS_Data, { command: 'ns.getPurchasedServerLimit', result: ns.getPurchasedServerLimit() });
+    database.saveRecord(DatabaseStoreName.NS_Data, { command: 'ns.getPurchasedServerMaxRam', result: ns.getPurchasedServerMaxRam() });
+    database.saveRecord(DatabaseStoreName.NS_Data, { command: 'ns.getPurchasedServerCost(2)', result: ns.getPurchasedServerCost(2) });
 
-    (new DynamicScript('ns.getPurchasedServers', getDynamicScriptContent('ns.getPurchasedServers', 'ns.getPurchasedServers()', 'ns_data')))
-        .run(ns, true);
+    (new DynamicScript('ns.getPurchasedServers',
+        getDynamicScriptContent('ns.getPurchasedServers', 'ns.getPurchasedServers()', DatabaseStoreName.NS_Data)
+    )).run(ns, true);
 
-    const maxServers = await database.get<number>('ns_data', 'ns.getPurchasedServerLimit');
-    const maxRam = await database.get<number>('ns_data', 'ns.getPurchasedServerMaxRam');
-    const baseCost = await database.get<number>('ns_data', 'ns.getPurchasedServerCost(2)');
+    const maxServers = await database.get<number>(DatabaseStoreName.NS_Data, 'ns.getPurchasedServerLimit');
+    const maxRam = await database.get<number>(DatabaseStoreName.NS_Data, 'ns.getPurchasedServerMaxRam');
+    const baseCost = await database.get<number>(DatabaseStoreName.NS_Data, 'ns.getPurchasedServerCost(2)');
 
     while (true) {
-        const player = await database.get<IScriptPlayer>("ns_data", "ns.getPlayer");
-        const allServers = (await database.getAll<IScriptServer>("servers"))
+        const player = await database.get<IScriptPlayer>(DatabaseStoreName.NS_Data, "ns.getPlayer");
+        const allServers = (await database.getAll<IScriptServer>(DatabaseStoreName.Servers))
             .map(server => new ScriptServer(server));
-        const purchaseServers = (await database.get<string[]>('ns_data', 'ns.getPurchasedServers'))
+        const purchaseServers = (await database.get<string[]>(DatabaseStoreName.NS_Data, 'ns.getPurchasedServers'))
             .map(hostname => allServers.find(server => server.hostname === hostname)) as ScriptServer[];
 
         // purchase max servers
@@ -33,7 +34,7 @@ export async function main(ns: NS): Promise<void> {
 
             (new DynamicScript('ns.purchaseServer', `ns.purchaseServer("pserv-${purchaseServers.length}", 2 )`))
                 .run(ns, true);
-        } else{
+        } else {
             purchaseServers.sort((a, b) => a.ram.max - b.ram.max);
         }
     }

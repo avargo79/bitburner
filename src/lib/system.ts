@@ -1,4 +1,5 @@
 import { NS } from "@ns";
+import { DatabaseStoreName } from "/lib/database";
 
 export class DynamicScript {
     public get filePath() {
@@ -17,7 +18,7 @@ export class DynamicScript {
                 ${this.includes.join('\n')}
 
                 export async function main(ns) {
-                    const database = new Database();
+                    const database = await Database.getInstance();
                     await database.open();
                     ${this.commandToWrite}
                 }
@@ -35,7 +36,7 @@ export class DynamicScript {
 
             // find pid in recent scripts
             const pid = ns.run(this.filePath, 1);
-            while(waitForComplete && !ns.getRecentScripts().find(s => s.pid === pid)){
+            while (waitForComplete && !ns.getRecentScripts().find(s => s.pid === pid)) {
                 await ns.sleep(20);
             }
             resolve(true);
@@ -47,6 +48,6 @@ export class DynamicScript {
     };
 }
 
-export function getDynamicScriptContent(commandName: string, scriptContent: string, storeName = 'ns_data') {
+export function getDynamicScriptContent(commandName: string, scriptContent: string, storeName = DatabaseStoreName.NS_Data) {
     return `const result = ${scriptContent};await database.saveRecord('${storeName}', { command: '${commandName}', result });`
 }

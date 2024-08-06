@@ -2,7 +2,7 @@ import { DynamicScript } from "/lib/system";
 import { ScriptTask } from "/lib/models";
 
 export default (taskName: string = 'SolveContracts') => new ScriptTask(
-    { name: taskName, priority: 80, lastRun: 0, interval: 5000, enabled: true },
+    { name: taskName, priority: 80, lastRun: 0, interval: 5000, enabled: false },
     new DynamicScript(taskName, `
         // update contracts
         await new DynamicScript('SolveContracts_Update', \`

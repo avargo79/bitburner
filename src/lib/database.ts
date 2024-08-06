@@ -6,8 +6,20 @@ export enum DatabaseStoreName {
 }
 
 export class Database {
-    private IndxDb: IDBFactory;
+    private static instance: Database;
+    public static readonly DatabaseStoreNames = DatabaseStoreName;
+
+    private IndxDb: IDBFactory = eval('window.indexedDB');
     private db: IDBDatabase | undefined;
+
+    private constructor(public name: string, public version: number) { }
+
+    public static async getInstance(name: string = 'ScriptDb', version = 1): Promise<Database> {
+        if (!Database.instance) {
+            Database.instance = new Database(name, version);
+        }
+        return Database.instance;
+    }
 
     public tableDefinitions: ITableDefinition[] = [
         { name: DatabaseStoreName.Servers, key: "hostname" },
@@ -15,11 +27,6 @@ export class Database {
         { name: DatabaseStoreName.Contracts, key: "id", options: { autoIncrement: true } },
         { name: DatabaseStoreName.Tasks, key: "name" },
     ];
-
-    constructor(public name: string = 'ScriptDb', public version = 1) {
-        this.IndxDb = eval('window.indexedDB');
-        console.log(this.IndxDb);
-    }
 
     async open() {
         return new Promise((resolve, reject) => {
