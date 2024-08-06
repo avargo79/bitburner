@@ -1,5 +1,6 @@
 import { NS } from "@ns";
-import { DatabaseStoreName } from "/lib/database";
+import { Database, DatabaseStoreName } from "/lib/database";
+import { IScriptServer } from "./models";
 
 export class DynamicScript {
     public get filePath() {
@@ -18,7 +19,7 @@ export class DynamicScript {
                 ${this.includes.join('\n')}
 
                 export async function main(ns) {
-                    if (ns.ps().find(p => p.filename === ns.getScriptName() && p.pid !== ns.getRunningScript()?.pid)) return;
+                    // if (ns.ps().find(p => p.filename === ns.getScriptName() && p.pid !== ns.getRunningScript()?.pid)) return;
                     
                     const database = await Database.getInstance();
                     await database.open();
@@ -32,22 +33,31 @@ export class DynamicScript {
         await this.write(ns);
 
         return new Promise(async (resolve, reject) => {
-            while (!this.canRunScript(ns, ns.getHostname())) {
-                await ns.sleep(20);
-            }
+            const database = await Database.getInstance();
+            await database.open();
+            // while (!this.canRunScript(ns, ns.getHostname())) {
+            //     await ns.sleep(20);
+            // }
 
             // find pid in recent scripts
             const pid = ns.run(this.filePath, 1);
-            while (waitForComplete && !ns.getRecentScripts().find(s => s.pid === pid)) {
-                await ns.sleep(20);
+            await ns.sleep(50);
+            let running = waitForComplete;
+            while (running) {
+                const servers = await database.getAll<IScriptServer>(DatabaseStoreName.Servers);
+                running = servers.flatMap(a => a.pids.map(p => p.pid)).includes(pid);
+                await ns.sleep(10);
             }
+            // while (waitForComplete && !ns.getRecentScripts().find(s => s.pid === pid)) {
+            //     await ns.sleep(20);
+            // }
             resolve(true);
         });
     }
 
-    canRunScript = (ns: NS, hostName: string): boolean => {
-        return ns.getScriptRam(this.filePath) <= ns.getServerMaxRam(hostName) - ns.getServerUsedRam(hostName)
-    };
+    // canRunScript = (ns: NS, hostName: string): boolean => {
+    //     return ns.getScriptRam(this.filePath) <= ns.getServerMaxRam(hostName) - ns.getServerUsedRam(hostName)
+    // };
 }
 
 export function getDynamicScriptContent(commandName: string, scriptContent: string, storeName = DatabaseStoreName.NS_Data) {
