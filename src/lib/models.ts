@@ -79,7 +79,7 @@ export class ScriptServer {
     }
 
     public get isTarget() {
-        return !this.purchasedByPlayer && this.hostname !== 'home' && this.money.max > 0 && (this.ports.open ?? 0) >= (this.ports.required ?? 0) && this.hasAdminRights;
+        return !this.purchasedByPlayer && this.hostname !== 'home' && this.money.max > 0 && this.ports.open >= this.ports.required && this.hasAdminRights;
     }
 
     public get isAttacker() {
@@ -117,7 +117,7 @@ export class ScriptServer {
 
     public get ram() {
         return {
-            available: (this.server.maxRam ?? 0) - (this.server.ramUsed ?? 0),
+            available: this.server.maxRam - this.server.ramUsed,
             used: this.server.ramUsed ?? 0,
             max: this.server.maxRam ?? 0
         };
