@@ -45,7 +45,7 @@ export class ScriptTask implements IScriptTask {
 export interface IScriptServer extends Server {
     files: string[];
     pids: { filename: string, threads: number, args: any[], pid: number, temporary: boolean }[];
-    hack: {
+    hackData: {
         wkTime: number;
         grTime: number;
         hkTime: number;
@@ -60,7 +60,7 @@ export class ScriptServer {
     }
 
     public get needsPrep() {
-        return this.security.current > this.security.min || this.money.current < this.money.max;
+        return this.hasAdminRights && this.money.max > 0 && (this.security.current > this.security.min || this.money.current < this.money.max);
     }
 
     public get hostname() {
