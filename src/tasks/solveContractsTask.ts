@@ -4,9 +4,9 @@ import { ScriptTask } from "/lib/models";
 export default (taskName: string = 'SolveContracts') => new ScriptTask(
     { name: taskName, priority: 80, lastRun: 0, interval: 5000, enabled: false },
     new DynamicScript(taskName, `
-        // Require at least 32GB of RAM
-        if((await database.get("servers", ns.getHostname())).maxRam < 32) {
-            ns.print("Server does not have enough RAM to run this script.");
+        // Require at least 64GB of RAM
+        if((await database.get("servers", ns.getHostname())).maxRam < 64) {
+            ns.toast("Server does not have enough RAM to run the contract task.");
             return;
         }
 
