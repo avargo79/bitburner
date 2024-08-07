@@ -10,7 +10,6 @@ import RootServersTask from "./tasks/rootServersTask";
 import UpdateHackDataTask from "./tasks/updateHackDataTask";
 // import purchasedServersTask from "./tasks/purchasedServersTask";
 
-const sleepInterval = 100;
 
 export enum TaskNames {
     UpdatePlayer = 'UpdatePlayer',
@@ -34,9 +33,8 @@ const Tasks: Record<string, ScriptTask> = {
 
 export async function main(ns: NS): Promise<void> {
     ns.clearLog();
-    ns.disableLog('sleep');
-    ns.disableLog('getServerMaxRam');
-    ns.disableLog('getServerUsedRam');
+    ns.disableLog('ALL');
+
     if (ns.ps().find(p => p.filename === ns.getScriptName() && p.pid !== ns.getRunningScript()?.pid)) return;
 
     const database = await Database.getInstance();
@@ -44,6 +42,8 @@ export async function main(ns: NS): Promise<void> {
     await initializeTaskDatabase(ns, database);
 
     while (true) {
+        const config = await database.get<tConfig>(DatabaseStoreName.Configuration, 'daemon.js');
+
         const tasks = await database.getAll<IScriptTask>(DatabaseStoreName.Tasks);
         tasks.sort((a, b) => b.priority - a.priority);
         for (const task of tasks.filter(task => task.enabled && task.lastRun + task.interval < Date.now())) {
@@ -51,12 +51,20 @@ export async function main(ns: NS): Promise<void> {
             await database.saveRecord(DatabaseStoreName.Tasks, { ...task, lastRun: Date.now() });
         }
 
-        await ns.sleep(sleepInterval);
+        await ns.sleep(config.interval);
     }
 }
 
-
+const scriptName = 'daemon.js';
+type tConfig = {
+    interval: number;
+};
+const initialConfig: tConfig = { interval: 100 };
 async function initializeTaskDatabase(ns: NS, database: Database) {
+    if (!(await database.get<IScriptTask>(DatabaseStoreName.Configuration, scriptName))) {
+        await database.saveRecord(DatabaseStoreName.Configuration, { key: scriptName, value: initialConfig });
+    }
+
     for (const taskName in Tasks) {
         if (await database.get<IScriptTask>(DatabaseStoreName.Tasks, taskName)) continue;
         ns.print('\tCreating task database record: ' + taskName);
