@@ -15,7 +15,7 @@ export class Database {
 
     private constructor(public name: string, public version: number) { }
 
-    public static async getInstance(name: string = 'ScriptDb', version = 1): Promise<Database> {
+    public static getInstance(name: string = 'ScriptDb', version = 1): Promise<Database> {
         if (!Database.instance) {
             Database.instance = new Database(name, version);
         }
@@ -30,7 +30,7 @@ export class Database {
         { name: DatabaseStoreName.Configuration, key: "key" },
     ];
 
-    async open() {
+    open() {
         return new Promise((resolve, reject) => {
             const request = this.IndxDb.open(this.name, this.version);
 
@@ -59,7 +59,7 @@ export class Database {
         });
     }
 
-    async deleteDatabase() {
+    deleteDatabase() {
         return new Promise((resolve, reject) => {
             const request = this.IndxDb.deleteDatabase(this.name);
 
@@ -75,7 +75,7 @@ export class Database {
         });
     }
 
-    async saveRecord(storeName: string, value: any) {
+    saveRecord(storeName: string, value: any) {
         return new Promise((resolve, reject) => {
             if (!this.db) {
                 reject("Database is not initialized.");
@@ -96,7 +96,7 @@ export class Database {
         });
     }
 
-    async deleteRecord(storeName: string, key: any) {
+    deleteRecord(storeName: string, key: any) {
         return new Promise((resolve, reject) => {
             if (!this.db) {
                 reject("Database is not initialized.");
@@ -117,7 +117,7 @@ export class Database {
         });
     }
 
-    async clear(storeName: string) {
+    clear(storeName: string) {
         return new Promise((resolve, reject) => {
             if (!this.db) {
                 reject("Database is not initialized.");
@@ -138,7 +138,7 @@ export class Database {
         });
     }
 
-    async get<T>(storeName: string, key: any): Promise<T> {
+    get<T>(storeName: string, key: any): Promise<T> {
         return new Promise((resolve, reject) => {
             if (!this.db) {
                 reject("Database is not initialized.");
@@ -159,7 +159,7 @@ export class Database {
         });
     }
 
-    async getAll<T>(storeName: string): Promise<T[]> {
+    getAll<T>(storeName: string): Promise<T[]> {
         return new Promise((resolve, reject) => {
             if (!this.db) {
                 reject("Database is not initialized.");
