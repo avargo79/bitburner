@@ -6,12 +6,8 @@ export default (taskName: string = 'UpdateHackData') => new ScriptTask(
     new DynamicScript(taskName, `
         const servers = await database.getAll(DatabaseStoreName.Servers);
         servers.forEach(server => {
-            server.hack = {
-                hkTime: ns.getHackTime(server.hostname),
-                wkTime: ns.getWeakenTime(server.hostname),
-                grTime: ns.getGrowTime(server.hostname),
-            }
-            database.saveRecord(DatabaseStoreName.Servers, server)
+            const result = {...server, hack: {hkTime: ns.getHackTime(server.hostname), wkTime: ns.getWeakenTime(server.hostname), grTime: ns.getGrowTime(server.hostname) } }
+            database.saveRecord(DatabaseStoreName.Servers, result)
         });
         `,
         ['import { getServerList } from "/lib/network";']
