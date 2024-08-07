@@ -15,12 +15,10 @@ export class DynamicScript {
 
     async write(ns: NS) {
         const cmdToFile = `
-                import { Database } from "/lib/database";
+                import { Database, DatabaseStoreName } from "/lib/database";
                 ${this.includes.join('\n')}
 
                 export async function main(ns) {
-                    // if (ns.ps().find(p => p.filename === ns.getScriptName() && p.pid !== ns.getRunningScript()?.pid)) return;
-                    
                     const database = await Database.getInstance();
                     await database.open();
                     ${this.commandToWrite}
@@ -35,11 +33,7 @@ export class DynamicScript {
         return new Promise(async (resolve, reject) => {
             const database = await Database.getInstance();
             await database.open();
-            // while (!this.canRunScript(ns, ns.getHostname())) {
-            //     await ns.sleep(20);
-            // }
 
-            // find pid in recent scripts
             const pid = ns.run(this.filePath, 1);
             await ns.sleep(50);
             let running = waitForComplete;
@@ -48,9 +42,6 @@ export class DynamicScript {
                 running = servers.flatMap(a => a.pids.map(p => p.pid)).includes(pid);
                 await ns.sleep(10);
             }
-            // while (waitForComplete && !ns.getRecentScripts().find(s => s.pid === pid)) {
-            //     await ns.sleep(20);
-            // }
             resolve(true);
         });
     }
