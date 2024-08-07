@@ -15,7 +15,7 @@ export class Database {
 
     private constructor(public name: string, public version: number) { }
 
-    public static getInstance(name: string = 'ScriptDb', version = 1): Promise<Database> {
+    public static async getInstance(name: string = 'ScriptDb', version = 1): Promise<Database> {
         if (!Database.instance) {
             Database.instance = new Database(name, version);
         }
