@@ -4,26 +4,17 @@ import { ScriptTask } from "/lib/models";
 export default (taskName: string = 'RootServers') => new ScriptTask(
     { name: taskName, priority: 20, lastRun: 0, interval: 2000, enabled: true },
     new DynamicScript(taskName, `
-        const servers = await database.getAll("servers");
-        const targets = servers.filter(s => !s.hasAdminRights).map(s => s.hostname);
-        for (const hostname of targets) {
-            try{ 
-                ns.brutessh(hostname); 
-                ns.ftpcrack(hostname); 
-                ns.relaysmtp(hostname); 
-                ns.httpworm(hostname); 
-                ns.sqlinject(hostname); 
-            } catch(e){} 
+        const servers = await database.getAll(DatabaseStoreName.Servers);
+        const targets = servers.filter(s => !s.hasAdminRights);
+        for (const target of targets) {
+            try { ns.brutessh(target.hostname); ns.ftpcrack(target.hostname); ns.relaysmtp(target.hostname); ns.httpworm(target.hostname); ns.sqlinject(target.hostname); } catch (e) { }
+            try { 
+                ns.nuke(target.hostname);
                 
-            try{ 
-                ns.nuke(hostname); 
-
-                const home = await database.get('servers', 'home');
-                const target = await database.get('servers', hostname);
-                ns.scp(home.files.filter(f => f.startsWith('remote/')), hostname, 'home');
-                ns.scp(home.files.filter(f => f.startsWith('lib/')), hostname, 'home');
-                ns.exec('remote/hwhw.prep.js', hostname, Math.floor(target.ram.available / 1.9), hostname);
-            } catch(e){} 
+                const homeServer = await database.get(DatabaseStoreName.Servers, 'home');
+                ns.scp(homeServer.files.filter(f => f.startsWith('remote/') || f.startsWith('lib/')), target.hostname);
+                ns.exec('remote/wgh.loop.js', target.hostname, Math.floor((target.maxRam - target.ramUsed) / 2), target.hostname);
+            } catch (e) { }
         }
     `, [])
 )
