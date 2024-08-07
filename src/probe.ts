@@ -69,7 +69,7 @@ export async function main(ns: NS): Promise<void> {
             s.hostname,
             s.requiredHackingSkill,
             s.hasAdminRights ? (s.backdoorInstalled ? "\u0138it" : "\u01a6oot") : s.ports.required,
-            s.needsPrep ? "Yes" : "No",
+            s.purchasedByPlayer ? "N/A" : s.needsPrep ? "No" : "Yes",
             ns.nFormat(s.money.current / s.money.max || 0, "0%"),
             ns.nFormat(s.isTarget ? s.security.current - s.security.min : 0, "0.0"),
             s.power || "",
