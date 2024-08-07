@@ -2,7 +2,7 @@ import { DynamicScript } from "/lib/system";
 import { ScriptTask } from "/lib/models";
 
 export default (taskName: string = 'UpdateHackData') => new ScriptTask(
-    { name: taskName, priority: 90, lastRun: 0, interval: 1000, enabled: true },
+    { name: taskName, priority: 90, lastRun: 0, interval: 1000, enabled: false },
     new DynamicScript(taskName, `
         const servers = await database.getAll(DatabaseStoreName.Servers);
         servers.forEach(server => {
