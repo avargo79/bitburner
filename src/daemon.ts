@@ -7,7 +7,8 @@ import UpdateServersTask from "./tasks/updateServersTask";
 import UpdateResetInfoTask from "./tasks/updateResetInfoTask";
 import SolveContractsTask from "./tasks/solveContractsTask";
 import RootServersTask from "./tasks/rootServersTask";
-import purchasedServersTask from "./tasks/purchasedServersTask";
+import UpdateHackDataTask from "./tasks/updateHackDataTask";
+// import purchasedServersTask from "./tasks/purchasedServersTask";
 
 const sleepInterval = 100;
 
@@ -18,6 +19,7 @@ export enum TaskNames {
     SolveContracts = 'SolveContracts',
     RootServers = 'RootServers',
     PurchasedServers = 'PurchasedServers',
+    UpdateHackData = 'UpdateHackData',
 };
 
 const Tasks: Record<string, ScriptTask> = {
@@ -26,6 +28,7 @@ const Tasks: Record<string, ScriptTask> = {
     [TaskNames.UpdateResetInfo]: UpdateResetInfoTask(TaskNames.UpdateResetInfo),
     [TaskNames.SolveContracts]: SolveContractsTask(TaskNames.SolveContracts),
     [TaskNames.RootServers]: RootServersTask(TaskNames.RootServers),
+    [TaskNames.UpdateHackData]: UpdateHackDataTask(TaskNames.UpdateHackData),
     // [TaskNames.PurchasedServers]: purchasedServersTask(TaskNames.PurchasedServers),
 };
 
