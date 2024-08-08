@@ -14,7 +14,6 @@ export interface IScriptContract {
     file: string;
     hostname: string;
     data: string;
-    numTriesRemaining: number;
     solved: boolean;
 }
 
