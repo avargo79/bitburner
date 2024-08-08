@@ -13,7 +13,10 @@ export default (taskName: string = 'RootServers') => new ScriptTask(
                 
                 const homeServer = await database.get(DatabaseStoreName.Servers, 'home');
                 ns.scp(homeServer.files.filter(f => f.startsWith('remote/') || f.startsWith('lib/')), target.hostname);
-                ns.exec('remote/wgh.loop.js', target.hostname, Math.floor((target.maxRam - target.ramUsed) / 2), target.hostname);
+                const player = await database.get(DatabaseStoreName.NS_Data, 'ns.getPlayer');
+                if(player.skills.hacking >= target.requiredHackingSkill) {
+                    ns.exec('remote/wgh.loop.js', target.hostname, Math.floor((target.maxRam - target.ramUsed) / 2), target.hostname);
+                }
             } catch (e) { }
         }
     `, [])
