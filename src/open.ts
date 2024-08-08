@@ -47,7 +47,7 @@ export async function main(ns: NS) {
     recursiveScan(ns, "", "home", server, route);
 
     const cmd = "connect " + route.join("; connect ") + ";" + (player.skills.hacking >= target.requiredHackingSkill! ? " backdoor" : "");
-    const terminalInput: any = document.getElementById("terminal-input");
+    const terminalInput: any = eval("document").getElementById("terminal-input");
     if (!terminalInput) {
         navigator.clipboard.writeText(cmd);
         ns.tprint("Route was added to the clipboard.");
