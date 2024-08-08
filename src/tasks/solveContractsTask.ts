@@ -70,7 +70,7 @@ export default (taskName: string = 'SolveContracts') => new ScriptTask(
                 if (reward) {
                     ns.toast("Contract rewarded: " + reward);
                     // await database.deleteRecord("contracts", contract.id);
-                    await database.saveRecord("contracts", { ...contract,solved: true });
+                    await database.saveRecord("contracts", { ...contract, solved: true, reward });
                 }
             }
         }
