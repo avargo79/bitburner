@@ -40,11 +40,11 @@ export async function main(ns: NS): Promise<void> {
         if (data["purchased"]) {
             servers = servers.filter((s) => s.purchasedByPlayer || s.hostname === "home");
         } else if (data["targets"]) {
-            servers = servers.filter((s) => s.isTarget);
+            servers = servers.filter((s) => s.isTarget && player.skills.hacking >= s.requiredHackingSkill);
         } else if (data["attackers"]) {
             servers = servers.filter((s) => s.isAttacker);
         } else if (data["prep"]) {
-            servers = servers.filter((s) => s.isTarget && (s.security.current > s.security.min || s.money.current < s.money.max));
+            servers = servers.filter((s) => s.isTarget && player.skills.hacking >= s.requiredHackingSkill && (s.security.current > s.security.min || s.money.current < s.money.max));
         } else if (!data["all"]) {
             servers = servers.filter((s) => player.skills.hacking >= s.requiredHackingSkill);
         }
