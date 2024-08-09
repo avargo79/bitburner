@@ -11,9 +11,6 @@ export async function main(ns: NS): Promise<void> {
     await database.open();
 
     const hostname = ns.args[0] as string;
-
     try { ns.brutessh(hostname); ns.ftpcrack(hostname); ns.relaysmtp(hostname); ns.httpworm(hostname); ns.sqlinject(hostname); } catch (e) { }
-    try {
-        ns.nuke(hostname);
-    } catch (e) { }
+    try { ns.nuke(hostname); } catch (e) { }
 }
