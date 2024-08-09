@@ -15,15 +15,5 @@ export async function main(ns: NS): Promise<void> {
     try { ns.brutessh(hostname); ns.ftpcrack(hostname); ns.relaysmtp(hostname); ns.httpworm(hostname); ns.sqlinject(hostname); } catch (e) { }
     try {
         ns.nuke(hostname);
-
     } catch (e) { }
-
-    await ns.sleep(1000);
-    const remoteHost = await database.get<IScriptServer>('servers', hostname);
-
-    if (remoteHost.hasAdminRights) {
-        const homeServer = await database.get<IScriptServer>(DatabaseStoreName.Servers, 'home');
-        ns.scp(homeServer.files.filter(f => f.startsWith('remote/') || f.startsWith('lib/')), hostname);
-        ns.exec('remote/wgh.loop.js', hostname, Math.floor((remoteHost.maxRam - remoteHost.ramUsed) / 2), hostname);
-    }
 }
