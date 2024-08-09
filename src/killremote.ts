@@ -11,7 +11,7 @@ export async function main(ns: NS) {
 
     const allServers = await database.getAll<IScriptServer>(DatabaseStoreName.Servers);
 
-    const remotePIDs = allServers.filter(s => s.hostname !== 'home')
+    const remotePIDs = allServers
         .flatMap(s => s.pids.filter(p => p.filename.startsWith("remote/")))
         .map(pid => ({ hostname: pid.args[0], filename: pid.filename }));
     for (const pid of remotePIDs) {
