@@ -1,8 +1,8 @@
 import { NS } from "@ns";
 import { Database, DatabaseStoreName } from "/lib/database";
 import { IScriptPlayer, IScriptServer } from "/lib/models";
-import { Colors } from "./lib/consts";
 import { DynamicScript, getDynamicScriptContent } from "./lib/system";
+import PrettyTable from "./lib/prettytable";
 
 const reserveRam = 32
 const database = await Database.getInstance();
@@ -40,11 +40,13 @@ export async function main(ns: NS): Promise<void> {
     const refreshServers = async (filterFn: (server: IScriptServer) => boolean) => (await database.getAll<IScriptServer>(DatabaseStoreName.Servers)).filter(filterFn);
 
     while (true) {
-        ns.clearLog();
         player = await refreshPlayer();
+        executingServer = await refreshExecutingServer();
+
+        ns.clearLog();
+        printStatus(ns, executingServer);
 
         // Weaken targets
-        executingServer = await refreshExecutingServer();
         const weakenTargets = await refreshServers(shouldWeaken);
         weakenTargets.sort(sortByValue);
         for (const target of weakenTargets) {
@@ -82,7 +84,7 @@ export async function main(ns: NS): Promise<void> {
         executingServer = await refreshExecutingServer();
         const hackTargets = await refreshServers(shouldHack);
         hackTargets.sort(sortByValue);
-        for (const target of growTargets) {
+        for (const target of hackTargets) {
             const executingThreads = executingServer.pids
                 .filter(p => p.filename === "remote/hwgw.hack.js" && p.args.includes(target.hostname))
                 .reduce((acc, p) => acc + p.threads, 0);
@@ -101,10 +103,7 @@ export async function main(ns: NS): Promise<void> {
         while (sleepingUntilThreads) {
             executingServer = await refreshExecutingServer();
             sleepingUntilThreads = (executingServer.maxRam - executingServer.ramUsed - reserveRam) / 2 < 1;
-            const maxRam = executingServer.maxRam - reserveRam;
-            const availableRam = maxRam - executingServer.ramUsed;
-            ns.print(`Sleeping until threads available. Current RAM: ${Colors.brightRed}${ns.formatRam(availableRam)}/${ns.formatRam(maxRam)}${Colors.reset}`);
-            await ns.sleep(1000);
+            await ns.sleep(100);
         }
     }
 }
@@ -113,7 +112,39 @@ function tryExecuteScript(ns: NS, executingServer: IScriptServer, script: string
     const availableThreads = Math.floor(((executingServer.maxRam - reserveRam) - executingServer.ramUsed) / 2);
     const execThreads = Math.min(threads, availableThreads);
     if (execThreads <= 0) return 0;
-    ns.print(`${hostname}: Trying to exec '${script}' with ${Colors.brightRed}${execThreads}${Colors.reset} threads(req=${Colors.brightBlue}${threads}${Colors.reset})`);
     const pid = ns.exec(script, executingServer.hostname, execThreads, hostname, 0);
     return pid > 0 ? execThreads : 0;
+}
+
+async function printStatus(ns: NS, executingServer: IScriptServer) {
+    const remoteScripts = executingServer.pids
+        .filter(p => p.filename.startsWith("remote/"));
+
+    const rows = remoteScripts.map(s => [s.args[0], s.filename, s.threads]).reduce((acc, s) => {
+        // find the entry where [hostname, filename] is the same, if not found, push the new entry
+        if (!acc.find(e => e[0] === s[0] && e[1] === s[1])) acc.push(s);
+        // if found, add the threads to the existing entry
+        const element = acc.find(e => e[0] === s[0] && e[1] === s[1]);
+
+        element[2] += s[2];
+
+        return acc;
+    }, []);
+
+    const servers = await database.getAll<IScriptServer>(DatabaseStoreName.Servers);
+    rows.forEach(r => {
+        const server = servers.find(s => s.hostname === r[0])!;
+        r.push(ns.formatNumber(server.hackDifficulty! - server.minDifficulty!));
+        r.push(ns.formatPercent(server.moneyAvailable! / server.moneyMax! || 0));
+    });
+    rows.sort((a, b) => a[0].localeCompare(b[0]) || a[1].localeCompare(b[1]));
+
+    const pt = new PrettyTable();
+    const headers = ["SERVERNAME", "SCRIPT", "THREADS", "SEC+", "$"];
+    pt.create(headers, rows);
+    ns.print(pt.print());
+}
+
+function formatMoney(val: number): string {
+    return val.toLocaleString("en-US", { style: "currency", currency: "USD" });
 }
