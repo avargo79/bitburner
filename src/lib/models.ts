@@ -49,6 +49,7 @@ export interface IScriptServer extends Server {
         grTime: number;
         hkTime: number;
     };
+    lastUpdated: number;
 }
 
 export class ScriptServer {
@@ -120,5 +121,9 @@ export class ScriptServer {
             used: this.server.ramUsed ?? 0,
             max: this.server.maxRam ?? 0
         };
+    }
+
+    public get lastUpdated() {
+        return this.server.lastUpdated;
     }
 }

@@ -54,3 +54,7 @@ export class DynamicScript {
 export function getDynamicScriptContent(commandName: string, scriptContent: string, storeName = DatabaseStoreName.NS_Data) {
     return `const result = ${scriptContent};await database.saveRecord('${storeName}', { command: '${commandName}', result });`
 }
+
+export function disableLogs(ns: NS, logs: string[]) {
+    logs.forEach(log => ns.disableLog(log));
+}

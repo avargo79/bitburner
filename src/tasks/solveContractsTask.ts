@@ -69,8 +69,7 @@ export default (taskName: string = 'SolveContracts') => new ScriptTask(
                 const reward = await database.get(DatabaseStoreName.NS_Data, "ns.codingcontract.attempt");
                 if (reward) {
                     ns.toast("Contract rewarded: " + reward);
-                    // await database.deleteRecord("contracts", contract.id);
-                    await database.saveRecord("contracts", { ...contract, solved: true, reward });
+                    await database.deleteRecord("contracts", contract.id);
                 }
             }
         }
