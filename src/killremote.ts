@@ -1,6 +1,6 @@
 import { NS } from "@ns";
 import { Database, DatabaseStoreName } from "/lib/database";
-import { IScriptServer } from "/lib/models";
+import { IScriptServer } from "/models/ScriptServer";
 
 export async function main(ns: NS) {
     ns.disableLog("ALL");

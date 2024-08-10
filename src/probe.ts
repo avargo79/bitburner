@@ -1,8 +1,9 @@
 import { NS } from "@ns";
-import PrettyTable from "./lib/prettytable";
+import PrettyTable from "/lib/prettytable";
 
 import { Database, DatabaseStoreName } from "/lib/database";
-import { IScriptServer, IScriptPlayer, ScriptServer } from "/lib/models";
+import { IScriptServer, ScriptServer } from "/models/ScriptServer";
+import { IScriptPlayer } from "/models/IScriptPlayer";
 
 export function autocomplete(data: { servers: any }, args: any) {
     return data.servers;

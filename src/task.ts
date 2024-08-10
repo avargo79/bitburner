@@ -1,8 +1,8 @@
 import { AutocompleteData, NS, ScriptArg } from "@ns";
 import { Database, DatabaseStoreName } from "/lib/database";
-import { IScriptTask } from "./lib/models";
-import { TaskNames } from "./daemon";
-import PrettyTable from "./lib/prettytable";
+import { TaskNames } from "/daemon";
+import PrettyTable from "/lib/prettytable";
+import { IScriptTask } from "/models/ScriptTask";
 
 const argsSchema: [string, string | number | boolean | string[]][] = [
    ['enable', false],

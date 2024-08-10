@@ -1,5 +1,5 @@
 import { DynamicScript } from "/lib/system";
-import { ScriptTask } from "/lib/models";
+import { ScriptTask } from "/models/ScriptTask";
 
 export default (taskName: string = 'RootServers') => new ScriptTask(
     { name: taskName, priority: 20, lastRun: 0, interval: 2000, enabled: true },

@@ -1,6 +1,6 @@
 import { NS } from "@ns";
 import { Database, DatabaseStoreName } from "/lib/database";
-import { IScriptServer } from "./models";
+import { IScriptServer } from "/models/ScriptServer";
 
 export class DynamicScript {
     public get filePath() {
@@ -13,14 +13,20 @@ export class DynamicScript {
 
     constructor(public scriptName: string, public command: string, public includes: string[] = []) { }
 
+    public static new(scriptName: string, command: string, includes: string[] = []): DynamicScript {
+        return new DynamicScript(scriptName, command, includes);
+    }
+
     async write(ns: NS) {
         const cmdToFile = `
                 import { Database, DatabaseStoreName } from "/lib/database";
                 ${this.includes.join('\n')}
 
+                const database = await Database.getInstance();
+                await database.open();
+                
+                /** @param {NS} ns */
                 export async function main(ns) {
-                    const database = await Database.getInstance();
-                    await database.open();
                     ${this.commandToWrite}
                 }
             `;

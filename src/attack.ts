@@ -1,8 +1,9 @@
 import { AutocompleteData, NS } from "@ns";
 import { Database, DatabaseStoreName } from "/lib/database";
-import { IScriptPlayer, IScriptServer } from "/lib/models";
-import { DynamicScript, getDynamicScriptContent } from "./lib/system";
-import PrettyTable from "./lib/prettytable";
+import { DynamicScript, getDynamicScriptContent } from "/lib/system";
+import PrettyTable from "/lib/prettytable";
+import { IScriptPlayer } from "/models/IScriptPlayer";
+import { IScriptServer } from "/models/ScriptServer";
 
 const argsSchema: [string, string | number | boolean | string[]][] = [
     ['prep-only', false],
@@ -120,10 +121,11 @@ export async function main(ns: NS): Promise<void> {
         await ns.sleep(1000);
 
         // Wait until threads available
-        while ((executingServer.maxRam - executingServer.ramUsed - reserveRam) / 2 < 1) {
-            executingServer = await refreshExecutingServer();
-            await ns.sleep(100);
-        }
+        // executingServer = await refreshExecutingServer();
+        // while ((executingServer.maxRam - executingServer.ramUsed - reserveRam) / 2 < 1) {
+        //     executingServer = await refreshExecutingServer();
+        //     await ns.sleep(100);
+        // }
     }
 }
 
@@ -138,7 +140,7 @@ function tryExecuteScript(ns: NS, executingServer: IScriptServer, script: string
 async function printStatus(ns: NS, executingServer: IScriptServer) {
     const remoteScripts = executingServer.pids
         .filter(p => p.filename.startsWith("remote/"));
-
+    ns.print(JSON.stringify(remoteScripts));
     const rows = remoteScripts.map(s => [s.args[0], s.filename, s.threads]).reduce((acc, s) => {
         // find the entry where [hostname, filename] is the same, if not found, push the new entry
         if (!acc.find(e => e[0] === s[0] && e[1] === s[1])) acc.push(s);

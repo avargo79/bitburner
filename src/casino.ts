@@ -1,6 +1,6 @@
 import { NS } from "@ns";
 import { Database, DatabaseStoreName } from "/lib/database";
-import { IScriptPlayer } from "/lib/models";
+import { IScriptPlayer } from "./models/IScriptPlayer";
 
 export async function main(ns: NS): Promise<void> {
     const database = await Database.getInstance();

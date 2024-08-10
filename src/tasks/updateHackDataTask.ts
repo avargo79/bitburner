@@ -1,5 +1,5 @@
 import { DynamicScript } from "/lib/system";
-import { ScriptTask } from "/lib/models";
+import { ScriptTask } from "/models/ScriptTask";
 
 export default (taskName: string = 'UpdateHackData') => new ScriptTask(
     { name: taskName, priority: 90, lastRun: 0, interval: 1000, enabled: false },

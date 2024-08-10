@@ -1,6 +1,6 @@
 import { NS } from "@ns";
-import { IScriptServer } from "/lib/models";
 import { Database } from "/lib/database";
+import { IScriptServer } from "/models/ScriptServer";
 
 export async function main(ns: NS): Promise<void> {
     const hostname = ns.args[0] as string;

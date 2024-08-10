@@ -1,14 +1,14 @@
 import { NS } from "@ns";
 import { Database, DatabaseStoreName } from "/lib/database";
-import { IScriptTask, ScriptTask } from "/lib/models";
 
-import UpdatePlayerTask from "./tasks/updatePlayerTask";
-import UpdateServersTask from "./tasks/updateServersTask";
-import UpdateResetInfoTask from "./tasks/updateResetInfoTask";
-import SolveContractsTask from "./tasks/solveContractsTask";
-import RootServersTask from "./tasks/rootServersTask";
-import UpdateHackDataTask from "./tasks/updateHackDataTask";
-// import purchasedServersTask from "./tasks/purchasedServersTask";
+import UpdatePlayerTask from "/tasks/updatePlayerTask";
+import UpdateServersTask from "/tasks/updateServersTask";
+import UpdateResetInfoTask from "/tasks/updateResetInfoTask";
+import SolveContractsTask from "/tasks/solveContractsTask";
+import RootServersTask from "/tasks/rootServersTask";
+import UpdateHackDataTask from "/tasks/updateHackDataTask";
+import { IScriptTask, ScriptTask } from "/models/ScriptTask";
+// import purchasedServersTask from "/tasks/purchasedServersTask";
 
 
 export enum TaskNames {

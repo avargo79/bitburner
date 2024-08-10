@@ -1,5 +1,5 @@
 import { DynamicScript } from "/lib/system";
-import { ScriptTask } from "/lib/models";
+import { ScriptTask } from "/models/ScriptTask";
 
 export default (taskName: string = 'SolveContracts') => new ScriptTask(
     { name: taskName, priority: 80, lastRun: 0, interval: 5000, enabled: false },

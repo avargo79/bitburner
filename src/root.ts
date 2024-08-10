@@ -1,6 +1,5 @@
 import { NS } from "@ns";
-import { Database, DatabaseStoreName } from "/lib/database";
-import { IScriptServer } from "/lib/models";
+import { Database } from "/lib/database";
 
 export function autocomplete(data: { servers: any }, args: any) {
     return data.servers;
