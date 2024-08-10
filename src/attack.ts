@@ -140,7 +140,7 @@ function tryExecuteScript(ns: NS, executingServer: IScriptServer, script: string
 async function printStatus(ns: NS, executingServer: IScriptServer) {
     const remoteScripts = executingServer.pids
         .filter(p => p.filename.startsWith("remote/"));
-    ns.print(JSON.stringify(remoteScripts));
+
     const rows = remoteScripts.map(s => [s.args[0], s.filename, s.threads]).reduce((acc, s) => {
         // find the entry where [hostname, filename] is the same, if not found, push the new entry
         if (!acc.find(e => e[0] === s[0] && e[1] === s[1])) acc.push(s);
