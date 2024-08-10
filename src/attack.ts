@@ -1,16 +1,32 @@
-import { NS } from "@ns";
+import { AutocompleteData, NS } from "@ns";
 import { Database, DatabaseStoreName } from "/lib/database";
 import { IScriptPlayer, IScriptServer } from "/lib/models";
 import { DynamicScript, getDynamicScriptContent } from "./lib/system";
 import PrettyTable from "./lib/prettytable";
 
+const argsSchema: [string, string | number | boolean | string[]][] = [
+    ['prep-only', false],
+]
+
+export function autocomplete(data: AutocompleteData, args: any) {
+    data.flags(argsSchema);
+    return data.txts;
+}
+
 const reserveRam = 32
+const scripts = {
+    weaken: "remote/hwgw.weaken.js",
+    grow: "remote/hwgw.grow.js",
+    hack: "remote/hwgw.hack.js",
+}
 const database = await Database.getInstance();
 await database.open();
 
 export async function main(ns: NS): Promise<void> {
     ns.disableLog("ALL");
     ns.clearLog();
+
+    const options = ns.flags(argsSchema);
 
     let player: IScriptPlayer;
     let executingServer: IScriptServer;
@@ -23,15 +39,16 @@ export async function main(ns: NS): Promise<void> {
         && (server.moneyMax ?? 0) > 0;
     const shouldWeaken = (server: IScriptServer) =>
         isTarget(server)
-        && server.hackDifficulty! > server.minDifficulty!
+        && server.hackDifficulty! > server.minDifficulty!;
     const shouldGrow = (server: IScriptServer) =>
         isTarget(server)
         && server.moneyMax! > server.moneyAvailable!
+        && getExecutingThreads(executingServer, server, scripts.weaken) < 1;
     const shouldHack = (server: IScriptServer) =>
         isTarget(server)
         && !shouldWeaken(server)
         && !shouldGrow(server)
-        && executingServer.pids.find(p => p.filename === "remote/hwgw.hack" && p.args.includes(server.hostname)) === undefined;
+        && executingServer.pids.find(p => p.filename === scripts.hack && p.args.includes(server.hostname)) === undefined;
 
     const sortByValue = (a: IScriptServer, b: IScriptServer) => getTargetValue(b) - getTargetValue(a)
 
@@ -39,24 +56,27 @@ export async function main(ns: NS): Promise<void> {
     const refreshExecutingServer = async () => await database.get<IScriptServer>(DatabaseStoreName.Servers, 'home');
     const refreshServers = async (filterFn: (server: IScriptServer) => boolean) => (await database.getAll<IScriptServer>(DatabaseStoreName.Servers)).filter(filterFn);
 
+    const getExecutingThreads = (executingServer: IScriptServer, target: IScriptServer, script: string) =>
+        executingServer.pids
+            .filter(p => p.filename === script && p.args.includes(target.hostname))
+            .reduce((acc, p) => acc + p.threads, 0);
+
     while (true) {
         player = await refreshPlayer();
         executingServer = await refreshExecutingServer();
 
         ns.clearLog();
-        printStatus(ns, executingServer);
+        await printStatus(ns, executingServer);
 
         // Weaken targets
         const weakenTargets = await refreshServers(shouldWeaken);
         weakenTargets.sort(sortByValue);
         for (const target of weakenTargets) {
-            const executingThreads = executingServer.pids
-                .filter(p => p.filename === "remote/hwgw.weaken.js" && p.args.includes(target.hostname))
-                .reduce((acc, p) => acc + p.threads, 0);
+            const executingThreads = getExecutingThreads(executingServer, target, scripts.weaken);
 
             const secDecrease = target.hackDifficulty! - target.minDifficulty!;
-            let weakenThreads = Math.ceil(secDecrease * 20) - executingThreads;
-            weakenThreads -= tryExecuteScript(ns, executingServer, 'remote/hwgw.weaken.js', target.hostname, weakenThreads);
+            const weakenThreads = Math.ceil(secDecrease * 20) - executingThreads;
+            tryExecuteScript(ns, executingServer, scripts.weaken, target.hostname, weakenThreads);
         }
         await ns.sleep(1000);
 
@@ -65,9 +85,11 @@ export async function main(ns: NS): Promise<void> {
         const growTargets = await refreshServers(shouldGrow);
         growTargets.sort(sortByValue);
         for (const target of growTargets) {
-            const executingThreads = executingServer.pids
-                .filter(p => p.filename === "remote/hwgw.grow.js" && p.args.includes(target.hostname))
-                .reduce((acc, p) => acc + p.threads, 0);
+            const executingThreads = getExecutingThreads(executingServer, target, scripts.grow);
+            if (executingThreads === 1 && !target.moneyAvailable) {
+                ns.print(`Skipping grow on ${target.hostname} because no money available`);
+                continue
+            };
 
             let money = target.moneyMax! / target.moneyAvailable!;
             if (money == Infinity) money = target.moneyMax!;
@@ -75,34 +97,31 @@ export async function main(ns: NS): Promise<void> {
             const scriptContext = getDynamicScriptContent("ns.growthAnalyze", `Math.ceil(ns.growthAnalyze('${target.hostname}', ${money}))`, DatabaseStoreName.NS_Data);
             await (new DynamicScript('ns.growthAnalyze', scriptContext, [])).run(ns, true);
             const grThreads = await database.get<number>(DatabaseStoreName.NS_Data, 'ns.growthAnalyze');
-            let growThreads = grThreads - executingThreads;
-            growThreads -= tryExecuteScript(ns, executingServer, 'remote/hwgw.grow.js', target.hostname, growThreads);
+            // If there is no money available, only run 1 thread to put money on the server
+            const growThreads = target.moneyAvailable ? 1 : (grThreads - executingThreads);
+            tryExecuteScript(ns, executingServer, scripts.grow, target.hostname, growThreads);
         }
         await ns.sleep(1000);
 
         // Hack targets if no weaken/grow targets
         executingServer = await refreshExecutingServer();
-        const hackTargets = await refreshServers(shouldHack);
+        const hackTargets = options["prep-only"] ? [] : await refreshServers(shouldHack);
         hackTargets.sort(sortByValue);
         for (const target of hackTargets) {
-            const executingThreads = executingServer.pids
-                .filter(p => p.filename === "remote/hwgw.hack.js" && p.args.includes(target.hostname))
-                .reduce((acc, p) => acc + p.threads, 0);
+            const executingThreads = getExecutingThreads(executingServer, target, scripts.hack);
 
             const scriptContext = getDynamicScriptContent("ns.hackAnalyzeThreads", `Math.ceil(ns.hackAnalyzeThreads('${target.hostname}', ${target.moneyMax!}))`, DatabaseStoreName.NS_Data);
             await (new DynamicScript('ns.hackAnalyzeThreads', scriptContext, [])).run(ns, true);
             const hkThreads = await database.get<number>(DatabaseStoreName.NS_Data, 'ns.hackAnalyzeThreads');
             let hackThreads = hkThreads - executingThreads;
-            if (hackThreads == Infinity) hackThreads = 1;
-            hackThreads -= tryExecuteScript(ns, executingServer, 'remote/hwgw.hack.js', target.hostname, hackThreads);
+            if (hackThreads == Infinity) hackThreads = 0;
+            hackThreads -= tryExecuteScript(ns, executingServer, scripts.hack, target.hostname, hackThreads);
         }
         await ns.sleep(1000);
 
         // Wait until threads available
-        let sleepingUntilThreads = (executingServer.maxRam - executingServer.ramUsed - reserveRam) / 2 < 1
-        while (sleepingUntilThreads) {
+        while ((executingServer.maxRam - executingServer.ramUsed - reserveRam) / 2 < 1) {
             executingServer = await refreshExecutingServer();
-            sleepingUntilThreads = (executingServer.maxRam - executingServer.ramUsed - reserveRam) / 2 < 1;
             await ns.sleep(100);
         }
     }
