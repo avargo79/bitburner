@@ -46,7 +46,7 @@ export async function main(ns: NS) {
 
     recursiveScan(ns, "", "home", server, route);
 
-    const cmd = "connect " + route.join("; connect ") + ";" + (player.skills.hacking >= target.requiredHackingSkill! ? " backdoor" : "");
+    const cmd = "connect " + route.join("; connect ") + ";" + (!target.backdoorInstalled && player.skills.hacking >= target.requiredHackingSkill! ? " backdoor" : "");
     const terminalInput: any = eval("document").getElementById("terminal-input");
     if (!terminalInput) {
         navigator.clipboard.writeText(cmd);
