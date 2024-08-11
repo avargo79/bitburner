@@ -1,36 +1,37 @@
-import { AutocompleteData, NS } from "@ns";
+import { AutocompleteData, NS, ScriptArg } from "@ns";
 import { Database, DatabaseStoreName } from "/lib/database";
 import { disableLogs, DynamicScript, getDynamicScriptContent } from "/lib/system";
 import { IScriptPlayer } from "/models/IScriptPlayer";
-import { IScriptServer } from "/models/ScriptServer";
+import { byAvailableRam, byValue, getAvailableThreads, isAttacker, IScriptServer, isTarget, shouldGrow, shouldHack, shouldWeaken, targetValue } from "/models/ScriptServer";
 import { IHackScriptArgs } from "./models/IRemoteScriptArgs";
 import PrettyTable from "./lib/prettytable";
 
 const reserveRam = 32;
 
 const argsSchema: [string, string | number | boolean | string[]][] = [
-    ['target', ''],
     ['debug', false],
-    ['prep', false],
-    ['repeat', false],
+    ['repeat', true],
+    ['prep-only', true],
 ]
+let options: {
+    [key: string]: string[] | ScriptArg;
+};
 
 const database = await Database.getInstance();
 await database.open();
 
 export function autocomplete(data: AutocompleteData, args: any) {
     data.flags(argsSchema);
-    const lastFlag = args.length > 0 ? args[args.length - 1] : null;
-    if (lastFlag == "--target")
-        return data.servers;
 
     return [];
 }
 
 export async function main(ns: NS): Promise<void> {
     disableLogs(ns, ['sleep', 'run', 'scp', 'exec']);
-    const options = ns.flags(argsSchema);
-    ns.setTitle('Batcher' + (options.debug ? ' - Debug' : ''));
+    options = ns.flags(argsSchema);
+    ns.atExit(() => {
+        ns.exec('killremote.js', 'home');
+    });
 
     do {
         ns.clearLog()
@@ -38,90 +39,196 @@ export async function main(ns: NS): Promise<void> {
         const player = await database.get<IScriptPlayer>(DatabaseStoreName.NS_Data, 'ns.getPlayer');
         const servers = await database.getAll<IScriptServer>(DatabaseStoreName.Servers);
 
-        const targets = servers.filter(s => isTarget(s, player)).sort(byValue);
-        const bestTarget = options.target
-            ? targets.find(s => s.hostname === options.target)!
-            : targets.reduce((acc, cur) => targetValue(cur) > targetValue(acc) ? cur : acc);
-
+        const targets = servers.filter(s => isTarget(s) && s.requiredHackingSkill! <= player.skills.hacking).sort(byValue);
         const attackers = servers.filter(isAttacker).sort(byAvailableRam);
         attackers.forEach(s => ns.scp('remote/hwg.js', s.hostname));
 
-        const batch = !options.prep && (!shouldWeaken(bestTarget, player) && !shouldGrow(bestTarget, player))
-            ? await initializeHackBatch(ns, 'Best Target Batch', bestTarget)
-            : await initializePrepBatch(ns, 'Best Target Prep Batch', bestTarget);
-        timings['hk'] = batch.finishAt - 400;
-        timings['wk1'] = batch.finishAt - 300;
-        timings['gr'] = batch.finishAt - 200;
-        timings['wk2'] = batch.finishAt - 100;
+        // Get a current view of all the attacking servers and their thread count
+        const attackerThreads: Record<string, number> = servers.filter(isAttacker)
+            .reduce((acc, cur) => ({
+                ...acc,
+                [cur.hostname]: Math.floor(getAvailableThreads(cur) - (cur.hostname === 'home' ? reserveRam : 0) / 2)
+            }), {});
 
-        const attackFinishTime = Date.now() + bestTarget.hackData.wkTime + 1000;
+        // build batchers for server that need to be hacked
+        const serversToHack = targets.filter(t => shouldHack(t));
+        const hackBatches = [];
+        for (const target of serversToHack) {
 
-        for (const attacker of attackers) {
-            const maxRam = attacker.maxRam - (attacker.hostname === 'home' ? reserveRam : 0);
-            let availableThreads = Math.floor((maxRam - attacker.ramUsed) / 2);
-            if (availableThreads < 1) continue;
+            if (!target.hackData)
+                ns.print(target.hostname, ' has no hackData');
 
-            if (!options.prep && (shouldHack(bestTarget, player)))
-                availableThreads -= buildHkScripts(batch, attacker, availableThreads, attackFinishTime);
-            availableThreads -= buildWk1Scripts(batch, attacker, availableThreads, attackFinishTime);
-            availableThreads -= buildGrScripts(batch, attacker, availableThreads, attackFinishTime);
-            availableThreads -= buildWk2Scripts(batch, attacker, availableThreads, attackFinishTime);
+            const hackBatch = await initializeHackBatch(ns, 'Hack Batch', target);
+            hackBatches.push(hackBatch);
         }
 
-        if (options.debug) {
-            batch.scripts.forEach(s => ns.print(`${s.hostname}: Type: ${s.type} Threads: ${s.threads} Target: ${s.scriptArgs.hostname}`));
-            return;
+        // build batches for server that need to be prepped
+        const serversToPrep = targets.filter(t => shouldWeaken(t) || shouldGrow(t));
+        const prepBatches = [];
+        for (const target of serversToPrep) {
+            prepBatches.push(await initializePrepBatch(ns, 'Prep Batch', target));
         }
 
-        for (const script of batch.scripts) {
-            if (options.debug) break;
-            ns.exec('remote/hwg.js', script.hostname, script.threads, JSON.stringify(script.scriptArgs));
+        // run the batches
+        const batches = [...buildHackBatches(hackBatches, attackers, attackerThreads), ...buildPrepBatches(prepBatches, attackers, attackerThreads)];
+        // const batches = [batches_og.find(b => b.name === 'Prep Batch')!];
+        if (options.debug) debugBatches(ns, batches);
+
+        for (const batch of batches) {
+            for (const script of batch.scripts) {
+                // if (options.debug) ns.tprint(`Running ${script.type} on ${script.hostname} with ${script.threads} threads, delay until ${script.scriptArgs.delayUntil}`);
+                const pid = ns.exec('remote/hwg.js', script.hostname, script.threads, JSON.stringify(script.scriptArgs));
+                if (pid === 0) {
+                    // ns.toast(`Failed to start ${script.type} on ${script.hostname}`, 'error');
+                }
+            }
         }
 
-        const totalNetworkThreads = servers.reduce((acc, cur) => acc + ((cur.maxRam - (cur.hostname === 'home' ? reserveRam : 0)) / 2), 0);
-        const totalThreads = batch.scripts.reduce((acc, cur) => acc + cur.threads, 0);
-        const totalBatchThreads = batch.hackThreads + batch.weakenThreads1 + batch.growThreads + batch.weakenThreads2;
         do {
-            await ns.sleep(500);
+            await ns.sleep(100);
             ns.clearLog();
-            ns.print(`Batch: '${batch.name}' Target: ${batch.target.hostname}`)
-            ns.print(`\tHack: ${batch.hackThreads}, Weaken: ${batch.weakenThreads1}, Grow: ${batch.growThreads}, Weaken: ${batch.weakenThreads2}`);
-            ns.print(`\tNetwork Threads: ${totalNetworkThreads} Batch Threads: ${totalThreads}/${totalBatchThreads}`);
-            ns.print(`\tComplete: ${ns.tFormat(batch.finishAt - Date.now())}`)
-        } while (await printStatus(ns, batch))
+        } while (printStatus(ns, batches))
     } while (options.repeat)
 }
 
-async function printStatus(ns: NS, batch: IBatch) {
-    const servers = await database.getAll<IScriptServer>(DatabaseStoreName.Servers);
 
-    const rows = servers
-        .flatMap(s => s.pids.filter((pid => pid.filename.startsWith("remote/"))).map(pid => ({ ...pid, args: { ...JSON.parse(pid.args[0]) }, hostname: s.hostname })))
-        .sort((a, b) => (timings[a.args.batchType] - Date.now()) - (timings[b.args.batchType] - Date.now()))
-        .map(pid => [
-            pid.hostname,
+function printStatus(ns: NS, batches: IBatch[]) {
+    const rows = [];
+
+    for (const batch of batches) {
+        rows.push([
+            batch.name,
             batch.target.hostname,
-            pid.args.batchType,
-            pid.threads,
-            pid.args.delayUntil - Date.now() <= 0
-                ? 'Running'
-                : ns.tFormat(pid.args.delayUntil - Date.now()),
+            batch.deadline - Date.now() > 0 ? ns.tFormat(batch.deadline - Date.now()) : 'Complete',
         ]);
-
+    }
     const pt = new PrettyTable();
-    const headers = ["HOSTNAME", "TARGET", "TYPE", "THREADS", "DELAY"];
+    const headers = ["NAME", "TARGET", "COMPLETE"];
     pt.create(headers, rows);
     ns.print(pt.print());
-    return rows.length
+
+    return rows.length > 0 && rows.some(r => r[2] !== 'Complete');
 }
 
 
-function buildHkScripts(batch: IBatch, attacker: IScriptServer, availableThreads: number, attackFinishTime: number) {
+async function initializeHackBatch(ns: NS, name: string, target: IScriptServer): Promise<IBatch> {
+    const batch: IBatch = Batch.new();
+    batch.name = name;
+    batch.target = target;
+
+    const hackAnalyzeThreadsScript = getDynamicScriptContent("ns.hackAnalyzeThreads", `Math.ceil(ns.hackAnalyzeThreads('${target.hostname}', ${target.moneyAvailable!}))`);
+    await DynamicScript.new('HackAnalyzeThreads', hackAnalyzeThreadsScript, []).run(ns, true);
+    batch.hackThreads = await database.get<number>(DatabaseStoreName.NS_Data, 'ns.hackAnalyzeThreads');
+    if (batch.hackThreads == Infinity) batch.hackThreads = 0;
+
+    const hackAnalyzeSecurityScript = getDynamicScriptContent("ns.hackAnalyzeSecurity", `ns.hackAnalyzeSecurity(${batch.hackThreads}, '${target.hostname}')`);
+    await DynamicScript.new('HackAnalyzeSecurity', hackAnalyzeSecurityScript, []).run(ns, true);
+    const hackSecIncrease = await database.get<number>(DatabaseStoreName.NS_Data, 'ns.hackAnalyzeSecurity');
+
+    const weakenAnalyzeScript = getDynamicScriptContent("ns.weakenAnalyze", `ns.weakenAnalyze(1)`);
+    await DynamicScript.new('WeakenAnalyze', weakenAnalyzeScript, []).run(ns, true);
+    const weakenEffect = await database.get<number>(DatabaseStoreName.NS_Data, 'ns.weakenAnalyze');
+    batch.weakenThreads1 = Math.ceil(hackSecIncrease / weakenEffect);
+
+    const growthAnalyzeScript = getDynamicScriptContent("ns.growthAnalyze", `Math.ceil(ns.growthAnalyze('${target.hostname}', ${target.moneyMax!}))`);
+    await DynamicScript.new('GrowthAnalyze', growthAnalyzeScript, []).run(ns, true);
+    batch.growThreads = await database.get<number>(DatabaseStoreName.NS_Data, 'ns.growthAnalyze');
+
+    // const growthAnalyzeSecurityScript = getDynamicScriptContent("ns.growthAnalyzeSecurity", `ns.growthAnalyzeSecurity(${batch.growThreads!}, '${target.hostname}')`);
+    // await DynamicScript.new('GrowthAnalyzeSecurity', growthAnalyzeSecurityScript, []).run(ns, true);
+    // const growSecIncrease = await database.get<number>(DatabaseStoreName.NS_Data, 'ns.growthAnalyzeSecurity');
+
+    // batch.weakenThreads2 = Math.ceil(growSecIncrease / weakenEffect);
+    batch.weakenThreads2 = Math.ceil(batch.growThreads / 12.5) + 15
+
+    return batch;
+}
+function buildHackBatches(hackBatches: IBatch[], attackers: IScriptServer[], attackerThreads: Record<string, number>) {
+    if (options['preop-only'] || hackBatches.length === 0) return hackBatches;
+    const bestTargetBatch = hackBatches.sort((a, b) => targetValue(b.target) - targetValue(a.target))[0];
+    // bestTargetBatch.deadline = Date.now() + bestTargetBatch.target.hackData.wkTime + 1000;
+
+    // determine how many time the best target batch can run from total attacker threads available
+    let totalThreads = Object.values(attackerThreads).reduce((acc, cur) => acc + cur, 0);
+    //attackers.reduce((acc, cur) => acc + (getAvailableThreads(cur) - (cur.hostname === 'home' ? reserveRam : 0)), 0);
+    const totalBatchThreads = bestTargetBatch.hackThreads + bestTargetBatch.weakenThreads1 + bestTargetBatch.growThreads + bestTargetBatch.weakenThreads2;
+    const totalRuns = Math.floor(totalThreads / totalBatchThreads);
+
+    // build the hack batches
+    const offSet = 1000;
+    const batches: IBatch[] = [];
+    for (let i = 0; i < totalRuns; i++) {
+        const batch: IBatch = { ...bestTargetBatch, name: `Hack Batch ${i + 1}` };
+
+        batch.deadline = Date.now() + batch.target.hackData.wkTime + 1000 + (i * offSet);
+
+        for (const attacker of attackers) {
+            buildBatchScripts(attacker, batch, attackerThreads);
+        }
+        batches.push(batch);
+    }
+    return batches.filter(b => b.scripts.length > 0);
+}
+
+
+async function initializePrepBatch(ns: NS, name: string, target: IScriptServer): Promise<IBatch> {
+    const batch: IBatch = Batch.new();
+    batch.name = name;
+    batch.target = target;
+
+    await DynamicScript.new('WeakenAnalyze', getDynamicScriptContent("ns.weakenAnalyze", `ns.weakenAnalyze(1)`)).run(ns, true);
+    const weakenEffect = await database.get<number>(DatabaseStoreName.NS_Data, 'ns.weakenAnalyze');
+    const secDecrease = target.hackDifficulty! - target.minDifficulty!;
+    batch.weakenThreads1 = weakenEffect > 0 ? Math.ceil(secDecrease / weakenEffect) : 0;
+
+    let money = target.moneyMax! / target.moneyAvailable!;
+    if (money == Infinity) money = target.moneyMax!;
+    await DynamicScript.new('GrowthAnalyze', getDynamicScriptContent("ns.growthAnalyze", `Math.ceil(ns.growthAnalyze('${target.hostname}', ${money}))`), []).run(ns, true);
+    const growthAnalyzeThreads = await database.get<number>(DatabaseStoreName.NS_Data, 'ns.growthAnalyze');
+    // If there is no money available, only run 1 thread to put money on the server
+    batch.growThreads = !target.moneyAvailable ? 1 : growthAnalyzeThreads;
+
+    await DynamicScript.new('GrowthAnalyzeSecurity', getDynamicScriptContent("ns.growthAnalyzeSecurity", `ns.growthAnalyzeSecurity(${batch.growThreads}, '${target.hostname}')`), []).run(ns, true);
+    const growSecIncrease = await database.get<number>(DatabaseStoreName.NS_Data, 'ns.growthAnalyzeSecurity');
+    batch.weakenThreads2 = Math.ceil(growSecIncrease / weakenEffect);
+
+    return batch;
+}
+function buildPrepBatches(prepBatches: IBatch[], attackers: IScriptServer[], attackerThreads: Record<string, number>) {
+    if (prepBatches.length === 0) return prepBatches;
+    let remainingThreads = attackers.reduce((acc, cur) => acc + (getAvailableThreads(cur) - (cur.hostname === 'home' ? reserveRam : 0)), 0);
+
+    const batches: IBatch[] = [];
+    while (remainingThreads > 0) {
+        const prepBatch = prepBatches.pop();
+        if (prepBatch === undefined) break;
+        prepBatch.deadline = Date.now() + prepBatch.target.hackData.wkTime + 1000;
+
+        for (const attacker of attackers) {
+            buildBatchScripts(attacker, prepBatch, attackerThreads);
+        }
+        batches.push(prepBatch);
+    }
+    return batches.filter(b => b.scripts.length > 0);
+}
+
+
+function buildBatchScripts(attacker: IScriptServer, batch: IBatch, attackerThreads: Record<string, number>) {
+    const maxRam = attacker.maxRam - (attacker.hostname === 'home' ? reserveRam : 0);
+    if (attackerThreads[attacker.hostname] < 1) return;
+
+    if (!options.prep && (shouldHack(batch.target)))
+        attackerThreads[attacker.hostname] -= buildHkScripts(batch, attacker, attackerThreads[attacker.hostname]);
+    attackerThreads[attacker.hostname] -= buildWk1Scripts(batch, attacker, attackerThreads[attacker.hostname]);
+    attackerThreads[attacker.hostname] -= buildGrScripts(batch, attacker, attackerThreads[attacker.hostname]);
+    attackerThreads[attacker.hostname] -= buildWk2Scripts(batch, attacker, attackerThreads[attacker.hostname]);
+}
+function buildHkScripts(batch: IBatch, attacker: IScriptServer, availableThreads: number) {
     if (availableThreads < 1) return availableThreads;
     const batchType = 'hk';
     const hackType = 'hack';
     const batchThreads = batch.hackThreads;
-    const delayUntil = Math.ceil((attackFinishTime - batch.target.hackData.hkTime) - 400);
+    const delayUntil = Math.ceil((batch.deadline - batch.target.hackData.hkTime) - 400);
 
     const neededThreads = batchThreads - batch.scripts.reduce((acc, cur) => cur.type === batchType ? acc + cur.threads : acc, 0);
     const threads = Math.min(availableThreads, neededThreads);
@@ -135,14 +242,15 @@ function buildHkScripts(batch: IBatch, attacker: IScriptServer, availableThreads
     }
     return threads;
 }
-function buildWk1Scripts(batch: IBatch, attacker: IScriptServer, availableThreads: number, attackFinishTime: number) {
+function buildWk1Scripts(batch: IBatch, attacker: IScriptServer, availableThreads: number) {
     if (availableThreads < 1) return availableThreads;
     const batchType = 'wk1';
     const hackType = 'weaken';
     const batchThreads = batch.weakenThreads1;
-    const delayUntil = Math.ceil((attackFinishTime - batch.target.hackData.wkTime) - 300);
+    const delayUntil = Math.ceil((batch.deadline - batch.target.hackData.wkTime) - 300);
 
-    const neededThreads = batchThreads - batch.scripts.reduce((acc, cur) => cur.type === batchType ? acc + cur.threads : acc, 0);
+    const currentBatchThreads = batch.scripts.reduce((acc, cur) => cur.type === batchType ? acc + cur.threads : acc, 0);
+    const neededThreads = batchThreads - currentBatchThreads;
     const threads = Math.min(availableThreads, neededThreads);
     if (threads > 0) {
         batch.scripts.push({
@@ -154,12 +262,12 @@ function buildWk1Scripts(batch: IBatch, attacker: IScriptServer, availableThread
     }
     return threads;
 }
-function buildGrScripts(batch: IBatch, attacker: IScriptServer, availableThreads: number, attackFinishTime: number) {
+function buildGrScripts(batch: IBatch, attacker: IScriptServer, availableThreads: number) {
     if (availableThreads < 1) return availableThreads;
     const batchType = 'gr';
     const hackType = 'grow';
     const batchThreads = batch.growThreads;
-    const delayUntil = Math.ceil((attackFinishTime - batch.target.hackData.grTime) - 200);
+    const delayUntil = Math.ceil((batch.deadline - batch.target.hackData.grTime) - 200);
 
     const neededThreads = batchThreads - batch.scripts.reduce((acc, cur) => cur.type === batchType ? acc + cur.threads : acc, 0);
     const threads = Math.min(availableThreads, neededThreads);
@@ -173,12 +281,12 @@ function buildGrScripts(batch: IBatch, attacker: IScriptServer, availableThreads
     }
     return threads;
 }
-function buildWk2Scripts(batch: IBatch, attacker: IScriptServer, availableThreads: number, attackFinishTime: number) {
+function buildWk2Scripts(batch: IBatch, attacker: IScriptServer, availableThreads: number) {
     if (availableThreads < 1) return availableThreads;
     const batchType = 'wk2';
     const hackType = 'weaken';
     const batchThreads = batch.weakenThreads2;
-    const delayUntil = Math.ceil((attackFinishTime - batch.target.hackData.wkTime) - 100);
+    const delayUntil = Math.ceil((batch.deadline - batch.target.hackData.wkTime) - 100);
 
     const neededThreads = batchThreads - batch.scripts.reduce((acc, cur) => cur.type === batchType ? acc + cur.threads : acc, 0);
     const threads = Math.min(availableThreads, neededThreads);
@@ -200,109 +308,49 @@ interface IBatch {
     weakenThreads1: number,
     growThreads: number,
     weakenThreads2: number,
-    scripts: IScriptBatch[],
-    finishAt: number;
+    scripts: IBatchScript[],
+    deadline: number;
+}
+class Batch implements IBatch {
+    name: string = '';
+    target: IScriptServer = {} as IScriptServer;
+    hackThreads: number = 0;
+    weakenThreads1: number = 0;
+    growThreads: number = 0;
+    weakenThreads2: number = 0;
+    scripts: IBatchScript[] = [];
+    deadline: number = 0;
+
+    static new(): IBatch {
+        return new Batch();
+    }
 }
 
-interface IScriptBatch {
+interface IBatchScript {
     hostname: string,
     type: 'hk' | 'wk1' | 'gr' | 'wk2',
     scriptArgs: IHackScriptArgs,
     threads: number,
 }
 
-const isTarget = (server: IScriptServer, player: IScriptPlayer) =>
-    server.hasAdminRights
-    && !server.purchasedByPlayer
-    && player.skills.hacking >= server.requiredHackingSkill!
-    && (server.moneyMax ?? 0) > 0;
-const isAttacker = (server: IScriptServer) =>
-    server.hasAdminRights
-    && server.maxRam - server.ramUsed > 0;
-
-const shouldWeaken = (server: IScriptServer, player: IScriptPlayer) =>
-    isTarget(server, player)
-    && (server.hackDifficulty ?? 0) > (server.minDifficulty ?? 0);
-const shouldGrow = (server: IScriptServer, player: IScriptPlayer) =>
-    isTarget(server, player)
-    && (server.moneyMax ?? 0) > (server.moneyAvailable ?? 0);
-const shouldHack = (server: IScriptServer, player: IScriptPlayer) =>
-    isTarget(server, player)
-    && !shouldWeaken(server, player)
-    && !shouldGrow(server, player);
-
-const targetValue = (server: IScriptServer) => Math.floor(server.moneyMax! / server.hackData.wkTime);
-
-const byValue = (a: IScriptServer, b: IScriptServer) => targetValue(b) - targetValue(a)
-const byAvailableRam = (a: IScriptServer, b: IScriptServer) => b.maxRam - a.maxRam;
-
-
-const timings: Record<string, number> = {};
-async function initializeHackBatch(ns: NS, name: string, target: IScriptServer): Promise<IBatch> {
-    const batch: IBatch = {
-        name,
-        target,
-        hackThreads: 0,
-        weakenThreads1: 0,
-        growThreads: 0,
-        weakenThreads2: 0,
-        scripts: [],
-        finishAt: Date.now() + target.hackData.wkTime + 1000
+function debugBatches(ns: NS, batches: IBatch[]) {
+    ns.tprint("Date.now():", Date.now());
+    ns.tprint("Batch count:", batches.length);
+    for (const batch of batches) {
+        ns.tprint("Batch name:", batch.name);
+        ns.tprint("  Target hostname:", batch.target.hostname);
+        ns.tprint("    hk:", batch.hackThreads);
+        ns.tprint("    wk1:", batch.weakenThreads1);
+        ns.tprint("    gr:", batch.growThreads);
+        ns.tprint("    wk2:", batch.weakenThreads2);
+        ns.tprint("  Scripts:");
+        for (const script of batch.scripts) {
+            ns.tprint("    Hostname:", script.hostname);
+            ns.tprint("      Type:", script.type);
+            ns.tprint("      Script Args:", script.scriptArgs);
+            ns.tprint("      Threads:", script.threads);
+        }
+        ns.tprint("  Deadline:", new Date(batch.deadline).toLocaleString());
+        ns.tprint("--------------------");
     }
-
-    const hackAnalyzeThreadsScript = getDynamicScriptContent("ns.hackAnalyzeThreads", `Math.ceil(ns.hackAnalyzeThreads('${target.hostname}', ${target.moneyAvailable!}))`);
-    await DynamicScript.new('HackAnalyzeThreads', hackAnalyzeThreadsScript, []).run(ns, true);
-    batch.hackThreads = await database.get<number>(DatabaseStoreName.NS_Data, 'ns.hackAnalyzeThreads');
-    if (batch.hackThreads == Infinity) batch.hackThreads = 0;
-
-    const hackAnalyzeSecurityScript = getDynamicScriptContent("ns.hackAnalyzeSecurity", `ns.hackAnalyzeSecurity(${batch.hackThreads})`);
-    await DynamicScript.new('HackAnalyzeSecurity', hackAnalyzeSecurityScript, []).run(ns, true);
-    const hackSecIncrease = await database.get<number>(DatabaseStoreName.NS_Data, 'ns.hackAnalyzeSecurity');
-
-    const weakenAnalyzeScript = getDynamicScriptContent("ns.weakenAnalyze", `ns.weakenAnalyze(1)`);
-    await DynamicScript.new('WeakenAnalyze', weakenAnalyzeScript, []).run(ns, true);
-    const weakenEffect = await database.get<number>(DatabaseStoreName.NS_Data, 'ns.weakenAnalyze');
-    batch.weakenThreads1 = Math.ceil(hackSecIncrease / weakenEffect);
-
-    const growthAnalyzeScript = getDynamicScriptContent("ns.growthAnalyze", `Math.ceil(ns.growthAnalyze('${target.hostname}', ${target.moneyMax!}))`);
-    await DynamicScript.new('GrowthAnalyze', growthAnalyzeScript, []).run(ns, true);
-    batch.growThreads = await database.get<number>(DatabaseStoreName.NS_Data, 'ns.growthAnalyze');
-
-    const growthAnalyzeSecurityScript = getDynamicScriptContent("ns.growthAnalyzeSecurity", `ns.growthAnalyzeSecurity(${batch.growThreads!}, '${target.hostname}')`);
-    await DynamicScript.new('GrowthAnalyzeSecurity', growthAnalyzeSecurityScript, []).run(ns, true);
-    const growSecIncrease = await database.get<number>(DatabaseStoreName.NS_Data, 'ns.growthAnalyzeSecurity');
-
-    batch.weakenThreads2 = Math.ceil(growSecIncrease / weakenEffect);
-
-    return batch;
-}
-async function initializePrepBatch(ns: NS, name: string, target: IScriptServer): Promise<IBatch> {
-    const batch: IBatch = {
-        name,
-        target,
-        hackThreads: 0,
-        weakenThreads1: 0,
-        growThreads: 0,
-        weakenThreads2: 0,
-        scripts: [],
-        finishAt: Date.now() + target.hackData.wkTime + 1000
-    }
-
-    await DynamicScript.new('WeakenAnalyze', getDynamicScriptContent("ns.weakenAnalyze", `ns.weakenAnalyze(1)`)).run(ns, true);
-    const weakenEffect = await database.get<number>(DatabaseStoreName.NS_Data, 'ns.weakenAnalyze');
-    const secDecrease = target.hackDifficulty! - target.minDifficulty!;
-    batch.weakenThreads1 = weakenEffect > 0 ? Math.ceil(secDecrease / weakenEffect) : 0;
-
-    let money = target.moneyMax! / target.moneyAvailable!;
-    if (money == Infinity) money = target.moneyMax!;
-    await DynamicScript.new('GrowthAnalyze', getDynamicScriptContent("ns.growthAnalyze", `Math.ceil(ns.growthAnalyze('${target.hostname}', ${money}))`), []).run(ns, true);
-    const growthAnalyzeThreads = await database.get<number>(DatabaseStoreName.NS_Data, 'ns.growthAnalyze');
-    // If there is no money available, only run 1 thread to put money on the server
-    batch.growThreads = !target.moneyAvailable ? 1 : growthAnalyzeThreads;
-
-    await DynamicScript.new('GrowthAnalyzeSecurity', getDynamicScriptContent("ns.growthAnalyzeSecurity", `ns.growthAnalyzeSecurity(${batch.growThreads}, '${target.hostname}')`), []).run(ns, true);
-    const growSecIncrease = await database.get<number>(DatabaseStoreName.NS_Data, 'ns.growthAnalyzeSecurity');
-    batch.weakenThreads2 = Math.ceil(growSecIncrease / weakenEffect);
-
-    return batch;
 }

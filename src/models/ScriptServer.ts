@@ -86,3 +86,33 @@ export class ScriptServer {
         return this.server.lastUpdated;
     }
 }
+
+export const isTarget = (server: IScriptServer) =>
+    server.hasAdminRights
+    && !server.purchasedByPlayer
+    && (server.moneyMax ?? 0) > 0;
+
+export const isAttacker = (server: IScriptServer) =>
+    server.hasAdminRights
+    && server.maxRam - server.ramUsed > 0;
+
+export const shouldWeaken = (server: IScriptServer) =>
+    isTarget(server)
+    && (server.hackDifficulty ?? 0) > (server.minDifficulty ?? 0);
+
+export const shouldGrow = (server: IScriptServer) =>
+    isTarget(server)
+    && (server.moneyMax ?? 0) > (server.moneyAvailable ?? 0);
+
+export const shouldHack = (server: IScriptServer) =>
+    isTarget(server)
+    && !shouldWeaken(server)
+    && !shouldGrow(server);
+
+export const targetValue = (server: IScriptServer) => Math.floor(server.moneyMax! / server.hackData.wkTime);
+
+export const byValue = (a: IScriptServer, b: IScriptServer) => targetValue(b) - targetValue(a)
+
+export const byAvailableRam = (a: IScriptServer, b: IScriptServer) => b.maxRam - a.maxRam;
+
+export const getAvailableThreads = (server: IScriptServer) => (server.maxRam - server.ramUsed) / 2;
