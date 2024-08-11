@@ -8,7 +8,7 @@ import SolveContractsTask from "/tasks/solveContractsTask";
 import RootServersTask from "/tasks/rootServersTask";
 import UpdateHackDataTask from "/tasks/updateHackDataTask";
 import { IScriptTask, ScriptTask } from "/models/ScriptTask";
-// import purchasedServersTask from "/tasks/purchasedServersTask";
+import purchasedServersTask from "/tasks/purchasedServersTask";
 
 
 export enum TaskNames {
@@ -28,7 +28,7 @@ const Tasks: Record<string, ScriptTask> = {
     [TaskNames.SolveContracts]: SolveContractsTask(TaskNames.SolveContracts),
     [TaskNames.RootServers]: RootServersTask(TaskNames.RootServers),
     [TaskNames.UpdateHackData]: UpdateHackDataTask(TaskNames.UpdateHackData),
-    // [TaskNames.PurchasedServers]: purchasedServersTask(TaskNames.PurchasedServers),
+    [TaskNames.PurchasedServers]: purchasedServersTask(TaskNames.PurchasedServers),
 };
 
 export async function main(ns: NS): Promise<void> {
