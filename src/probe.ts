@@ -74,9 +74,9 @@ export async function main(ns: NS): Promise<void> {
             ns.formatPercent(s.money.current / s.money.max || 0),
             ns.formatNumber(s.isTarget ? s.security.current - s.security.min : 1),
             s.power || "",
-            ns.tFormat(ns.getWeakenTime(s.hostname)) || "",
-            formatMoney(ns.getServerMaxMoney(s.hostname)),
-            Math.floor(ns.getServerMaxMoney(s.hostname) / ns.getWeakenTime(s.hostname)),
+            s.money.max > 0 ? ns.tFormat(ns.getWeakenTime(s.hostname)) : "N/A",
+            s.money.max > 0 ? formatMoney(ns.getServerMaxMoney(s.hostname)) : "$0",
+            s.money.max > 0 ? Math.floor(ns.getServerMaxMoney(s.hostname) / ns.getWeakenTime(s.hostname)) : 0,
         ]);
 
         pt.create(headers, rows);

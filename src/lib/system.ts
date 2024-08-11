@@ -13,6 +13,11 @@ export class DynamicScript {
 
     constructor(public scriptName: string, public command: string, public includes: string[] = []) { }
 
+    /** 
+     *  @param {string} scriptName Data of the script that will be written to /temp
+     *  @param {string} command Content that will be executed in the temp script and set as the result in the ObjectStore
+     *  @param {string[]} includes Imports needed to execute the temp script
+     */
     public static new(scriptName: string, command: string, includes: string[] = []): DynamicScript {
         return new DynamicScript(scriptName, command, includes);
     }
@@ -57,6 +62,11 @@ export class DynamicScript {
     // };
 }
 
+/** 
+ *  @param {string} commandName Value that will be used for the key in the ObjectStore
+ *  @param {string} scriptContent Content that will be executed in the script and set as the result in the ObjectStore
+ *  @param {string} storeName ObjectStore name
+ */
 export function getDynamicScriptContent(commandName: string, scriptContent: string, storeName = DatabaseStoreName.NS_Data) {
     return `const result = ${scriptContent};await database.saveRecord('${storeName}', { command: '${commandName}', result });`
 }

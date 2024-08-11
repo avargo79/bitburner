@@ -61,7 +61,7 @@ type tConfig = {
 };
 const initialConfig: tConfig = { interval: 100 };
 async function initializeTaskDatabase(ns: NS, database: Database) {
-    if (!(await database.get<IScriptTask>(DatabaseStoreName.Configuration, scriptName))) {
+    if (!(await database.get<tConfig>(DatabaseStoreName.Configuration, scriptName))) {
         await database.saveRecord(DatabaseStoreName.Configuration, { key: scriptName, value: initialConfig });
     }
 
