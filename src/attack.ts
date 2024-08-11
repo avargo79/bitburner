@@ -4,6 +4,7 @@ import { DynamicScript, getDynamicScriptContent } from "/lib/system";
 import PrettyTable from "/lib/prettytable";
 import { IScriptPlayer } from "/models/IScriptPlayer";
 import { IScriptServer } from "/models/ScriptServer";
+import { IScriptTask } from "/models/ScriptTask";
 
 const argsSchema: [string, string | number | boolean | string[]][] = [
     ['prep-only', false],
@@ -26,6 +27,14 @@ await database.open();
 export async function main(ns: NS): Promise<void> {
     ns.disableLog("ALL");
     ns.clearLog();
+
+    const tasks = await database.getAll<IScriptTask>(DatabaseStoreName.Tasks);
+    const updateServersTask = tasks.find(t => t.name === 'UpdateServers');
+    const updateHackDataTask = tasks.find(t => t.name === 'UpdateHackData');
+    if (updateServersTask?.enabled === false || updateHackDataTask?.enabled === false) {
+        ns.toast('UpdateServers and UpdateHackData tasks must be enabled to run attack script', 'error', 5000);
+        return;
+    }
 
     const options = ns.flags(argsSchema);
 
