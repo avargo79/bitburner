@@ -8,7 +8,9 @@ export async function main(ns: NS): Promise<void> {
 
     const args = JSON.parse(ns.args[0] as string) as IHackScriptArgs;
     const timeToExecute = args.delayUntil ?? Date.now();
-    const delayFor = (timeToExecute < 1 ? Date.now() : timeToExecute) - Date.now();
+    const delayFor = timeToExecute < 1
+        ? 0
+        : timeToExecute - Date.now();
     switch (args.type) {
         case "hack":
             await ns.hack(args.hostname, { additionalMsec: delayFor });
