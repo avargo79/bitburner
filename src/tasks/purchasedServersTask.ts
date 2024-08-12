@@ -22,7 +22,13 @@ export default (taskName: string = 'PurchasedServers') => new ScriptTask(
         const max_servers = await database.get(DatabaseStoreName.NS_Data, "ns.getPurchasedServerLimit");
         const max_ram = await database.get(DatabaseStoreName.NS_Data, "ns.getPurchasedServerMaxRam");
         const base_cost = await database.get(DatabaseStoreName.NS_Data, "ns.getPurchasedServerCost");
-        const max_power = 13;//data["max-power"] as number;
+
+        let config = await database.get(DatabaseStoreName.Configuration, "purchasedServersTask.js");
+        if (!config) {
+            config = { maxPower: 13 };
+            await database.saveRecord(DatabaseStoreName.Configuration, { key: "purchasedServersTask.js", value: config });
+        }
+        const max_power = config.maxPower;
 
         const servers = await database.get(DatabaseStoreName.NS_Data, "ns.getPurchasedServers");
 
