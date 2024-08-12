@@ -48,6 +48,9 @@ export default (taskName: string = 'PurchasedServers') => new ScriptTask(
             purchasedServers.sort((a, b) => a.maxRam - b.maxRam);
             const target = purchasedServers[0];
             const upgrade_ram = target.maxRam * 2;
+             await DynamicScript.new("ns.getPurchasedServerUpgradeCost", 
+                getDynamicScriptContent("ns.getPurchasedServerUpgradeCost", "ns.getPurchasedServerUpgradeCost('" + target.hostname + "', " + upgrade_ram + ")")
+            ).run(ns, true);
             const upgrade_cost = await database.get(DatabaseStoreName.NS_Data, "ns.getPurchasedServerUpgradeCost");
 
             if (player.money < upgrade_cost) {
