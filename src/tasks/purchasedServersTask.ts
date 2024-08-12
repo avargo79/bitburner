@@ -25,25 +25,23 @@ export default (taskName: string = 'PurchasedServers') => new ScriptTask(
 
         let config = await database.get(DatabaseStoreName.Configuration, "purchasedServersTask.js");
         if (!config) {
-            config = { maxPower: 13 };
-            await database.saveRecord(DatabaseStoreName.Configuration, { key: "purchasedServersTask.js", value: config });
+            config = { key: "purchasedServersTask.js", value: { maxPower: 13 } };
+            await database.saveRecord(DatabaseStoreName.Configuration, config);
         }
-        const max_power = config.maxPower;
+        const max_power = config.value.maxPower;
 
         const servers = await database.get(DatabaseStoreName.NS_Data, "ns.getPurchasedServers");
 
         if (servers.length < max_servers && player.money < base_cost) {
             return;
         } else if (servers.length < max_servers && player.money >= base_cost) {
-            await DynamicScript.new("ns.purchaseServer", 
-                getDynamicScriptContent("ns.purchaseServer", "ns.purchaseServer('pserve-" + (servers.length + 1).toString() + "', 2)")
-            ).run(ns, true);
+            await DynamicScript.new("ns.purchaseServer", "ns.purchaseServer('pserve-" + (servers.length + 1).toString() + "', 2)").run(ns, true);
             return
         }
 
         var getPower = server => Math.max(0, Math.log2(server.maxRam));
         const networkServers = await database.getAll(DatabaseStoreName.Servers);
-        const purchasedServers = networkServers.filter(s => s.hostname.startsWith("pserve-"));
+        const purchasedServers = networkServers.filter(s => servers.includes(s.hostname));
        if (purchasedServers.some((s) => getPower(s) < max_power && s.maxRam < max_ram)) {
             purchasedServers.sort((a, b) => a.maxRam - b.maxRam);
             const target = purchasedServers[0];
@@ -57,11 +55,11 @@ export default (taskName: string = 'PurchasedServers') => new ScriptTask(
                 return
             }
 
-            const upgradePurchasedServerScript = "ns.upgradePurchasedServer('" + target.hostname + "', " + upgrade_ram + ")"
-            await DynamicScript.new("ns.upgradePurchasedServer",
-                getDynamicScriptContent("ns.upgradePurchasedServer", upgradePurchasedServerScript)
+            const upgradePurchasedServerScript = 
+                await DynamicScript.new("ns.upgradePurchasedServer", "ns.upgradePurchasedServer('" + target.hostname + "', " + upgrade_ram + ")"
             ).run(ns, true);
-        }
+            return;
+        } 
         `,
         [
             'import { DynamicScript, getDynamicScriptContent } from "/lib/system";',
