@@ -32,6 +32,8 @@ export class DynamicScript {
                 
                 /** @param {NS} ns */
                 export async function main(ns) {
+                    if (ns.ps().find(p => p.filename === "${this.filePath}" && p.pid !== ns.getRunningScript()?.pid)) return;
+
                     ${this.commandToWrite}
                 }
             `;

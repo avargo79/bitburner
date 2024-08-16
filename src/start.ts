@@ -11,15 +11,19 @@ export async function main(ns: NS): Promise<void> {
    const destroyedBitNodeRecently = Date.now() - ResetInfo.lastNodeReset < 300000;
    const installedAugsRecently = Date.now() - ResetInfo.lastAugReset < 300000;
    if (!ResetInfo || destroyedBitNodeRecently) {
+      ns.tprint("Resetting database after bitnode destruction");
       await database.clear(DatabaseStoreName.Tasks);
       await database.clear(DatabaseStoreName.Servers);
       await database.clear(DatabaseStoreName.NS_Data);
       await database.clear(DatabaseStoreName.Contracts);
+      await database.clear(DatabaseStoreName.Configuration);
 
    } else if (installedAugsRecently) {
+      ns.tprint("Resetting database after installing augments");
       await database.clear(DatabaseStoreName.Servers);
       await database.clear(DatabaseStoreName.NS_Data);
       await database.clear(DatabaseStoreName.Contracts);
+      await database.clear(DatabaseStoreName.Configuration);
    }
 
    ns.run("daemon.js");

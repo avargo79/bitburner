@@ -87,12 +87,12 @@ export async function main(ns: NS): Promise<void> {
         do {
             await ns.sleep(100);
             ns.clearLog();
-        } while (printStatus(ns, batches))
+        } while (await printStatus(ns, batches))
     } while (options.repeat)
 }
 
 
-function printStatus(ns: NS, batches: IBatch[]) {
+async function printStatus(ns: NS, batches: IBatch[]) {
     const rows = [];
 
     for (const batch of batches) {
@@ -107,7 +107,9 @@ function printStatus(ns: NS, batches: IBatch[]) {
     pt.create(headers, rows);
     ns.print(pt.print());
 
-    return rows.length > 0 && rows.some(r => r[2] !== 'Complete');
+    const servers = await database.getAll<IScriptServer>(DatabaseStoreName.Servers);
+    const running = servers.some(s => s.pids.some(p => p.filename === 'remote/hwg.js'));
+    return running;
 }
 
 
@@ -146,11 +148,9 @@ async function initializeHackBatch(ns: NS, name: string, target: IScriptServer):
 function buildHackBatches(hackBatches: IBatch[], attackers: IScriptServer[], attackerThreads: Record<string, number>) {
     if (options['preop-only'] || hackBatches.length === 0) return hackBatches;
     const bestTargetBatch = hackBatches.sort((a, b) => targetValue(b.target) - targetValue(a.target))[0];
-    // bestTargetBatch.deadline = Date.now() + bestTargetBatch.target.hackData.wkTime + 1000;
 
     // determine how many time the best target batch can run from total attacker threads available
     let totalThreads = Object.values(attackerThreads).reduce((acc, cur) => acc + cur, 0);
-    //attackers.reduce((acc, cur) => acc + (getAvailableThreads(cur) - (cur.hostname === 'home' ? reserveRam : 0)), 0);
     const totalBatchThreads = bestTargetBatch.hackThreads + bestTargetBatch.weakenThreads1 + bestTargetBatch.growThreads + bestTargetBatch.weakenThreads2;
     const totalRuns = Math.floor(totalThreads / totalBatchThreads);
 
@@ -158,14 +158,13 @@ function buildHackBatches(hackBatches: IBatch[], attackers: IScriptServer[], att
     const offSet = 1000;
     const batches: IBatch[] = [];
     for (let i = 0; i < totalRuns; i++) {
-        const batch: IBatch = { ...bestTargetBatch, name: `Hack Batch ${i + 1}` };
-
-        batch.deadline = Date.now() + batch.target.hackData.wkTime + 1000 + (i * offSet);
+        const hackBatch: IBatch = { ...bestTargetBatch, name: `Hack Batch ${i + 1}` };
+        hackBatch.deadline = Date.now() + hackBatch.target.hackData.wkTime + 1000 + (i * offSet);
 
         for (const attacker of attackers) {
-            buildBatchScripts(attacker, batch, attackerThreads);
+            buildBatchScripts(attacker, hackBatch, attackerThreads);
         }
-        batches.push(batch);
+        batches.push(hackBatch);
     }
     return batches.filter(b => b.scripts.length > 0);
 }
@@ -214,7 +213,6 @@ function buildPrepBatches(prepBatches: IBatch[], attackers: IScriptServer[], att
 
 
 function buildBatchScripts(attacker: IScriptServer, batch: IBatch, attackerThreads: Record<string, number>) {
-    const maxRam = attacker.maxRam - (attacker.hostname === 'home' ? reserveRam : 0);
     if (attackerThreads[attacker.hostname] < 1) return;
 
     if (!options.prep && (shouldHack(batch.target)))
@@ -302,6 +300,7 @@ function buildWk2Scripts(batch: IBatch, attacker: IScriptServer, availableThread
 }
 
 interface IBatch {
+    key: string,
     name: string,
     target: IScriptServer,
     hackThreads: number,
@@ -311,7 +310,15 @@ interface IBatch {
     scripts: IBatchScript[],
     deadline: number;
 }
+
+interface IBatchScript {
+    hostname: string,
+    type: 'hk' | 'wk1' | 'gr' | 'wk2',
+    scriptArgs: IHackScriptArgs,
+    threads: number,
+}
 class Batch implements IBatch {
+    key: string = '';
     name: string = '';
     target: IScriptServer = {} as IScriptServer;
     hackThreads: number = 0;
@@ -324,13 +331,20 @@ class Batch implements IBatch {
     static new(): IBatch {
         return new Batch();
     }
-}
 
-interface IBatchScript {
-    hostname: string,
-    type: 'hk' | 'wk1' | 'gr' | 'wk2',
-    scriptArgs: IHackScriptArgs,
-    threads: number,
+    toDTO(): IBatch {
+        return {
+            key: this.key,
+            name: this.name,
+            target: this.target,
+            hackThreads: this.hackThreads,
+            weakenThreads1: this.weakenThreads1,
+            growThreads: this.growThreads,
+            weakenThreads2: this.weakenThreads2,
+            scripts: this.scripts,
+            deadline: this.deadline,
+        };
+    }
 }
 
 function debugBatches(ns: NS, batches: IBatch[]) {

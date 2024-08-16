@@ -4,6 +4,7 @@ export enum DatabaseStoreName {
     Contracts = 'contracts',
     Tasks = 'tasks',
     Configuration = 'config',
+    Batches = 'batches',
 }
 
 export class Database {
@@ -28,6 +29,7 @@ export class Database {
         { name: DatabaseStoreName.Contracts, key: "id", options: { autoIncrement: true } },
         { name: DatabaseStoreName.Tasks, key: "name" },
         { name: DatabaseStoreName.Configuration, key: "key" },
+        { name: DatabaseStoreName.Batches, key: "key" },
     ];
 
     open() {
