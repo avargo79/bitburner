@@ -109,6 +109,9 @@ export const shouldHack = (server: IScriptServer) =>
     && !shouldWeaken(server)
     && !shouldGrow(server);
 
+export const isRunningScript = (server: IScriptServer, filename: string): boolean =>
+    server.pids.some(p => p.filename === filename);
+
 export const targetValue = (server: IScriptServer) => Math.floor(server.moneyMax! / server.hackData.wkTime);
 
 export const byValue = (a: IScriptServer, b: IScriptServer) => targetValue(b) - targetValue(a)
