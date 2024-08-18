@@ -10,7 +10,6 @@ import UpdateHackDataTask from "/tasks/updateHackDataTask";
 import { IScriptTask, ScriptTask } from "/models/ScriptTask";
 import purchasedServersTask from "/tasks/purchasedServersTask";
 
-
 export enum TaskNames {
     UpdatePlayer = 'UpdatePlayer',
     UpdateServers = 'UpdateServers',
@@ -31,18 +30,20 @@ const Tasks: Record<string, ScriptTask> = {
     [TaskNames.PurchasedServers]: purchasedServersTask(TaskNames.PurchasedServers),
 };
 
+const scriptName = 'daemon.js';
+
 export async function main(ns: NS): Promise<void> {
+    if (ns.ps().find(p => p.filename === scriptName && p.pid !== ns.getRunningScript()?.pid)) return;
+
     ns.clearLog();
     ns.disableLog('ALL');
-
-    if (ns.ps().find(p => p.filename === ns.getScriptName() && p.pid !== ns.getRunningScript()?.pid)) return;
 
     const database = await Database.getInstance();
     await database.open();
     await initializeTaskDatabase(ns, database);
 
     while (true) {
-        const config = await database.get<tConfig>(DatabaseStoreName.Configuration, 'daemon.js');
+        const config = await database.get<tConfig>(DatabaseStoreName.Configuration, scriptName);
 
         const tasks = await database.getAll<IScriptTask>(DatabaseStoreName.Tasks);
         tasks.sort((a, b) => b.priority - a.priority);
@@ -55,7 +56,6 @@ export async function main(ns: NS): Promise<void> {
     }
 }
 
-const scriptName = 'daemon.js';
 type tConfig = {
     interval: number;
 };
