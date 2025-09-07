@@ -118,4 +118,4 @@ export const byValue = (a: IScriptServer, b: IScriptServer) => targetValue(b) - 
 
 export const byAvailableRam = (a: IScriptServer, b: IScriptServer) => b.maxRam - a.maxRam;
 
-export const getAvailableThreads = (server: IScriptServer) => (server.maxRam - server.ramUsed) / 2;
+export const getAvailableThreads = (server: IScriptServer) => (server.maxRam - server.ramUsed) / 1.75;

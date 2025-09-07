@@ -10,6 +10,7 @@
     "esModuleInterop": true,
     "inlineSourceMap": true,
     "inlineSources": true,
+    "skipLibCheck": true,
     "strict": true,
     "rootDir": "src/",
     "outDir": "dist/",
