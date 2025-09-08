@@ -1,4 +1,4 @@
-import { Database, DatabaseStoreName } from "/lib/database";
+import { Database, DatabaseStoreName } from "lib/database";
 
 export interface IScriptConfiguration {
     key: string;
@@ -20,8 +20,9 @@ export class Configuration {
         return Configuration.instance;
     }
 
-    public async get<T>(key: string): Promise<T> {
-        return (await Configuration.database.get<IScriptConfiguration>(DatabaseStoreName.Configuration, key)).value as T;
+    public async get<T>(key: string): Promise<T | undefined> {
+        const result = await Configuration.database.get<IScriptConfiguration>(DatabaseStoreName.Configuration, key);
+        return result ? (result.value as T) : undefined;
     }
 
     public async set(value: IScriptConfiguration) {

@@ -50,6 +50,14 @@ This is a sophisticated Bitburner game automation framework built with TypeScrip
 - `npm run watch:remote` - Bitburner Remote File API sync
 - `npx tsc` - TypeScript compilation check
 - `npx eslint src/` - Lint all source files
+
+### **⚠️ CRITICAL: Watch Process Management**
+**NEVER run `npm run watch` or any watch commands from AI agents!** The user manages their own watch process. Running watch commands from AI agents will:
+- Kill existing watch processes the user is running
+- Cause file sync conflicts and build issues
+- Interrupt the user's development workflow
+
+**Only use `npx tsc --noEmit` to check TypeScript compilation without interfering with the user's watch process.**
 - **Note**: No test framework configured - testing happens in-game
 
 ## Code Style & Conventions

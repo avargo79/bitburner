@@ -1,6 +1,6 @@
 import { NS } from "@ns";
-import { Database, DatabaseStoreName } from "/lib/database";
-import { IScriptServer } from "/models/ScriptServer";
+import { Database, DatabaseStoreName } from "lib/database";
+import { IScriptServer } from "models/ScriptServer";
 
 export class DynamicScript {
     public get filePath() {
@@ -24,7 +24,7 @@ export class DynamicScript {
 
     async write(ns: NS) {
         const cmdToFile = `
-                import { Database, DatabaseStoreName } from "/lib/database";
+                import { Database, DatabaseStoreName } from "lib/database";
                 ${this.includes.join('\n')}
 
                 const database = await Database.getInstance();

@@ -5,6 +5,9 @@ export enum DatabaseStoreName {
     Tasks = 'tasks',
     Configuration = 'config',
     Batches = 'batches',
+    StockPositions = 'stockPositions',
+    StockHistory = 'stockHistory',
+    StockMetrics = 'stockMetrics',
 }
 
 export class Database {
@@ -30,6 +33,9 @@ export class Database {
         { name: DatabaseStoreName.Tasks, key: "name" },
         { name: DatabaseStoreName.Configuration, key: "key" },
         { name: DatabaseStoreName.Batches, key: "key" },
+        { name: DatabaseStoreName.StockPositions, key: "symbol" },
+        { name: DatabaseStoreName.StockHistory, key: "id", options: { autoIncrement: true } },
+        { name: DatabaseStoreName.StockMetrics, key: "symbol" },
     ];
 
     open() {
@@ -37,6 +43,8 @@ export class Database {
             const request = this.IndxDb.open(this.name, this.version);
 
             request.onupgradeneeded = (event: IDBVersionChangeEvent) => {
+                // DEBUG LOG
+                if (typeof window !== 'undefined' && window.console) window.console.log('[Database] onupgradeneeded');
                 this.db = request.result;
 
                 // Create tables here if needed
@@ -51,11 +59,15 @@ export class Database {
             };
 
             request.onsuccess = (event: Event) => {
+                // DEBUG LOG
+                if (typeof window !== 'undefined' && window.console) window.console.log('[Database] onsuccess');
                 this.db = request.result;
                 resolve("Database initialized successfully.");
             };
 
             request.onerror = (event: Event) => {
+                // DEBUG LOG
+                if (typeof window !== 'undefined' && window.console) window.console.log('[Database] onerror', event);
                 reject("Failed to initialized the database.");
             };
         });

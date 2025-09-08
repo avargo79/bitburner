@@ -1,80 +1,46 @@
 import { NS } from "@ns";
+import { SequentialTaskRunner, TaskDefinition } from "/lib/sequentialTaskRunner";
 import { Database, DatabaseStoreName } from "/lib/database";
 
-import UpdatePlayerTask from "/tasks/updatePlayerTask";
-import UpdateServersTask from "/tasks/updateServersTask";
-import UpdateResetInfoTask from "/tasks/updateResetInfoTask";
-import SolveContractsTask from "/tasks/solveContractsTask";
-import RootServersTask from "/tasks/rootServersTask";
-import UpdateHackDataTask from "/tasks/updateHackDataTask";
-import { IScriptTask, ScriptTask } from "/models/ScriptTask";
-import purchasedServersTask from "/tasks/purchasedServersTask";
-
-export enum TaskNames {
-    UpdatePlayer = 'UpdatePlayer',
-    UpdateServers = 'UpdateServers',
-    UpdateResetInfo = 'UpdateResetInfo',
-    SolveContracts = 'SolveContracts',
-    RootServers = 'RootServers',
-    PurchasedServers = 'PurchasedServers',
-    UpdateHackData = 'UpdateHackData',
-};
-
-const Tasks: Record<string, ScriptTask> = {
-    [TaskNames.UpdatePlayer]: UpdatePlayerTask(TaskNames.UpdatePlayer),
-    [TaskNames.UpdateServers]: UpdateServersTask(TaskNames.UpdateServers),
-    [TaskNames.UpdateResetInfo]: UpdateResetInfoTask(TaskNames.UpdateResetInfo),
-    [TaskNames.SolveContracts]: SolveContractsTask(TaskNames.SolveContracts),
-    [TaskNames.RootServers]: RootServersTask(TaskNames.RootServers),
-    [TaskNames.UpdateHackData]: UpdateHackDataTask(TaskNames.UpdateHackData),
-    [TaskNames.PurchasedServers]: purchasedServersTask(TaskNames.PurchasedServers),
-};
-
-const scriptName = 'daemon.js';
-
-export async function main(ns: NS): Promise<void> {
-    if (ns.ps().find(p => p.filename === scriptName && p.pid !== ns.getRunningScript()?.pid)) return;
-
-    ns.clearLog();
-    ns.disableLog('ALL');
-
-    const database = await Database.getInstance();
-    await database.open();
-    await initializeTaskDatabase(ns, database);
-
-    while (true) {
-        const config = await database.get<tConfig>(DatabaseStoreName.Configuration, scriptName);
-
-        const tasks = await database.getAll<IScriptTask>(DatabaseStoreName.Tasks);
-        tasks.sort((a, b) => b.priority - a.priority);
-        for (const task of tasks.filter(task => task.enabled && task.lastRun + task.interval < Date.now())) {
-            await Tasks[task.name].run(ns, false);
-            await database.saveRecord(DatabaseStoreName.Tasks, { ...task, lastRun: Date.now() });
-        }
-
-        await ns.sleep(config.interval);
+/**
+ * Daemon: Runs each task in order, waits for completion, then starts the next.
+ * This is now the canonical entry point for sequential task automation.
+ * 
+ * NOTE: Stock trading has been moved to a standalone stocks.js script for better performance.
+ */
+export async function main(ns: NS) {
+  ns.disableLog("ALL");
+  ns.clearLog();
+  
+  // Check if another daemon instance is already running
+  const runningScripts = ns.ps();
+  for (const script of runningScripts) {
+    if (script.filename === 'daemon.js' && script.pid !== ns.getRunningScript()?.pid) {
+      ns.tprint(`[daemon] Another daemon instance is already running (PID: ${script.pid}). Exiting.`);
+      return; // Exit gracefully, let the existing instance continue
     }
+  }
+  
+  // Check for daemon debug flag
+  const db = await Database.getInstance();
+  await db.open();
+  const daemonTask = await db.get(DatabaseStoreName.Tasks, 'daemon') as { debug?: boolean } | undefined;
+  const debug = daemonTask?.debug ?? false; // Default to false (quiet mode)
+  
+  if (debug) ns.tprint("[daemon] Starting sequential task runner...");
+
+  // TODO: Add other non-stock tasks here as they are implemented
+  const tasks: TaskDefinition[] = [
+    // Stock trading tasks have been moved to standalone stocks.js script
+    // Add server management, contract solving, and other discrete tasks here
+  ];
+
+  const runner = new SequentialTaskRunner(ns, tasks, debug);
+
+  while (true) {
+    await runner.runSequentially();
+    if (debug) ns.tprint("[daemon] All tasks complete. Sleeping before next cycle...");
+    await ns.sleep(5000); // Sleep 5 seconds between cycles (adjust as needed)
+  }
 }
 
-type tConfig = {
-    interval: number;
-};
-const initialConfig: tConfig = { interval: 100 };
-async function initializeTaskDatabase(ns: NS, database: Database) {
-    if (!(await database.get<tConfig>(DatabaseStoreName.Configuration, scriptName))) {
-        await database.saveRecord(DatabaseStoreName.Configuration, { key: scriptName, value: initialConfig });
-    }
-
-    for (const taskName in Tasks) {
-        if (await database.get<IScriptTask>(DatabaseStoreName.Tasks, taskName)) continue;
-        ns.print('\tCreating task database record: ' + taskName);
-        const taskRecord: IScriptTask = {
-            name: taskName,
-            priority: Tasks[taskName].priority,
-            lastRun: Tasks[taskName].lastRun,
-            interval: Tasks[taskName].interval,
-            enabled: Tasks[taskName].enabled
-        };
-        database.saveRecord(DatabaseStoreName.Tasks, taskRecord);
-    }
-}
