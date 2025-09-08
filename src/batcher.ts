@@ -1,5 +1,24 @@
 import { AutocompleteData, NS, ScriptArg } from "@ns";
 
+/**
+ * Enhanced HWGW Batcher with Server Management
+ * 
+ * Features:
+ * - Advanced HWGW batching with precise timing coordination
+ * - Automated server rooting (exploit tools + nuke)
+ * - Purchased server management (buying and upgrading)
+ * - Multi-server thread allocation across entire botnet
+ * - Real-time performance monitoring and failure detection
+ * 
+ * Command-line options:
+ * --debug=true          Enable detailed debug output
+ * --repeat=true         Run continuously (vs single batch)
+ * --rooting=true        Enable automatic server rooting
+ * --purchasing=true     Enable purchased server management
+ * --max-servers=25      Maximum purchased servers to buy
+ * --target-ram-power=20 Target RAM power (2^20 = 1TB per server)
+ */
+
 // Self-contained interfaces - no external imports
 interface ServerData {
     hostname: string;
@@ -68,9 +87,94 @@ const byAvailableRam = (a: ServerData, b: ServerData) => (b.maxRam - b.ramUsed) 
 
 const reserveRam = 32;
 
+// Server Management Functions
+function rootServer(ns: NS, hostname: string): boolean {
+    try {
+        // Try all available exploit tools
+        try { ns.brutessh(hostname); } catch (e) { }
+        try { ns.ftpcrack(hostname); } catch (e) { }
+        try { ns.relaysmtp(hostname); } catch (e) { }
+        try { ns.httpworm(hostname); } catch (e) { }
+        try { ns.sqlinject(hostname); } catch (e) { }
+        
+        // Attempt to nuke
+        try { 
+            ns.nuke(hostname); 
+            return true;
+        } catch (e) { 
+            return false;
+        }
+    } catch (e) {
+        return false;
+    }
+}
+
+function performServerRooting(ns: NS, servers: ServerData[]): number {
+    let rootedCount = 0;
+    const unrootedServers = servers.filter(s => !s.hasAdminRights && s.hostname !== 'home');
+    
+    for (const server of unrootedServers) {
+        if (rootServer(ns, server.hostname)) {
+            rootedCount++;
+            // Update the server data to reflect new admin rights
+            server.hasAdminRights = true;
+        }
+    }
+    
+    return rootedCount;
+}
+
+function managePurchasedServers(ns: NS, servers: ServerData[], maxServers: number, targetRamPower: number): { bought: number; upgraded: number } {
+    const playerMoney = ns.getServerMoneyAvailable('home');
+    const purchasedServers = servers.filter(s => s.purchasedByPlayer);
+    let bought = 0;
+    let upgraded = 0;
+    
+    // Buy new servers if under limit and affordable
+    if (purchasedServers.length < maxServers) {
+        const baseCost = ns.getPurchasedServerCost(2); // 2GB starting RAM
+        if (playerMoney >= baseCost) {
+            const serverName = `pserv-${purchasedServers.length + 1}`;
+            const hostname = ns.purchaseServer(serverName, 2);
+            if (hostname) {
+                bought++;
+                ns.print(`Purchased server: ${hostname} (2GB)`);
+            }
+        }
+    }
+    
+    // Upgrade existing servers
+    if (purchasedServers.length > 0) {
+        // Sort by RAM size (upgrade smallest first)
+        purchasedServers.sort((a, b) => a.maxRam - b.maxRam);
+        
+        for (const server of purchasedServers) {
+            const currentPower = Math.log2(server.maxRam);
+            if (currentPower < targetRamPower) {
+                const newRam = server.maxRam * 2;
+                const upgradeCost = ns.getPurchasedServerUpgradeCost(server.hostname, newRam);
+                
+                if (playerMoney >= upgradeCost) {
+                    if (ns.upgradePurchasedServer(server.hostname, newRam)) {
+                        upgraded++;
+                        ns.print(`Upgraded ${server.hostname}: ${server.maxRam}GB → ${newRam}GB`);
+                        break; // Only upgrade one per cycle to avoid spending all money
+                    }
+                }
+            }
+        }
+    }
+    
+    return { bought, upgraded };
+}
+
 const argsSchema: [string, string | number | boolean | string[]][] = [
     ['debug', false],
     ['repeat', true],
+    ['rooting', true],
+    ['purchasing', true],
+    ['max-servers', 25],
+    ['target-ram-power', 20],
 ];
 
 // Simple performance tracking
@@ -132,6 +236,20 @@ export async function main(ns: NS): Promise<void> {
     ns.disableLog('scriptKill');
     
     options = ns.flags(argsSchema);
+    
+    // Check if another batcher instance is already running
+    const runningScripts = ns.ps();
+    for (const script of runningScripts) {
+        if (script.filename === 'batcher.js' && script.pid !== ns.getRunningScript()?.pid) {
+            ns.tprint(`Enhanced Batcher: Another instance is already running (PID: ${script.pid}). Exiting.`);
+            return; // Exit gracefully, let the existing instance continue
+        }
+    }
+    
+    if (options.debug) {
+        ns.tprint(`Enhanced Batcher: Starting with PID ${ns.getRunningScript()?.pid} (rooting=${options.rooting}, purchasing=${options.purchasing})`);
+    }
+    
     ns.atExit(() => {
         // Kill all simple-* scripts directly using a more comprehensive approach
         try {
@@ -168,11 +286,30 @@ export async function main(ns: NS): Promise<void> {
 
         const playerHackLevel = ns.getHackingLevel();
         const servers = buildServerData(ns);
+        
+        // PHASE 1: Server Management (if enabled)
+        if (options.rooting) {
+            const rootedCount = performServerRooting(ns, servers);
+            if (rootedCount > 0) {
+                ns.print(`Rooted ${rootedCount} new servers`);
+            }
+        }
+        
+        if (options.purchasing) {
+            const maxServers = options['max-servers'] as number;
+            const targetRamPower = options['target-ram-power'] as number;
+            const serverManagement = managePurchasedServers(ns, servers, maxServers, targetRamPower);
+            if (serverManagement.bought > 0 || serverManagement.upgraded > 0) {
+                ns.print(`Server management: bought ${serverManagement.bought}, upgraded ${serverManagement.upgraded}`);
+            }
+        }
+        
+        // PHASE 2: HWGW Batching
         const targets = servers.filter(s => isTarget(s) && s.requiredHackingSkill <= playerHackLevel).sort(byValue);
         const attackers = servers.filter(isAttacker).sort(byAvailableRam);
         
         if (attackers.length === 0) {
-            ns.print('No attacker servers available. Need to root servers first.');
+            ns.print('No attacker servers available. Rooting servers...');
             await ns.sleep(5000);
             continue;
         }
@@ -340,6 +477,13 @@ function printStatus(ns: NS, servers: ServerData[], playerHackLevel: number) {
     const runningScripts = servers.flatMap(s => ns.ps(s.hostname).filter((p: any) => p.filename.includes('simple-')));
     const running = runningScripts.length > 0;
     
+    // Server management stats
+    const totalServers = servers.length;
+    const rootedServers = servers.filter(s => s.hasAdminRights).length;
+    const purchasedServers = servers.filter(s => s.purchasedByPlayer);
+    const purchasedCount = purchasedServers.length;
+    const totalPurchasedRAM = purchasedServers.reduce((sum, s) => sum + s.maxRam, 0);
+    
     if (running) {
         const scriptStats = { hack: 0, weaken: 0, grow: 0, total: runningScripts.length };
         runningScripts.forEach((p: any) => {
@@ -386,9 +530,10 @@ function printStatus(ns: NS, servers: ServerData[], playerHackLevel: number) {
             .sort(([,a], [,b]) => (b.hack + b.weaken + b.grow) - (a.hack + a.weaken + a.grow))
             .slice(0, 3);
         
-        ns.print(`┌─ BATCHER STATUS ─────────────────────────────────────────────`);
+        ns.print(`┌─ ENHANCED BATCHER STATUS ────────────────────────────────────`);
         ns.print(`│ Scripts: ${scriptStats.total.toString().padEnd(3)} (H:${scriptStats.hack.toString().padStart(2)} W:${scriptStats.weaken.toString().padStart(2)} G:${scriptStats.grow.toString().padStart(2)})  RAM: ${utilization.toFixed(1)}% (${(usedRAM/1000).toFixed(1)}/${(totalRAM/1000).toFixed(1)}TB)`);
         ns.print(`│ Money: $${ns.formatNumber(playerMoney)}  Hack: ${playerHackLevel}  Income: $${ns.formatNumber(incomeRate)}/sec`);
+        ns.print(`│ Servers: ${rootedServers}/${totalServers} rooted  Purchased: ${purchasedCount}/25 (${(totalPurchasedRAM/1000).toFixed(1)}TB)`);
         
         // Add uptime and cycle information
         const uptimeMs = Date.now() - batcherStartTime;
