@@ -1,19 +1,37 @@
 import { NS } from "@ns";
-import { Database, DatabaseStoreName } from "/lib/database";
-import { IScriptServer } from "/models/ScriptServer";
+
+function getServerList(ns: NS, host: string = 'home', network = new Set<string>()): string[] {
+    network.add(host);
+    ns.scan(host).filter((hostname: string) => !network.has(hostname)).forEach((neighbor: string) => getServerList(ns, neighbor, network));
+    return [...network];
+}
 
 export async function main(ns: NS) {
     ns.disableLog("ALL");
     ns.clearLog();
 
-    const database = await Database.getInstance();
-    await database.open();
+    const allServers = getServerList(ns);
+    let totalKilled = 0;
 
-    const allServers = await database.getAll<IScriptServer>(DatabaseStoreName.Servers);
-
-    const remotePIDs = allServers
-        .flatMap(s => s.pids.filter(p => p.filename.startsWith("remote/")).map(pid => ({ hostname: s.hostname, ...pid })));
-    for (const pid of remotePIDs) {
-        ns.print(`Killing ${pid.filename} on ${pid.hostname}... ${ns.scriptKill(pid.filename, pid.hostname) ? 'OK' : 'FAILED'}`);
+    for (const hostname of allServers) {
+        try {
+            const server = ns.getServer(hostname);
+            if (server.hasAdminRights && server.maxRam > 0) {
+                const runningScripts = ns.ps(hostname);
+                for (const script of runningScripts) {
+                    if (script.filename.startsWith('remote/')) {
+                        const killed = ns.scriptKill(script.filename, hostname);
+                        if (killed) {
+                            ns.print(`Killed ${script.filename} on ${hostname}`);
+                            totalKilled++;
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            // Skip servers that can't be accessed
+        }
     }
+
+    ns.tprint(`Cleanup complete: ${totalKilled} remote scripts killed`);
 }

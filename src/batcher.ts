@@ -1,44 +1,95 @@
 import { AutocompleteData, NS, ScriptArg } from "@ns";
-import { Database, DatabaseStoreName } from "lib/database";
-import { disableLogs, DynamicScript, getDynamicScriptContent } from "/lib/system";
-import { IScriptPlayer } from "models/IScriptPlayer";
-import { byAvailableRam, byValue, getAvailableThreads, isAttacker, IScriptServer, isTarget, shouldGrow, shouldHack, shouldWeaken, targetValue } from "/models/ScriptServer";
-import { IHackScriptArgs } from "./models/IRemoteScriptArgs";
-import PrettyTable from "./lib/prettytable";
+
+// Self-contained interfaces - no external imports
+interface ServerData {
+    hostname: string;
+    hasAdminRights: boolean;
+    purchasedByPlayer: boolean;
+    requiredHackingSkill: number;
+    maxRam: number;
+    ramUsed: number;
+    moneyMax: number;
+    moneyAvailable: number;
+    hackDifficulty: number;
+    minDifficulty: number;
+    hackTime: number;
+    weakenTime: number;
+    growTime: number;
+}
+
+// Utility functions
+function getServerList(ns: NS, host: string = 'home', network = new Set<string>()): string[] {
+    network.add(host);
+    ns.scan(host).filter((hostname: string) => !network.has(hostname)).forEach((neighbor: string) => getServerList(ns, neighbor, network));
+    return [...network];
+}
+
+function buildServerData(ns: NS): ServerData[] {
+    const hostnames = getServerList(ns);
+    const servers: ServerData[] = [];
+    
+    for (const hostname of hostnames) {
+        const server = ns.getServer(hostname);
+        const serverData: ServerData = {
+            hostname: hostname,
+            hasAdminRights: server.hasAdminRights,
+            purchasedByPlayer: server.purchasedByPlayer,
+            requiredHackingSkill: server.requiredHackingSkill ?? 0,
+            maxRam: server.maxRam,
+            ramUsed: server.ramUsed,
+            moneyMax: server.moneyMax ?? 0,
+            moneyAvailable: server.moneyAvailable ?? 0,
+            hackDifficulty: server.hackDifficulty ?? 0,
+            minDifficulty: server.minDifficulty ?? 0,
+            hackTime: ns.getHackTime(hostname),
+            weakenTime: ns.getWeakenTime(hostname),
+            growTime: ns.getGrowTime(hostname)
+        };
+        servers.push(serverData);
+    }
+    
+    return servers;
+}
+
+const isTarget = (server: ServerData) =>
+    server.hasAdminRights
+    && !server.purchasedByPlayer
+    && server.moneyMax > 0;
+
+const isAttacker = (server: ServerData) =>
+    server.hasAdminRights
+    && server.maxRam - server.ramUsed > 0;
+
+const targetValue = (server: ServerData) => Math.floor(server.moneyMax / server.weakenTime);
+
+const byValue = (a: ServerData, b: ServerData) => targetValue(b) - targetValue(a);
+
+const byAvailableRam = (a: ServerData, b: ServerData) => (b.maxRam - b.ramUsed) - (a.maxRam - a.ramUsed);
 
 const reserveRam = 32;
 
 const argsSchema: [string, string | number | boolean | string[]][] = [
     ['debug', false],
     ['repeat', true],
-]
+];
+
 let options: {
     [key: string]: string[] | ScriptArg;
 };
 
-const database = await Database.getInstance();
-await database.open();
-
-// Global metrics tracking
-let totalBatchCycles = 0;
-let startTime = Date.now();
-let totalErrorCount = 0;
-let totalScriptCount = 0;
-
-export function autocomplete(data: AutocompleteData, args: any) {
+export function autocomplete(data: AutocompleteData, _args: any) {
     data.flags(argsSchema);
     return [];
 }
 
-// Advanced HWGW Batching Algorithm Implementation
-
+// Batching interfaces
 interface INetworkRAMSnapshot {
     totalAvailable: number;
     servers: { hostname: string; availableRAM: number }[];
 }
 
 interface IHWGWBatch {
-    target: IScriptServer;
+    target: ServerData;
     hackThreads: number;
     weaken1Threads: number;
     growThreads: number;
@@ -51,7 +102,7 @@ interface IHWGWBatch {
 }
 
 interface IPrepBatch {
-    target: IScriptServer;
+    target: ServerData;
     weakenThreads: number;
     growThreads: number;
     totalThreads: number;
@@ -65,59 +116,97 @@ interface IExecutionResults {
 }
 
 export async function main(ns: NS): Promise<void> {
-    disableLogs(ns, ['sleep', 'run', 'scp', 'exec']);
+    ns.disableLog('sleep');
+    ns.disableLog('run');
+    ns.disableLog('scp');
+    ns.disableLog('exec');
+    ns.disableLog('scan');
+    ns.disableLog('getServerMoneyAvailable');
+    ns.disableLog('getHackingLevel');
+    ns.disableLog('getServer');
+    ns.disableLog('ps');
+    ns.disableLog('scriptKill');
+    
     options = ns.flags(argsSchema);
     ns.atExit(() => {
-        ns.exec('killremote.js', 'home');
+        // Kill all simple-* scripts directly using a more comprehensive approach
+        try {
+            // Get all servers in the network
+            const allServers = getServerList(ns);
+            let totalKilled = 0;
+            for (const hostname of allServers) {
+                try {
+                    const server = ns.getServer(hostname);
+                    if (server.hasAdminRights && server.maxRam > 0) {
+                        const runningScripts = ns.ps(hostname);
+                        for (const script of runningScripts) {
+                            if (script.filename.includes('simple-')) {
+                                const killed = ns.scriptKill(script.filename, hostname);
+                                if (killed) totalKilled++;
+                            }
+                        }
+                    }
+                } catch (e) {
+                    // Skip servers that can't be accessed
+                }
+            }
+            if (totalKilled > 0) {
+                ns.tprint(`Batcher cleanup: killed ${totalKilled} remote scripts`);
+            }
+        } catch (e) {
+            // Fallback: just print a message
+            ns.tprint(`Batcher cleanup failed - you may need to run 'killremote.js' manually`);
+        }
     });
 
     do {
         ns.clearLog();
 
-        const player = await database.get<IScriptPlayer>(DatabaseStoreName.NS_Data, 'ns.getPlayer');
-        const servers = await database.getAll<IScriptServer>(DatabaseStoreName.Servers);
-
-        const targets = servers.filter(s => isTarget(s) && s.requiredHackingSkill! <= player.skills.hacking).sort(byValue);
+        const playerHackLevel = ns.getHackingLevel();
+        const servers = buildServerData(ns);
+        const targets = servers.filter(s => isTarget(s) && s.requiredHackingSkill <= playerHackLevel).sort(byValue);
         const attackers = servers.filter(isAttacker).sort(byAvailableRam);
+        
+        if (attackers.length === 0) {
+            ns.print('No attacker servers available. Need to root servers first.');
+            await ns.sleep(5000);
+            continue;
+        }
+        
+        // Copy remote scripts to all attackers
         attackers.forEach(s => {
             ns.scp('remote/simple-hack.js', s.hostname);
             ns.scp('remote/simple-weaken.js', s.hostname);
             ns.scp('remote/simple-grow.js', s.hostname);
         });
 
-        // STEP 1: Snapshot Network RAM - Take total budget for spawning scripts
+        // STEP 1: Snapshot Network RAM
         const networkRAMSnapshot = takeNetworkRAMSnapshot(ns, attackers);
         let remainingRAMBudget = networkRAMSnapshot.totalAvailable;
-        const scriptRamCost = 1.75; // GB per thread for simple scripts
+        const scriptRamCost = 1.75; // GB per thread
         
         if (options.debug) {
             ns.tprint(`Network RAM Budget: ${remainingRAMBudget.toFixed(2)}GB across ${networkRAMSnapshot.servers.length} servers`);
         }
 
-        // STEP 2: Select Hackable Targets (95% money, security tolerance)
-        const hackableTargets = selectHackableTargets(targets, player.skills.hacking);
-        const nonReadyTargets = targets.filter(t => !hackableTargets.includes(t) && t.requiredHackingSkill! <= player.skills.hacking);
+        // STEP 2: Select Hackable Targets
+        const hackableTargets = selectHackableTargets(targets);
+        const nonReadyTargets = targets.filter(t => !hackableTargets.includes(t));
         
         if (options.debug) {
             ns.tprint(`Found ${hackableTargets.length} hack-ready targets, ${nonReadyTargets.length} need prep`);
         }
 
-        // STEP 3: Allocate Full HWGW Batches - AGGRESSIVE BATCHING
+        // STEP 3: Allocate Full HWGW Batches
         const hwgwBatches: IHWGWBatch[] = [];
         
-        // Keep spawning batches until RAM is exhausted
-        while (remainingRAMBudget > scriptRamCost * 10) { // Reserve some minimum RAM
+        while (remainingRAMBudget > scriptRamCost * 10) {
             let batchAllocatedThisRound = false;
             
             for (const target of hackableTargets) {
-                if (!target.hackData) {
-                    continue;
-                }
-
-                const fullBatch = await calculateFullHWGWBatch(ns, target);
+                const fullBatch = calculateFullHWGWBatch(ns, target);
                 const batchRAMCost = fullBatch.totalThreads * scriptRamCost;
                 
-                // STEP 4: Discard Partial Hack Batches - Only allow complete HWGW cycles
                 if (batchRAMCost <= remainingRAMBudget) {
                     hwgwBatches.push(fullBatch);
                     remainingRAMBudget -= batchRAMCost;
@@ -129,13 +218,12 @@ export async function main(ns: NS): Promise<void> {
                 }
             }
             
-            // If no batches were allocated this round, break to avoid infinite loop
             if (!batchAllocatedThisRound) {
                 break;
             }
         }
 
-        // STEP 5: Prepare Future Targets with remaining RAM - AGGRESSIVE PREP
+        // STEP 4: Prepare Future Targets
         const prepBatches: IPrepBatch[] = [];
         while (remainingRAMBudget >= scriptRamCost && nonReadyTargets.length > 0) {
             let prepAllocatedThisRound = false;
@@ -143,7 +231,7 @@ export async function main(ns: NS): Promise<void> {
             for (const target of nonReadyTargets) {
                 if (remainingRAMBudget < scriptRamCost) break;
                 
-                const prepBatch = await calculatePrepBatch(ns, target, remainingRAMBudget, scriptRamCost);
+                const prepBatch = calculatePrepBatch(ns, target, remainingRAMBudget, scriptRamCost);
                 if (prepBatch && prepBatch.totalThreads > 0) {
                     const prepRAMCost = prepBatch.totalThreads * scriptRamCost;
                     prepBatches.push(prepBatch);
@@ -156,51 +244,45 @@ export async function main(ns: NS): Promise<void> {
                 }
             }
             
-            // If no prep was allocated this round, break to avoid infinite loop
             if (!prepAllocatedThisRound) {
                 break;
             }
         }
 
-        // STEP 6: Finalize Output - Execute the batches
-        const executionResults = await executeHWGWBatches(ns, hwgwBatches, prepBatches, networkRAMSnapshot, scriptRamCost, !!options.debug);
+        // STEP 5: Execute the batches
+        const executionResults = executeHWGWBatches(ns, hwgwBatches, prepBatches, networkRAMSnapshot, scriptRamCost, !!options.debug);
         
         if (options.debug) {
             ns.tprint(`Execution Summary: ${executionResults.successfulScripts}/${executionResults.totalScripts} scripts started successfully`);
             ns.tprint(`Remaining RAM Budget: ${remainingRAMBudget.toFixed(2)}GB`);
         }
 
-        // CONTINUOUS BATCHING: Keep spawning new batches as old ones complete
+        // CONTINUOUS BATCHING
         while (true) {
-            await ns.sleep(1000); // Check every second for available RAM
+            await ns.sleep(1000);
             ns.clearLog();
             
-            // Get fresh server data
-            const currentServers = await database.getAll<IScriptServer>(DatabaseStoreName.Servers);
+            const currentServers = buildServerData(ns);
             const currentAttackers = currentServers.filter(isAttacker).sort(byAvailableRam);
-            const currentTargets = currentServers.filter(s => isTarget(s) && s.requiredHackingSkill! <= player.skills.hacking).sort(byValue);
+            const currentTargets = currentServers.filter(s => isTarget(s) && s.requiredHackingSkill <= playerHackLevel).sort(byValue);
             
-            // Take new RAM snapshot
             const currentNetworkRAM = takeNetworkRAMSnapshot(ns, currentAttackers);
             let availableRAM = currentNetworkRAM.totalAvailable;
             
-            // Show status
-            await printStatus(ns);
+            printStatus(ns, currentServers, playerHackLevel);
             
-            // If significant RAM is available, spawn more batches
-            if (availableRAM > scriptRamCost * 50) { // At least 87.5GB available
+            if (availableRAM > scriptRamCost * 50) {
                 if (options.debug) {
                     ns.tprint(`Detected ${availableRAM.toFixed(2)}GB available RAM - spawning additional batches`);
                 }
                 
-                // Spawn additional HWGW batches
-                const currentHackableTargets = selectHackableTargets(currentTargets, player.skills.hacking);
+                const currentHackableTargets = selectHackableTargets(currentTargets);
                 const additionalHWGWBatches: IHWGWBatch[] = [];
                 
                 for (const target of currentHackableTargets) {
-                    if (!target.hackData || availableRAM < scriptRamCost * 10) continue;
+                    if (availableRAM < scriptRamCost * 10) continue;
                     
-                    const batch = await calculateFullHWGWBatch(ns, target);
+                    const batch = calculateFullHWGWBatch(ns, target);
                     const batchCost = batch.totalThreads * scriptRamCost;
                     
                     if (batchCost <= availableRAM) {
@@ -213,14 +295,13 @@ export async function main(ns: NS): Promise<void> {
                     }
                 }
                 
-                // Spawn additional prep batches
                 const currentNonReadyTargets = currentTargets.filter(t => !currentHackableTargets.includes(t));
                 const additionalPrepBatches: IPrepBatch[] = [];
                 
                 for (const target of currentNonReadyTargets) {
                     if (availableRAM < scriptRamCost) break;
                     
-                    const prepBatch = await calculatePrepBatch(ns, target, availableRAM, scriptRamCost);
+                    const prepBatch = calculatePrepBatch(ns, target, availableRAM, scriptRamCost);
                     if (prepBatch && prepBatch.totalThreads > 0) {
                         const prepCost = prepBatch.totalThreads * scriptRamCost;
                         additionalPrepBatches.push(prepBatch);
@@ -232,66 +313,40 @@ export async function main(ns: NS): Promise<void> {
                     }
                 }
                 
-                // Execute additional batches
                 if (additionalHWGWBatches.length > 0 || additionalPrepBatches.length > 0) {
-                    await executeHWGWBatches(ns, additionalHWGWBatches, additionalPrepBatches, currentNetworkRAM, scriptRamCost, !!options.debug);
+                    executeHWGWBatches(ns, additionalHWGWBatches, additionalPrepBatches, currentNetworkRAM, scriptRamCost, !!options.debug);
                 }
             }
             
-            // Check if we should continue (if repeat is enabled)
             if (!options.repeat) {
-                const running = currentServers.some(s => s.pids.some(p => p.filename.includes('simple-')));
+                const running = currentServers.some(s => ns.ps(s.hostname).some(p => p.filename.includes('simple-')));
                 if (!running) break;
             }
         }
-    } while (options.repeat)
+    } while (options.repeat);
 }
 
-async function printStatus(ns: NS) {
-    const player = await database.get<IScriptPlayer>(DatabaseStoreName.NS_Data, 'ns.getPlayer');
-    const servers = await database.getAll<IScriptServer>(DatabaseStoreName.Servers);
-    const targets = servers.filter(s => isTarget(s) && s.requiredHackingSkill! <= player.skills.hacking);
+function printStatus(ns: NS, servers: ServerData[], playerHackLevel: number) {
+    const targets = servers.filter(s => isTarget(s) && s.requiredHackingSkill <= playerHackLevel);
     const attackers = servers.filter(isAttacker);
     
-    // Check if any scripts are running
-    const running = servers.some(s => s.pids.some(p => p.filename.includes('simple-')));
+    const runningScripts = servers.flatMap(s => ns.ps(s.hostname).filter((p: any) => p.filename.includes('simple-')));
+    const running = runningScripts.length > 0;
     
     if (running) {
-        // Build entire display in memory first to reduce flicker
-        const display: string[] = [];
+        const scriptStats = { hack: 0, weaken: 0, grow: 0, total: runningScripts.length };
+        runningScripts.forEach((p: any) => {
+            if (p.filename.includes('hack')) scriptStats.hack++;
+            if (p.filename.includes('weaken')) scriptStats.weaken++;
+            if (p.filename.includes('grow')) scriptStats.grow++;
+        });
         
-        // Calculate script statistics
-        const scriptStats = { hack: 0, weaken: 0, grow: 0, total: 0 };
-        const targetStats = new Map<string, { hack: number; weaken: number; grow: number; }>();
-        
-        for (const server of servers) {
-            for (const pid of server.pids.filter(p => p.filename.includes('simple-'))) {
-                scriptStats.total++;
-                if (pid.filename.includes('hack')) scriptStats.hack++;
-                if (pid.filename.includes('weaken')) scriptStats.weaken++;
-                if (pid.filename.includes('grow')) scriptStats.grow++;
-                
-                // Track per-target activity (args[0] is target hostname)
-                const target = pid.args[0] as string;
-                if (!targetStats.has(target)) {
-                    targetStats.set(target, { hack: 0, weaken: 0, grow: 0 });
-                }
-                const stat = targetStats.get(target)!;
-                if (pid.filename.includes('hack')) stat.hack++;
-                if (pid.filename.includes('weaken')) stat.weaken++;
-                if (pid.filename.includes('grow')) stat.grow++;
-            }
-        }
-        
-        // Calculate resource utilization
         const totalRAM = attackers.reduce((sum, s) => sum + s.maxRam, 0);
         const usedRAM = attackers.reduce((sum, s) => sum + s.ramUsed, 0);
         const utilization = totalRAM > 0 ? (usedRAM / totalRAM * 100) : 0;
         
-        const playerMoney = player?.money ?? 0;
-        const hackLevel = player?.skills?.hacking ?? 0;
+        const playerMoney = ns.getServerMoneyAvailable('home');
         
-        // Get total script income safely
         let incomeRate = 0;
         try {
             incomeRate = ns.getTotalScriptIncome()[0] ?? 0;
@@ -299,90 +354,52 @@ async function printStatus(ns: NS) {
             incomeRate = 0;
         }
         
-        // Calculate additional metrics
         const readyTargets = targets.filter(t => {
-            const securityOk = (t.hackDifficulty || 0) <= (t.minDifficulty || 0) + 5;
-            const moneyOk = (t.moneyAvailable || 0) >= (t.moneyMax || 1) * 0.95;
+            const securityOk = t.hackDifficulty <= t.minDifficulty + 5;
+            const moneyOk = t.moneyAvailable >= t.moneyMax * 0.95;
             return securityOk && moneyOk;
         });
         const prepTargets = targets.filter(t => !readyTargets.includes(t));
         
-        // Calculate uptime
-        const uptimeMs = Date.now() - (ns.getScriptName() === 'batcher.js' ? Date.now() - 10000 : Date.now()); // Rough estimate
-        const uptimeMinutes = Math.floor(uptimeMs / 60000);
-        const uptimeSeconds = Math.floor((uptimeMs % 60000) / 1000);
-        const uptimeStr = `${uptimeMinutes}m ${uptimeSeconds}s`;
+        // Get active targets being attacked
+        const activeTargets = new Map<string, { hack: number; weaken: number; grow: number }>();
+        runningScripts.forEach((p: any) => {
+            const target = p.args[0] as string;
+            if (!activeTargets.has(target)) {
+                activeTargets.set(target, { hack: 0, weaken: 0, grow: 0 });
+            }
+            const stats = activeTargets.get(target)!;
+            if (p.filename.includes('hack')) stats.hack++;
+            if (p.filename.includes('weaken')) stats.weaken++;
+            if (p.filename.includes('grow')) stats.grow++;
+        });
         
-        // Header section - clean left-only border design
-        display.push(`┌─ BATCHER STATUS ─────────────────────────────────────────────`);
-        
-        // Enhanced header lines with new metrics
-        const scriptsLine = `Scripts: ${scriptStats.total.toString().padEnd(3)} (H:${scriptStats.hack.toString().padStart(2)} W:${scriptStats.weaken.toString().padStart(2)} G:${scriptStats.grow.toString().padStart(2)})  RAM: ${utilization.toFixed(1)}% (${(usedRAM/1000).toFixed(1)}/${(totalRAM/1000).toFixed(1)}TB)`;
-        display.push(`│ ${scriptsLine}`);
-        
-        const moneyLine = `Money: $${ns.formatNumber(playerMoney)}  Hack: ${hackLevel}  Income: $${ns.formatNumber(incomeRate)}/sec`;
-        display.push(`│ ${moneyLine}`);
-        
-        // New metrics line
-        const metricsLine = `Ready: ${readyTargets.length}  Prep: ${prepTargets.length}  Uptime: ${uptimeStr}  Batches: ${Math.floor(scriptStats.total / 4)} cycles`;
-        display.push(`│ ${metricsLine}`);
-        
-        // Show active targets (top 8 most active)
-        const sortedTargets = Array.from(targetStats.entries())
+        // Get top 3 most active targets
+        const topTargets = Array.from(activeTargets.entries())
             .sort(([,a], [,b]) => (b.hack + b.weaken + b.grow) - (a.hack + a.weaken + a.grow))
-            .slice(0, 8);
-            
-        if (sortedTargets.length > 0) {
-            display.push(`├─ ACTIVE TARGETS ────────────────────────────────────────────`);
-            for (let i = 0; i < sortedTargets.length; i += 2) {
-                const [name1, stats1] = sortedTargets[i];
-                const display1 = `${name1.substring(0, 12).padEnd(12)} H:${stats1.hack.toString().padStart(2)} W:${stats1.weaken.toString().padStart(2)} G:${stats1.grow.toString().padStart(2)}`;
-                
-                if (i + 1 < sortedTargets.length) {
-                    const [name2, stats2] = sortedTargets[i + 1];
-                    const display2 = `${name2.substring(0, 12).padEnd(12)} H:${stats2.hack.toString().padStart(2)} W:${stats2.weaken.toString().padStart(2)} G:${stats2.grow.toString().padStart(2)}`;
-                    display.push(`│ ${display1} │ ${display2}`);
-                } else {
-                    display.push(`│ ${display1}`);
-                }
-            }
+            .slice(0, 3);
+        
+        ns.print(`┌─ BATCHER STATUS ─────────────────────────────────────────────`);
+        ns.print(`│ Scripts: ${scriptStats.total.toString().padEnd(3)} (H:${scriptStats.hack.toString().padStart(2)} W:${scriptStats.weaken.toString().padStart(2)} G:${scriptStats.grow.toString().padStart(2)})  RAM: ${utilization.toFixed(1)}% (${(usedRAM/1000).toFixed(1)}/${(totalRAM/1000).toFixed(1)}TB)`);
+        ns.print(`│ Money: $${ns.formatNumber(playerMoney)}  Hack: ${playerHackLevel}  Income: $${ns.formatNumber(incomeRate)}/sec`);
+        ns.print(`│ Ready: ${readyTargets.length}  Prep: ${prepTargets.length}  Batches: ${Math.floor(scriptStats.total / 4)} cycles`);
+        
+        if (topTargets.length > 0) {
+            ns.print(`├─ ACTIVE TARGETS ────────────────────────────────────────────`);
+            topTargets.forEach(([target, stats]) => {
+                const total = stats.hack + stats.weaken + stats.grow;
+                const targetDisplay = target.substring(0, 16).padEnd(16);
+                ns.print(`│ ${targetDisplay} ${total.toString().padStart(3)} scripts (H:${stats.hack.toString().padStart(2)} W:${stats.weaken.toString().padStart(2)} G:${stats.grow.toString().padStart(2)})`);
+            });
         }
         
-        // Show server distribution (top 6 most utilized)
-        const serverUtilization = attackers
-            .map(s => ({ name: s.hostname, used: s.ramUsed, max: s.maxRam, util: s.maxRam > 0 ? s.ramUsed / s.maxRam : 0 }))
-            .filter(s => s.used > 0)
-            .sort((a, b) => b.used - a.used)
-            .slice(0, 6);
-            
-        if (serverUtilization.length > 0) {
-            display.push(`├─ SERVER UTILIZATION ────────────────────────────────────────`);
-            for (let i = 0; i < serverUtilization.length; i += 2) {
-                const s1 = serverUtilization[i];
-                const display1 = `${s1.name.substring(0, 12).padEnd(12)} ${(s1.util * 100).toFixed(0).padStart(3)}%`;
-                
-                if (i + 1 < serverUtilization.length) {
-                    const s2 = serverUtilization[i + 1];
-                    const display2 = `${s2.name.substring(0, 12).padEnd(12)} ${(s2.util * 100).toFixed(0).padStart(3)}%`;
-                    display.push(`│ ${display1} │ ${display2}`);
-                } else {
-                    display.push(`│ ${display1}`);
-                }
-            }
-        }
-        
-        display.push(`└──────────────────────────────────────────────────────────────`);
-        
-        // Print entire display at once to reduce flicker
-        display.forEach(line => ns.print(line));
+        ns.print(`└──────────────────────────────────────────────────────────────`);
     } else {
         ns.print(`BATCHER: No active scripts - waiting for next cycle...`);
     }
-    
-    return running;
 }
 
-function takeNetworkRAMSnapshot(ns: NS, attackers: IScriptServer[]): INetworkRAMSnapshot {
+function takeNetworkRAMSnapshot(ns: NS, attackers: ServerData[]): INetworkRAMSnapshot {
     const servers: { hostname: string; availableRAM: number }[] = [];
     let totalAvailable = 0;
     
@@ -399,74 +416,37 @@ function takeNetworkRAMSnapshot(ns: NS, attackers: IScriptServer[]): INetworkRAM
     return { totalAvailable, servers };
 }
 
-function selectHackableTargets(targets: IScriptServer[], hackingSkill: number): IScriptServer[] {
-    const MONEY_THRESHOLD = 0.95; // 95% of max money
-    const SECURITY_TOLERANCE = 5; // Allow up to +5 security over minimum
+function selectHackableTargets(targets: ServerData[]): ServerData[] {
+    const MONEY_THRESHOLD = 0.95;
+    const SECURITY_TOLERANCE = 5;
     
     return targets.filter(target => {
-        // Must be within hacking skill
-        if (target.requiredHackingSkill! > hackingSkill) return false;
+        const moneyRatio = target.moneyAvailable / Math.max(target.moneyMax, 1);
+        const securityOverMin = target.hackDifficulty - target.minDifficulty;
         
-        // Must have hackData
-        if (!target.hackData) return false;
-        
-        // Money check: >= 95% of max money
-        const moneyRatio = (target.moneyAvailable || 0) / (target.moneyMax || 1);
-        if (moneyRatio < MONEY_THRESHOLD) return false;
-        
-        // Security check: <= minimum + tolerance
-        const securityOverMin = (target.hackDifficulty || 0) - (target.minDifficulty || 0);
-        if (securityOverMin > SECURITY_TOLERANCE) return false;
-        
-        return true;
+        return moneyRatio >= MONEY_THRESHOLD && securityOverMin <= SECURITY_TOLERANCE;
     });
 }
 
-async function calculateFullHWGWBatch(ns: NS, target: IScriptServer): Promise<IHWGWBatch> {
-    // Calculate hack threads for significant money extraction
-    const hackAnalyzeThreadsScript = getDynamicScriptContent("ns.hackAnalyzeThreads", `Math.ceil(ns.hackAnalyzeThreads('${target.hostname}', ${target.moneyAvailable! * 0.5}))`);
-    await DynamicScript.new('HackAnalyzeThreads', hackAnalyzeThreadsScript, []).run(ns, true);
-    const baseHackThreads = await database.get<number>(DatabaseStoreName.NS_Data, 'ns.hackAnalyzeThreads');
-    const hackThreads = Math.min(baseHackThreads || 1, Math.floor(target.moneyAvailable! / 1000)); // Cap threads
+function calculateFullHWGWBatch(ns: NS, target: ServerData): IHWGWBatch {
+    const baseHackThreads = Math.ceil(ns.hackAnalyzeThreads(target.hostname, target.moneyAvailable * 0.5));
+    const hackThreads = Math.min(baseHackThreads || 1, Math.floor(target.moneyAvailable / 1000));
     
-    // Calculate security increase from hack
-    const hackAnalyzeSecurityScript = getDynamicScriptContent("ns.hackAnalyzeSecurity", `ns.hackAnalyzeSecurity(${hackThreads}, '${target.hostname}')`);
-    await DynamicScript.new('HackAnalyzeSecurity', hackAnalyzeSecurityScript, []).run(ns, true);
-    const hackSecIncrease = await database.get<number>(DatabaseStoreName.NS_Data, 'ns.hackAnalyzeSecurity');
-    
-    // Calculate weaken effect per thread
-    const weakenAnalyzeScript = getDynamicScriptContent("ns.weakenAnalyze", `ns.weakenAnalyze(1)`);
-    await DynamicScript.new('WeakenAnalyze', weakenAnalyzeScript, []).run(ns, true);
-    const weakenEffect = await database.get<number>(DatabaseStoreName.NS_Data, 'ns.weakenAnalyze');
-    
-    // Weaken1 threads to counter hack security increase
+    const hackSecIncrease = ns.hackAnalyzeSecurity(hackThreads, target.hostname);
+    const weakenEffect = ns.weakenAnalyze(1);
     const weaken1Threads = Math.ceil(hackSecIncrease / weakenEffect);
     
-    // Calculate grow threads to restore money
-    const growthAnalyzeScript = getDynamicScriptContent("ns.growthAnalyze", `Math.ceil(ns.growthAnalyze('${target.hostname}', ${target.moneyMax! / Math.max(target.moneyAvailable! - (target.moneyAvailable! * 0.5), 1)}))`);
-    await DynamicScript.new('GrowthAnalyze', growthAnalyzeScript, []).run(ns, true);
-    const growThreads = await database.get<number>(DatabaseStoreName.NS_Data, 'ns.growthAnalyze');
+    const growThreads = Math.ceil(ns.growthAnalyze(target.hostname, target.moneyMax / Math.max(target.moneyAvailable - (target.moneyAvailable * 0.5), 1)));
     
-    // Calculate security increase from grow
-    const growthAnalyzeSecurityScript = getDynamicScriptContent("ns.growthAnalyzeSecurity", `ns.growthAnalyzeSecurity(${growThreads}, '${target.hostname}')`);
-    await DynamicScript.new('GrowthAnalyzeSecurity', growthAnalyzeSecurityScript, []).run(ns, true);
-    const growSecIncrease = await database.get<number>(DatabaseStoreName.NS_Data, 'ns.growthAnalyzeSecurity');
-    
-    // Weaken2 threads to counter grow security increase
+    const growSecIncrease = ns.growthAnalyzeSecurity(growThreads, target.hostname);
     const weaken2Threads = Math.ceil(growSecIncrease / weakenEffect);
     
-    // Calculate timing offsets for proper HWGW sequence
-    const hackTime = target.hackData.hkTime;
-    const weakenTime = target.hackData.wkTime;
-    const growTime = target.hackData.grTime;
-    
-    const gap = 200; // 200ms gap between completions
+    const gap = 200;
     const now = Date.now();
     
-    // Schedule so operations finish in sequence: hack -> weaken1 -> grow -> weaken2
-    const hackStartDelay = now + weakenTime - hackTime + (3 * gap);
+    const hackStartDelay = now + target.weakenTime - target.hackTime + (3 * gap);
     const weaken1StartDelay = now + gap;
-    const growStartDelay = now + weakenTime - growTime + (2 * gap);
+    const growStartDelay = now + target.weakenTime - target.growTime + (2 * gap);
     const weaken2StartDelay = now;
     
     return {
@@ -483,21 +463,14 @@ async function calculateFullHWGWBatch(ns: NS, target: IScriptServer): Promise<IH
     };
 }
 
-async function calculatePrepBatch(ns: NS, target: IScriptServer, availableRAMBudget: number, scriptRamCost: number): Promise<IPrepBatch | null> {
-    if (!target.hackData) return null;
-    
+function calculatePrepBatch(ns: NS, target: ServerData, availableRAMBudget: number, scriptRamCost: number): IPrepBatch | null {
     const maxThreadsAvailable = Math.floor(availableRAMBudget / scriptRamCost);
     
-    // Determine priority: security first, then money
-    const securityOverMin = (target.hackDifficulty || 0) - (target.minDifficulty || 0);
-    const moneyRatio = (target.moneyAvailable || 0) / (target.moneyMax || 1);
+    const securityOverMin = target.hackDifficulty - target.minDifficulty;
+    const moneyRatio = target.moneyAvailable / Math.max(target.moneyMax, 1);
     
     if (securityOverMin > 1) {
-        // Security priority - need to weaken
-        const weakenAnalyzeScript = getDynamicScriptContent("ns.weakenAnalyze", `ns.weakenAnalyze(1)`);
-        await DynamicScript.new('WeakenAnalyze', weakenAnalyzeScript, []).run(ns, true);
-        const weakenEffect = await database.get<number>(DatabaseStoreName.NS_Data, 'ns.weakenAnalyze');
-        
+        const weakenEffect = ns.weakenAnalyze(1);
         const weakenThreadsNeeded = Math.ceil(securityOverMin / weakenEffect);
         const weakenThreads = Math.min(weakenThreadsNeeded, maxThreadsAvailable);
         
@@ -509,12 +482,8 @@ async function calculatePrepBatch(ns: NS, target: IScriptServer, availableRAMBud
             priority: 'security'
         };
     } else if (moneyRatio < 0.95) {
-        // Money priority - need to grow
-        const growthMultiplier = target.moneyMax! / Math.max(target.moneyAvailable!, 1);
-        const growthAnalyzeScript = getDynamicScriptContent("ns.growthAnalyze", `Math.ceil(ns.growthAnalyze('${target.hostname}', ${Math.min(growthMultiplier, 100)}))`);
-        await DynamicScript.new('GrowthAnalyze', growthAnalyzeScript, []).run(ns, true);
-        const growThreadsNeeded = await database.get<number>(DatabaseStoreName.NS_Data, 'ns.growthAnalyze');
-        
+        const growthMultiplier = target.moneyMax / Math.max(target.moneyAvailable, 1);
+        const growThreadsNeeded = Math.ceil(ns.growthAnalyze(target.hostname, Math.min(growthMultiplier, 100)));
         const growThreads = Math.min(growThreadsNeeded, maxThreadsAvailable);
         
         return {
@@ -526,21 +495,19 @@ async function calculatePrepBatch(ns: NS, target: IScriptServer, availableRAMBud
         };
     }
     
-    return null; // Target doesn't need prep
+    return null;
 }
 
-async function executeHWGWBatches(ns: NS, hwgwBatches: IHWGWBatch[], prepBatches: IPrepBatch[], networkSnapshot: INetworkRAMSnapshot, scriptRamCost: number, debug: boolean): Promise<IExecutionResults> {
+function executeHWGWBatches(ns: NS, hwgwBatches: IHWGWBatch[], prepBatches: IPrepBatch[], networkSnapshot: INetworkRAMSnapshot, scriptRamCost: number, debug: boolean): IExecutionResults {
     let totalScripts = 0;
     let successfulScripts = 0;
     let failedScripts = 0;
     
-    // Create a copy of network snapshot for tracking allocations
     const serverRAM: Record<string, number> = {};
     for (const server of networkSnapshot.servers) {
         serverRAM[server.hostname] = server.availableRAM;
     }
     
-    // Execute HWGW batches
     for (const batch of hwgwBatches) {
         const scripts = [
             { type: 'hack', threads: batch.hackThreads, delay: batch.hackStartDelay },
@@ -559,7 +526,6 @@ async function executeHWGWBatches(ns: NS, hwgwBatches: IHWGWBatch[], prepBatches
         }
     }
     
-    // Execute prep batches
     for (const batch of prepBatches) {
         if (batch.weakenThreads > 0) {
             const result = allocateAndExecuteScript(ns, 'weaken', batch.weakenThreads, Date.now() + 1000, batch.target.hostname, serverRAM, scriptRamCost, debug);
@@ -580,7 +546,6 @@ async function executeHWGWBatches(ns: NS, hwgwBatches: IHWGWBatch[], prepBatches
 }
 
 function allocateAndExecuteScript(ns: NS, scriptType: string, threads: number, delay: number, targetHostname: string, serverRAM: Record<string, number>, scriptRamCost: number, debug: boolean): { success: boolean; pid: number } {
-    // Safety check: ensure threads is positive
     if (threads <= 0) {
         if (debug) {
             ns.tprint(`ERROR: Invalid thread count ${threads} for ${scriptType} -> ${targetHostname}`);
@@ -588,7 +553,6 @@ function allocateAndExecuteScript(ns: NS, scriptType: string, threads: number, d
         return { success: false, pid: 0 };
     }
     
-    // Determine script file
     let scriptFile = '';
     switch (scriptType) {
         case 'hack': scriptFile = 'remote/simple-hack.js'; break;
@@ -601,29 +565,25 @@ function allocateAndExecuteScript(ns: NS, scriptType: string, threads: number, d
     let totalSuccess = true;
     let firstPid = 0;
     
-    // Split threads across multiple servers as needed
     for (const [hostname, availableRAM] of Object.entries(serverRAM)) {
         if (remainingThreads === 0) break;
-        if (availableRAM < scriptRamCost) continue; // Skip servers with insufficient RAM for even 1 thread
+        if (availableRAM < scriptRamCost) continue;
         
-        // Calculate how many threads this server can handle (ensure positive)
         const maxThreadsOnServer = Math.max(0, Math.floor(availableRAM / scriptRamCost));
         const threadsToAllocate = Math.min(remainingThreads, maxThreadsOnServer);
         
         if (threadsToAllocate <= 0) continue;
         
-        // Allocate RAM
         const ramUsed = threadsToAllocate * scriptRamCost;
         serverRAM[hostname] -= ramUsed;
         
-        // Execute script
         const pid = ns.exec(scriptFile, hostname, threadsToAllocate, targetHostname, delay);
         const success = pid !== 0;
         
         if (!success) {
             totalSuccess = false;
         } else if (firstPid === 0) {
-            firstPid = pid; // Return the first successful PID
+            firstPid = pid;
         }
         
         if (debug) {
