@@ -54,7 +54,7 @@ function analyzeServer(ns: NS, hostname: string): ServerAnalysis {
         moneyCurrent,
         securityMin,
         securityCurrent,
-        power: server.maxRam / 1000, // Simple power metric
+        power: server.maxRam > 0 ? Math.log2(server.maxRam) : 0, // Power based on RAM (log base 2)
         isTarget,
         isAttacker,
         needsPrep
@@ -123,7 +123,7 @@ export async function main(ns: NS): Promise<void> {
             s.purchasedByPlayer ? "N/A" : s.needsPrep ? "No" : "Yes",
             ns.formatPercent(s.moneyCurrent / s.moneyMax || 0),
             ns.formatNumber(s.isTarget ? s.securityCurrent - s.securityMin : 1),
-            s.power || "",
+            s.maxRam > 0 ? Math.round(s.power).toString() : "",
             s.moneyMax > 0 ? ns.tFormat(ns.getWeakenTime(s.hostname)) : "N/A",
             s.moneyMax > 0 ? formatMoney(s.moneyMax) : "$0",
             s.moneyMax > 0 ? Math.floor(s.moneyMax / ns.getWeakenTime(s.hostname)) : 0,
