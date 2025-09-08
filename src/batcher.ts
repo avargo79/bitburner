@@ -73,6 +73,10 @@ const argsSchema: [string, string | number | boolean | string[]][] = [
     ['repeat', true],
 ];
 
+// Simple performance tracking
+let batcherStartTime = Date.now();
+let totalBatchCycles = 0;
+
 let options: {
     [key: string]: string[] | ScriptArg;
 };
@@ -252,6 +256,9 @@ export async function main(ns: NS): Promise<void> {
         // STEP 5: Execute the batches
         const executionResults = executeHWGWBatches(ns, hwgwBatches, prepBatches, networkRAMSnapshot, scriptRamCost, !!options.debug);
         
+        // Track batch cycles
+        totalBatchCycles++;
+        
         if (options.debug) {
             ns.tprint(`Execution Summary: ${executionResults.successfulScripts}/${executionResults.totalScripts} scripts started successfully`);
             ns.tprint(`Remaining RAM Budget: ${remainingRAMBudget.toFixed(2)}GB`);
@@ -382,7 +389,15 @@ function printStatus(ns: NS, servers: ServerData[], playerHackLevel: number) {
         ns.print(`┌─ BATCHER STATUS ─────────────────────────────────────────────`);
         ns.print(`│ Scripts: ${scriptStats.total.toString().padEnd(3)} (H:${scriptStats.hack.toString().padStart(2)} W:${scriptStats.weaken.toString().padStart(2)} G:${scriptStats.grow.toString().padStart(2)})  RAM: ${utilization.toFixed(1)}% (${(usedRAM/1000).toFixed(1)}/${(totalRAM/1000).toFixed(1)}TB)`);
         ns.print(`│ Money: $${ns.formatNumber(playerMoney)}  Hack: ${playerHackLevel}  Income: $${ns.formatNumber(incomeRate)}/sec`);
-        ns.print(`│ Ready: ${readyTargets.length}  Prep: ${prepTargets.length}  Batches: ${Math.floor(scriptStats.total / 4)} cycles`);
+        
+        // Add uptime and cycle information
+        const uptimeMs = Date.now() - batcherStartTime;
+        const uptimeMin = Math.floor(uptimeMs / 60000);
+        const uptimeSec = Math.floor((uptimeMs % 60000) / 1000);
+        const cyclesPerMin = totalBatchCycles > 0 && uptimeMin > 0 ? (totalBatchCycles / uptimeMin).toFixed(1) : '0.0';
+        
+        ns.print(`│ Ready: ${readyTargets.length}  Prep: ${prepTargets.length}  Batches: ${totalBatchCycles} cycles (${cyclesPerMin}/min)`);
+        ns.print(`│ Uptime: ${uptimeMin}m ${uptimeSec}s  Efficiency: $${(incomeRate / Math.max(scriptStats.total, 1)).toFixed(0)}/script`);
         
         if (topTargets.length > 0) {
             ns.print(`├─ ACTIVE TARGETS ────────────────────────────────────────────`);
@@ -417,33 +432,53 @@ function takeNetworkRAMSnapshot(ns: NS, attackers: ServerData[]): INetworkRAMSna
 }
 
 function selectHackableTargets(targets: ServerData[]): ServerData[] {
-    const MONEY_THRESHOLD = 0.95;
-    const SECURITY_TOLERANCE = 5;
+    const MONEY_THRESHOLD = 0.90; // Lowered from 0.95 to allow more targets
+    const SECURITY_TOLERANCE = 8; // Increased from 5 to allow slightly less optimal targets
     
-    return targets.filter(target => {
+    const hackableTargets = targets.filter(target => {
         const moneyRatio = target.moneyAvailable / Math.max(target.moneyMax, 1);
         const securityOverMin = target.hackDifficulty - target.minDifficulty;
         
         return moneyRatio >= MONEY_THRESHOLD && securityOverMin <= SECURITY_TOLERANCE;
     });
+    
+    // Sort by efficiency: money per weaken time, prioritizing high-value quick targets
+    return hackableTargets.sort((a, b) => {
+        const efficiencyA = (a.moneyMax / a.weakenTime) * (a.moneyAvailable / a.moneyMax);
+        const efficiencyB = (b.moneyMax / b.weakenTime) * (b.moneyAvailable / b.moneyMax);
+        return efficiencyB - efficiencyA;
+    });
 }
 
 function calculateFullHWGWBatch(ns: NS, target: ServerData): IHWGWBatch {
-    const baseHackThreads = Math.ceil(ns.hackAnalyzeThreads(target.hostname, target.moneyAvailable * 0.5));
-    const hackThreads = Math.min(baseHackThreads || 1, Math.floor(target.moneyAvailable / 1000));
+    // More aggressive hack percentage - target 75% of money instead of 50%
+    const hackPercent = 0.75;
+    const targetMoney = target.moneyAvailable * hackPercent;
     
+    // Calculate hack threads more efficiently
+    const baseHackThreads = Math.ceil(ns.hackAnalyzeThreads(target.hostname, targetMoney));
+    // Remove the artificial cap of moneyAvailable/1000 which was too conservative
+    const hackThreads = Math.max(1, baseHackThreads);
+    
+    // Calculate security increases and required weaken threads
     const hackSecIncrease = ns.hackAnalyzeSecurity(hackThreads, target.hostname);
     const weakenEffect = ns.weakenAnalyze(1);
     const weaken1Threads = Math.ceil(hackSecIncrease / weakenEffect);
     
-    const growThreads = Math.ceil(ns.growthAnalyze(target.hostname, target.moneyMax / Math.max(target.moneyAvailable - (target.moneyAvailable * 0.5), 1)));
+    // Calculate grow threads needed to restore the money we're taking
+    const moneyAfterHack = target.moneyAvailable - targetMoney;
+    const growthNeeded = target.moneyMax / Math.max(moneyAfterHack, 1);
+    // Cap growth analysis to prevent extreme values on very low-money targets
+    const growThreads = Math.ceil(ns.growthAnalyze(target.hostname, Math.min(growthNeeded, 50)));
     
     const growSecIncrease = ns.growthAnalyzeSecurity(growThreads, target.hostname);
     const weaken2Threads = Math.ceil(growSecIncrease / weakenEffect);
     
-    const gap = 200;
+    // Optimize timing - reduce gaps for faster cycles
+    const gap = 150; // Reduced from 200ms for tighter timing
     const now = Date.now();
     
+    // Calculate optimal timing for HWGW batch
     const hackStartDelay = now + target.weakenTime - target.hackTime + (3 * gap);
     const weaken1StartDelay = now + gap;
     const growStartDelay = now + target.weakenTime - target.growTime + (2 * gap);
@@ -581,13 +616,21 @@ function allocateAndExecuteScript(ns: NS, scriptType: string, threads: number, d
         const success = pid !== 0;
         
         if (!success) {
+            // If script execution fails, restore RAM allocation for retry
+            serverRAM[hostname] += ramUsed;
             totalSuccess = false;
-        } else if (firstPid === 0) {
-            firstPid = pid;
-        }
-        
-        if (debug) {
-            ns.tprint(`${success ? 'SUCCESS' : 'FAILED'}: ${scriptType} on ${hostname} (${threadsToAllocate}t/${threads}t) -> ${targetHostname} (PID: ${pid})`);
+            
+            if (debug) {
+                ns.tprint(`FAILED: ${scriptType} on ${hostname} (${threadsToAllocate}t) -> ${targetHostname} - RAM restored`);
+            }
+        } else {
+            if (firstPid === 0) {
+                firstPid = pid;
+            }
+            
+            if (debug) {
+                ns.tprint(`SUCCESS: ${scriptType} on ${hostname} (${threadsToAllocate}t/${threads}t) -> ${targetHostname} (PID: ${pid})`);
+            }
         }
         
         remainingThreads -= threadsToAllocate;
