@@ -198,7 +198,19 @@ export async function main(ns: NS): Promise<void> {
 								const ip = [A.toString(), '.', B.toString(), '.', C.toString(), '.', D.toString()].join('')
 								if (ip.length === data.length + 3) {
 									ret.push(ip)
-								}
+	}
+	
+	solvers['Encryption II: Vigenère Cipher'] = function (data) {
+		const cipher = [...data[0]]
+			.map((a, i) => {
+				return a === " "
+					? a
+					: String.fromCharCode(((a.charCodeAt(0) - 2 * 65 + data[1].charCodeAt(i % data[1].length)) % 26) + 65);
+			})
+			.join("");
+		return cipher;
+	}
+	
 							}
 						}
 					}
@@ -380,12 +392,331 @@ export async function main(ns: NS): Promise<void> {
 	solvers['Compression I: RLE Compression'] = function (data) {
 		return data.replace(/([\w])\1{0,8}/g, (group: any, chr: any) => group.length + chr)
 	}
+
+	solvers['Compression II: LZ Decompression'] = function (compr) {
+		let plain = "";
+
+		for (let i = 0; i < compr.length;) {
+			const literal_length = compr.charCodeAt(i) - 0x30;
+
+			if (literal_length < 0 || literal_length > 9 || i + 1 + literal_length > compr.length) {
+				return null;
+			}
+
+			plain += compr.substring(i + 1, i + 1 + literal_length);
+			i += 1 + literal_length;
+
+			if (i >= compr.length) {
+				break;
+			}
+			const backref_length = compr.charCodeAt(i) - 0x30;
+
+			if (backref_length < 0 || backref_length > 9) {
+				return null;
+			} else if (backref_length === 0) {
+				++i;
+			} else {
+				if (i + 1 >= compr.length) {
+					return null;
+				}
+
+				const backref_offset = compr.charCodeAt(i + 1) - 0x30;
+				if ((backref_length > 0 && (backref_offset < 1 || backref_offset > 9)) || backref_offset > plain.length) {
+					return null;
+				}
+
+				for (let j = 0; j < backref_length; ++j) {
+					plain += plain[plain.length - backref_offset];
+				}
+
+				i += 2;
+			}
+		}
+
+		return plain;
+	}
+
+	solvers['Compression III: LZ Compression'] = function (plain) {
+		let cur_state = Array.from(Array(10), () => Array(10).fill(null));
+		let new_state = Array.from(Array(10), () => Array(10));
+
+		function set(state: any, i: any, j: any, str: any) {
+			const current = state[i][j];
+			if (current == null || str.length < current.length) {
+				state[i][j] = str;
+			} else if (str.length === current.length && Math.random() < 0.5) {
+				state[i][j] = str;
+			}
+		}
+
+		cur_state[0][1] = "";
+
+		for (let i = 1; i < plain.length; ++i) {
+			for (const row of new_state) {
+				row.fill(null);
+			}
+			const c = plain[i];
+
+			for (let length = 1; length <= 9; ++length) {
+				const string = cur_state[0][length];
+				if (string == null) {
+					continue;
+				}
+
+				if (length < 9) {
+					set(new_state, 0, length + 1, string);
+				} else {
+					set(new_state, 0, 1, string + "9" + plain.substring(i - 9, i) + "0");
+				}
+
+				for (let offset = 1; offset <= Math.min(9, i); ++offset) {
+					if (plain[i - offset] === c) {
+						set(new_state, offset, 1, string + length + plain.substring(i - length, i));
+					}
+				}
+			}
+
+			for (let offset = 1; offset <= 9; ++offset) {
+				for (let length = 1; length <= 9; ++length) {
+					const string = cur_state[offset][length];
+					if (string == null) {
+						continue;
+					}
+
+					if (plain[i - offset] === c) {
+						if (length < 9) {
+							set(new_state, offset, length + 1, string);
+						} else {
+							set(new_state, offset, 1, string + "9" + offset + "0");
+						}
+					}
+
+					set(new_state, 0, 1, string + length + offset);
+
+					for (let new_offset = 1; new_offset <= Math.min(9, i); ++new_offset) {
+						if (plain[i - new_offset] === c) {
+							set(new_state, new_offset, 1, string + length + offset + "0");
+						}
+					}
+				}
+			}
+
+			const tmp_state = new_state;
+			new_state = cur_state;
+			cur_state = tmp_state;
+		}
+
+		let result = null;
+
+		for (let len = 1; len <= 9; ++len) {
+			let string = cur_state[0][len];
+			if (string == null) {
+				continue;
+			}
+
+			string += len + plain.substring(plain.length - len, plain.length);
+			if (result == null || string.length < result.length) {
+				result = string;
+			} else if (string.length == result.length && Math.random() < 0.5) {
+				result = string;
+			}
+		}
+
+		for (let offset = 1; offset <= 9; ++offset) {
+			for (let len = 1; len <= 9; ++len) {
+				let string = cur_state[offset][len];
+				if (string == null) {
+					continue;
+				}
+
+				string += len + "" + offset;
+				if (result == null || string.length < result.length) {
+					result = string;
+				} else if (string.length == result.length && Math.random() < 0.5) {
+					result = string;
+				}
+			}
+		}
+
+		return result ?? "";
+	}
 	
 	solvers['Encryption I: Caesar Cipher'] = function (data) {
 		const cipher = [...data[0]]
 			.map((a) => (a === " " ? a : String.fromCharCode(((a.charCodeAt(0) - 65 - data[1] + 26) % 26) + 65)))
 			.join("");
 		return cipher;
+	}
+
+	solvers['Sanitize Parentheses in Expression'] = function (data) {
+		let left = 0
+		let right = 0
+		const res: any = []
+		for (let i = 0; i < data.length; ++i) {
+			if (data[i] === '(') {
+				++left
+			} else if (data[i] === ')') {
+				left > 0 ? --left : ++right
+			}
+		}
+
+		function dfs(pair: any, index: any, left: any, right: any, s: any, solution: any, res: any) {
+			if (s.length === index) {
+				if (left === 0 && right === 0 && pair === 0) {
+					for (let i = 0; i < res.length; i++) {
+						if (res[i] === solution) {
+							return
+						}
+					}
+					res.push(solution)
+				}
+				return
+			}
+			if (s[index] === '(') {
+				if (left > 0) {
+					dfs(pair, index + 1, left - 1, right, s, solution, res)
+				}
+				dfs(pair + 1, index + 1, left, right, s, solution + s[index], res)
+			} else if (s[index] === ')') {
+				if (right > 0) dfs(pair, index + 1, left, right - 1, s, solution, res)
+				if (pair > 0) dfs(pair - 1, index + 1, left, right, s, solution + s[index], res)
+			} else {
+				dfs(pair, index + 1, left, right, s, solution + s[index], res)
+			}
+		}
+		dfs(0, 0, left, right, data, '', res)
+
+		return res
+	}
+
+	solvers['Find All Valid Math Expressions'] = function (data) {
+		const num: any = data[0]
+		const target: any = data[1]
+
+		function helper(res: any, path: any, num: any, target: any, pos: any, evaluated: any, multed: any) {
+			if (pos === num.length) {
+				if (target === evaluated) {
+					res.push(path)
+				}
+				return
+			}
+			for (let i = pos; i < num.length; ++i) {
+				if (i != pos && num[pos] == '0') {
+					break
+				}
+				const cur = parseInt(num.substring(pos, i + 1))
+				if (pos === 0) {
+					helper(res, path + cur, num, target, i + 1, cur, cur)
+				} else {
+					helper(res, path + '+' + cur, num, target, i + 1, evaluated + cur, cur)
+					helper(res, path + '-' + cur, num, target, i + 1, evaluated - cur, -cur)
+					helper(res, path + '*' + cur, num, target, i + 1, evaluated - multed + multed * cur, multed * cur)
+				}
+			}
+		}
+
+		if (num == null || num.length === 0) {
+			return []
+		}
+		const result: any = []
+		helper(result, '', num, target, 0, 0, 0)
+		return result
+	}
+
+	solvers['HammingCodes: Integer to Encoded Binary'] = function (value) {
+		const HammingSumOfParity = 
+			(lengthOfDBits: any) => lengthOfDBits == 0 ? 0 : lengthOfDBits < 3 ? lengthOfDBits + 1 :
+			Math.ceil(Math.log2(lengthOfDBits * 2)) <= Math.ceil(Math.log2(1 + lengthOfDBits + Math.ceil(Math.log2(lengthOfDBits)))) ?
+				Math.ceil(Math.log2(lengthOfDBits) + 1) : Math.ceil(Math.log2(lengthOfDBits));
+		const data = value.toString(2).split("");
+		const sumParity = HammingSumOfParity(data.length);
+		const count = (arr: any, val: any) => arr.reduce((a: any, v: any) => (v === val ? a + 1 : a), 0);
+		const build = ["x", "x", ...data.splice(0, 1)];
+		for (let i = 2; i < sumParity; i++)
+			build.push("x", ...data.splice(0, Math.pow(2, i) - 1));
+		const parityBits = build.map((e, i) => [e, i]).filter(([e, _]) => e == "x").map(([_, i]) => i);
+		for (const index of parityBits) {
+			const tempcount = index + 1;
+			const temparray = [];
+			const tempdata = [...build];
+			while (tempdata[index] !== undefined) {
+				const temp = tempdata.splice(index, tempcount * 2);
+				temparray.push(...temp.splice(0, tempcount));
+			}
+			temparray.splice(0, 1);
+			build[index] = (count(temparray, "1") % 2).toString();
+		}
+		build.unshift((count(build, "1") % 2).toString());
+		return build.join("");
+	}
+
+	solvers['HammingCodes: Encoded Binary to Integer'] = function (data) {
+		const build = data.split("");
+		const testArray = [];
+		const sumParity = Math.ceil(Math.log2(data.length));
+		const count = (arr: any, val: any) => arr.reduce((a: any, v: any) => (v === val ? a + 1 : a), 0);
+		let overallParity = build.splice(0, 1).join("");
+		testArray.push(overallParity == (count(build, "1") % 2).toString() ? true : false);
+		for (let i = 0; i < sumParity; i++) {
+			const tempIndex = Math.pow(2, i) - 1;
+			const tempStep = tempIndex + 1;
+			const tempData = [...build];
+			const tempArray = [];
+			while (tempData[tempIndex] != undefined) {
+				const temp = [...tempData.splice(tempIndex, tempStep * 2)];
+				tempArray.push(...temp.splice(0, tempStep));
+			}
+			const tempParity = tempArray.shift();
+			testArray.push(tempParity == (count(tempArray, "1") % 2).toString() ? true : false);
+		}
+		let fixIndex = 0;
+		for (let i = 1; i < sumParity + 1; i++) {
+			fixIndex += testArray[i] ? 0 : Math.pow(2, i) / 2;
+		}
+		build.unshift(overallParity);
+		if (fixIndex > 0 && testArray[0] == false) {
+			build[fixIndex] = build[fixIndex] == "0" ? "1" : "0";
+		} else if (testArray[0] == false) {
+			overallParity = overallParity == "0" ? "1" : "0";
+		} else if (testArray[0] == true && testArray.some((truth) => truth == false)) {
+			return 0;
+		}
+		for (let i = sumParity; i >= 0; i--) {
+			build.splice(Math.pow(2, i), 1);
+		}
+		build.splice(0, 1);
+		return parseInt(build.join(""), 2);
+	}
+
+	solvers['Proper 2-Coloring of a Graph'] = function (data) {
+		const nodes: any = new Array(data[0]).fill(0).map(() => [])
+		for (const e of data[1]) {
+			nodes[e[0]].push(e[1])
+			nodes[e[1]].push(e[0])
+		}
+		const solution = new Array(data[0]).fill(undefined)
+		let oddCycleFound = false
+		const traverse = (index: any, color: any) => {
+			if (oddCycleFound) {
+				return
+			}
+			if (solution[index] === color) {
+				return
+			}
+			if (solution[index] === (color ^ 1)) {
+				oddCycleFound = true
+				return
+			}
+			solution[index] = color
+			for (const n of nodes[index]) {
+				traverse(n, color ^ 1)
+			}
+		}
+		while (!oddCycleFound && solution.some(e => e === undefined)) {
+			traverse(solution.indexOf(undefined), 0)
+		}
+		if (oddCycleFound) return "[]";
+		return solution
 	}
 	
 	// Helper function to run a script and wait for results

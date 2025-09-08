@@ -1,11 +1,6 @@
 import { NS } from "@ns";
-import { Database, DatabaseStoreName } from "/lib/database";
-import { IScriptPlayer } from "/models/IScriptPlayer";
 
 export async function main(ns: NS): Promise<void> {
-    const database = await Database.getInstance();
-    await database.open();
-
     const doc: Document = eval('document');
     const hook0 = doc.getElementById('overview-extra-hook-0') as HTMLParagraphElement;
     const hook1 = doc.getElementById('overview-extra-hook-1') as HTMLParagraphElement;
@@ -16,7 +11,7 @@ export async function main(ns: NS): Promise<void> {
     });
 
     while (true) {
-        const player = await database.get<IScriptPlayer>(DatabaseStoreName.NS_Data, 'ns.getPlayer');
+        const player = ns.getPlayer();
 
         hook1.innerHTML = hook0.innerHTML = "";
 
