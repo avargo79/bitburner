@@ -84,7 +84,6 @@ const defaultTradingStrategy: TradingStrategy = {
 // Command line arguments schema
 const argsSchema: [string, string | number | boolean | string[]][] = [
   ['debug', false],
-  ['nodebug', false],
   ['help', false],
 ];
 
@@ -107,8 +106,6 @@ export async function main(ns: NS): Promise<void> {
   // Set debug mode from flags
   if (flags.debug) {
     debug = true;
-  } else if (flags.nodebug) {
-    debug = false;
   }
   
   // Check for existing stock trading instances
@@ -158,13 +155,11 @@ function showHelp(ns: NS): void {
   ns.tprint("");
   ns.tprint("Options:");
   ns.tprint("  --debug     Enable verbose debug output");
-  ns.tprint("  --nodebug   Disable debug output (default)");
   ns.tprint("  --help      Show this help message");
   ns.tprint("");
   ns.tprint("Examples:");
   ns.tprint("  run stocks.js               # Run with default settings (quiet)");
   ns.tprint("  run stocks.js --debug       # Run with verbose output");
-  ns.tprint("  run stocks.js --nodebug     # Run quietly (explicit)");
   ns.tprint("  tail stocks.js              # View real-time status display");
   ns.tprint("");
   ns.tprint("The stock system runs independently with all data kept in memory.");
