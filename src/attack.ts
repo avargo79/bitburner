@@ -1,8 +1,8 @@
 import { AutocompleteData, NS } from "@ns";
 import { Database, DatabaseStoreName } from "/lib/database";
 import { DynamicScript, getDynamicScriptContent } from "/lib/system";
-import PrettyTable from "/lib/prettytable";
-import { IScriptPlayer } from "/models/IScriptPlayer";
+import PrettyTable from "lib/prettytable";
+import { IScriptPlayer } from "models/IScriptPlayer";
 import { IScriptServer } from "/models/ScriptServer";
 import { IScriptTask } from "/models/ScriptTask";
 

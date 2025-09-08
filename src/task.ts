@@ -1,6 +1,6 @@
 import { AutocompleteData, NS, ScriptArg } from "@ns";
 import { Database, DatabaseStoreName } from "/lib/database";
-import { TaskNames } from "/daemon";
+// import { TaskNames } from "/daemon";
 import PrettyTable from "/lib/prettytable";
 import { IScriptTask } from "/models/ScriptTask";
 
@@ -10,9 +10,11 @@ const argsSchema: [string, string | number | boolean | string[]][] = [
    ['interval', 0],
    ['priority', 0],
    ['list', false],
+   ['debug', false],
+   ['nodebug', false],
 ]
 
-const taskNames: string[] = Object.keys(TaskNames);
+const taskNames: string[] = [] // TODO: Populate with actual task names
 
 export function autocomplete(data: AutocompleteData, args: string[]) {
    data.flags(argsSchema);
@@ -69,12 +71,35 @@ async function listTasks(database: Database, ns: NS) {
 }
 
 async function updateTask(ns: NS, database: Database, options: { [key: string]: string[] | ScriptArg; }) {
-   const taskName = ns.args[0] as TaskNames;
-   const task = await database.get<IScriptTask>(DatabaseStoreName.Tasks, taskName);
+   const taskName = ns.args[0] as string;
+   let task = await database.get<IScriptTask>(DatabaseStoreName.Tasks, taskName);
+
+   // If task doesn't exist and we're setting debug flags, create a basic task record
+   if (task === undefined && (options.debug || options.nodebug)) {
+      task = {
+         name: taskName,
+         priority: 10,
+         lastRun: 0,
+         interval: 5000,
+         enabled: true,
+         debug: !!options.debug
+      };
+      await database.saveRecord(DatabaseStoreName.Tasks, task);
+      ns.tprint(`Created new task record for ${taskName} with debug set to ${task.debug}`);
+      return;
+   }
 
    if (task === undefined) {
       ns.tprint('Task not found.  Valid tasks are: ' + taskNames.join(', '));
       ns.exit();
+   }
+
+   // Debug toggling for stockTrading
+   if (options.debug || options.nodebug) {
+      task.debug = !!options.debug;
+      await database.saveRecord(DatabaseStoreName.Tasks, task);
+      ns.tprint(`${taskName} debug set to ${task.debug}`);
+      return;
    }
 
    const orgTask = { ...task };

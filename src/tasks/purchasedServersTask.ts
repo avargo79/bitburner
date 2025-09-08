@@ -1,5 +1,5 @@
-import { DynamicScript } from "/lib/system";
-import { ScriptTask } from "/models/ScriptTask";
+import { DynamicScript } from "lib/system";
+import { ScriptTask } from "models/ScriptTask";
 
 export default (taskName: string = 'PurchasedServers') => new ScriptTask(
     { name: taskName, priority: 10, lastRun: 0, interval: 10000, enabled: true },
@@ -30,9 +30,14 @@ export default (taskName: string = 'PurchasedServers') => new ScriptTask(
         }
         const max_power = config.value.maxPower;
 
-        const servers = await database.get(DatabaseStoreName.NS_Data, "ns.getPurchasedServers");
+const servers = await database.get(DatabaseStoreName.NS_Data, "ns.getPurchasedServers") || [];
 
-        if (servers.length < max_servers && player.money < base_cost) {
+if (!Array.isArray(servers)) {
+    // Data not ready, skip this cycle
+    return;
+}
+
+if (servers.length < max_servers && player.money < base_cost) {
             return;
         } else if (servers.length < max_servers && player.money >= base_cost) {
             await DynamicScript.new("ns.purchaseServer", "ns.purchaseServer('pserve-" + (servers.length + 1).toString() + "', 2)").run(ns, true);
@@ -62,7 +67,7 @@ export default (taskName: string = 'PurchasedServers') => new ScriptTask(
         } 
         `,
         [
-            'import { DynamicScript, getDynamicScriptContent } from "/lib/system";',
+            'import { DynamicScript, getDynamicScriptContent } from "lib/system";',
         ]
     )
 )

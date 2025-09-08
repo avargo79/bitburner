@@ -1,5 +1,5 @@
 import { AutocompleteData, NS, ScriptArg, ProcessInfo, RunningScript } from "@ns";
-import { Database, DatabaseStoreName } from "/lib/database";
+import { Database, DatabaseStoreName } from "lib/database";
 import { IScriptServer } from "/models/ScriptServer";
 import { IHackScriptArgs } from "./models/IRemoteScriptArgs";
 import PrettyTable from "./lib/prettytable";

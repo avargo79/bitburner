@@ -1,7 +1,7 @@
 import { AutocompleteData, NS, ScriptArg } from "@ns";
-import { Database, DatabaseStoreName } from "/lib/database";
+import { Database, DatabaseStoreName } from "lib/database";
 import { disableLogs, DynamicScript, getDynamicScriptContent } from "/lib/system";
-import { IScriptPlayer } from "/models/IScriptPlayer";
+import { IScriptPlayer } from "models/IScriptPlayer";
 import { byAvailableRam, byValue, getAvailableThreads, isAttacker, IScriptServer, isTarget, shouldGrow, shouldHack, shouldWeaken, targetValue } from "/models/ScriptServer";
 import { IHackScriptArgs } from "./models/IRemoteScriptArgs";
 import PrettyTable from "./lib/prettytable";
