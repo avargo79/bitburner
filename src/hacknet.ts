@@ -18,6 +18,10 @@ interface HacknetConfig {
     maxRAM: number;
     maxCores: number;
   };
+  factionRequirements: {
+    targetTotalLevels: number; // Target total levels for Netburners faction (100)
+    prioritizeFactionGoal: boolean; // Prioritize reaching faction requirement over ROI
+  };
   debug: boolean;
 }
 
@@ -98,6 +102,10 @@ const defaultHacknetConfig: HacknetConfig = {
     maxRAM: 64,
     maxCores: 16
   },
+  factionRequirements: {
+    targetTotalLevels: 100, // Netburners faction requirement
+    prioritizeFactionGoal: true // Prioritize reaching 100 levels over pure ROI
+  },
   debug: false
 };
 
@@ -124,6 +132,7 @@ export async function main(ns: NS): Promise<void> {
   }
   
   // Set debug mode from flags
+  debug = false; // Explicitly reset debug mode
   if (flags.debug) {
     debug = true;
   }
@@ -279,9 +288,14 @@ async function updateNodeData(ns: NS): Promise<void> {
     const ramUpgradeIncrease = currentProduction * 0.07; // ~7% increase per RAM upgrade
     const coreUpgradeIncrease = currentProduction * 0.05; // ~5% increase per core upgrade
     
-    node.roi.level = node.upgradeCosts.level > 0 ? levelUpgradeIncrease / node.upgradeCosts.level : 0;
-    node.roi.ram = node.upgradeCosts.ram > 0 ? ramUpgradeIncrease / node.upgradeCosts.ram : 0;
-    node.roi.cores = node.upgradeCosts.cores > 0 ? coreUpgradeIncrease / node.upgradeCosts.cores : 0;
+    // Calculate payback time for each upgrade type (more realistic than ROI)
+    const levelUpgradePayback = node.upgradeCosts.level > 0 ? node.upgradeCosts.level / (levelUpgradeIncrease * 3600) : Infinity;
+    const ramUpgradePayback = node.upgradeCosts.ram > 0 ? node.upgradeCosts.ram / (ramUpgradeIncrease * 3600) : Infinity;
+    const coreUpgradePayback = node.upgradeCosts.cores > 0 ? node.upgradeCosts.cores / (coreUpgradeIncrease * 3600) : Infinity;
+    
+    node.roi.level = levelUpgradePayback < Infinity ? levelUpgradeIncrease / node.upgradeCosts.level : 0;
+    node.roi.ram = ramUpgradePayback < Infinity ? ramUpgradeIncrease / node.upgradeCosts.ram : 0;
+    node.roi.cores = coreUpgradePayback < Infinity ? coreUpgradeIncrease / node.upgradeCosts.cores : 0;
   }
   
   // Add new nodes if they exist
@@ -327,21 +341,44 @@ async function analyzeOpportunities(ns: NS): Promise<void> {
   
   if (maxSpendable <= 0) return;
   
-  // Analyze new node purchase
+  // Calculate current total levels for faction requirement
+  const totalLevels = nodes.reduce((sum, node) => sum + node.level, 0);
+  const needsMoreLevelsForFaction = totalLevels < config.factionRequirements.targetTotalLevels;
+  
+  if (debug) {
+    ns.tprint(`[Hacknet] Total levels: ${totalLevels}/${config.factionRequirements.targetTotalLevels} (Netburners faction)`);
+  }
+  
+  // Analyze new node purchase - prioritize for faction efficiency
   if (ns.hacknet.numNodes() < ns.hacknet.maxNumNodes()) {
     const newNodeCost = ns.hacknet.getPurchaseNodeCost();
     if (newNodeCost <= maxSpendable) {
-      const estimatedProduction = 1.5; // Base production for new node
-      const roi = estimatedProduction / newNodeCost;
+      const estimatedProduction = nodes.length === 0 ? 1.5 : 2.0;
+      const paybackHours = newNodeCost / (estimatedProduction * 3600);
       
-      if (roi >= config.minROIThreshold) {
+      // When working toward faction goal, prioritize getting to 10-12 nodes first
+      const targetNodeCount = Math.ceil(config.factionRequirements.targetTotalLevels / 10); // ~10 nodes for 100 levels
+      const shouldPrioritizeMoreNodes = needsMoreLevelsForFaction && nodes.length < targetNodeCount;
+      
+      // More generous payback for new nodes when building toward faction goal
+      const acceptablePaybackHours = shouldPrioritizeMoreNodes ? 2160 : (nodes.length < 3 ? 720 : 240); // 90 days vs 30/10 days
+      
+      if (debug) {
+        ns.tprint(`[Hacknet] New node analysis: Cost=$${ns.formatNumber(newNodeCost)}, Payback=${paybackHours.toFixed(1)}h, Max=${acceptablePaybackHours}h, Target nodes: ${targetNodeCount}`);
+      }
+      
+      if (paybackHours <= acceptablePaybackHours) {
+        // Massive priority boost for new nodes when building faction base
+        const factionNodeBonus = shouldPrioritizeMoreNodes ? 5000 : 0;
+        const basePriority = (1 / paybackHours) * 1000;
+        
         opportunities.push({
           type: 'new_node',
           cost: newNodeCost,
           benefit: estimatedProduction,
-          roi: roi,
-          priority: roi * 100,
-          description: `Purchase new hacknet node (${ns.hacknet.numNodes() + 1}/${ns.hacknet.maxNumNodes()})`
+          roi: estimatedProduction / newNodeCost,
+          priority: basePriority + factionNodeBonus,
+          description: `Purchase new hacknet node (${ns.hacknet.numNodes() + 1}/${ns.hacknet.maxNumNodes()})${shouldPrioritizeMoreNodes ? ' [FACTION BASE]' : ''}`
         });
       }
     }
@@ -349,18 +386,33 @@ async function analyzeOpportunities(ns: NS): Promise<void> {
   
   // Analyze upgrades for existing nodes
   for (const node of nodes) {
-    // Level upgrades
+    // Level upgrades - prioritize even distribution for faction efficiency
     if (node.level < config.upgradePreferences.maxLevel) {
       const cost = node.upgradeCosts.level;
-      if (cost <= maxSpendable && cost > 0 && node.roi.level >= config.minROIThreshold) {
+      const benefit = node.production * 0.01;
+      const paybackHours = cost > 0 ? cost / (benefit * 3600) : Infinity;
+      
+      // When working toward faction goal, prefer upgrading lower-level nodes first
+      const averageLevel = nodes.length > 0 ? nodes.reduce((sum, n) => sum + n.level, 0) / nodes.length : 1;
+      const isLowLevelNode = node.level <= averageLevel; // This node is at or below average
+      const shouldPrioritizeEvenLevels = needsMoreLevelsForFaction && config.factionRequirements.prioritizeFactionGoal;
+      
+      // More generous payback time if we need levels for faction, especially for low-level nodes
+      const maxPaybackHours = shouldPrioritizeEvenLevels && isLowLevelNode ? 1440 : (needsMoreLevelsForFaction ? 720 : 240); // 60/30/10 days
+      
+      if (cost <= maxSpendable && cost > 0 && paybackHours <= maxPaybackHours) {
+        // Extra priority boost for evening out levels when working toward faction
+        const factionBonus = shouldPrioritizeEvenLevels && isLowLevelNode ? 3000 : (needsMoreLevelsForFaction ? 2000 : 0);
+        const basePriority = (1 / paybackHours) * (config.upgradePreferences.prioritizeLevel ? 1500 : 1000);
+        
         opportunities.push({
           type: 'upgrade_level',
           nodeIndex: node.index,
           cost: cost,
-          benefit: node.production * 0.01,
+          benefit: benefit,
           roi: node.roi.level,
-          priority: node.roi.level * (config.upgradePreferences.prioritizeLevel ? 150 : 100),
-          description: `${node.name}: Level ${node.level} → ${node.level + 1}`
+          priority: basePriority + factionBonus,
+          description: `${node.name}: Level ${node.level} → ${node.level + 1}${needsMoreLevelsForFaction ? ' [FACTION]' : ''}${isLowLevelNode && shouldPrioritizeEvenLevels ? ' [SPREAD]' : ''}`
         });
       }
     }
@@ -368,14 +420,18 @@ async function analyzeOpportunities(ns: NS): Promise<void> {
     // RAM upgrades
     if (node.ram < config.upgradePreferences.maxRAM) {
       const cost = node.upgradeCosts.ram;
-      if (cost <= maxSpendable && cost > 0 && node.roi.ram >= config.minROIThreshold) {
+      const benefit = node.production * 0.07;
+      const paybackHours = cost > 0 ? cost / (benefit * 3600) : Infinity;
+      const maxPaybackHours = 240; // 10 days max payback for upgrades
+      
+      if (cost <= maxSpendable && cost > 0 && paybackHours <= maxPaybackHours) {
         opportunities.push({
           type: 'upgrade_ram',
           nodeIndex: node.index,
           cost: cost,
-          benefit: node.production * 0.07,
+          benefit: benefit,
           roi: node.roi.ram,
-          priority: node.roi.ram * (config.upgradePreferences.prioritizeRAM ? 150 : 100),
+          priority: (1 / paybackHours) * (config.upgradePreferences.prioritizeRAM ? 1500 : 1000),
           description: `${node.name}: RAM ${node.ram}GB → ${node.ram * 2}GB`
         });
       }
@@ -384,14 +440,18 @@ async function analyzeOpportunities(ns: NS): Promise<void> {
     // Core upgrades
     if (node.cores < config.upgradePreferences.maxCores) {
       const cost = node.upgradeCosts.cores;
-      if (cost <= maxSpendable && cost > 0 && node.roi.cores >= config.minROIThreshold) {
+      const benefit = node.production * 0.05;
+      const paybackHours = cost > 0 ? cost / (benefit * 3600) : Infinity;
+      const maxPaybackHours = 240; // 10 days max payback for upgrades
+      
+      if (cost <= maxSpendable && cost > 0 && paybackHours <= maxPaybackHours) {
         opportunities.push({
           type: 'upgrade_cores',
           nodeIndex: node.index,
           cost: cost,
-          benefit: node.production * 0.05,
+          benefit: benefit,
           roi: node.roi.cores,
-          priority: node.roi.cores * (config.upgradePreferences.prioritizeCores ? 150 : 100),
+          priority: (1 / paybackHours) * (config.upgradePreferences.prioritizeCores ? 1500 : 1000),
           description: `${node.name}: Cores ${node.cores} → ${node.cores + 1}`
         });
       }
@@ -507,80 +567,88 @@ function updateStatusDisplay(ns: NS): void {
   ns.print("│                      🖧 HACKNET OPTIMIZATION SYSTEM                         │");
   ns.print("└─────────────────────────────────────────────────────────────────────────────┘");
   
-  // Status overview
+  // Status overview with faction progress and strategy
   const uptimeHours = metrics.uptime / (1000 * 60 * 60);
   const status = config.enabled ? "🟢 ACTIVE" : "🔴 DISABLED";
+  const totalLevels = nodes.reduce((sum, node) => sum + node.level, 0);
+  const factionProgress = totalLevels >= config.factionRequirements.targetTotalLevels ? "✅" : `${totalLevels}/${config.factionRequirements.targetTotalLevels}`;
+  
+  const targetNodeCount = Math.ceil(config.factionRequirements.targetTotalLevels / 10);
+  const needsMoreNodes = totalLevels < config.factionRequirements.targetTotalLevels && nodes.length < targetNodeCount;
+  const strategy = needsMoreNodes ? `🎯 BUILD TO ${targetNodeCount} NODES` : (totalLevels < config.factionRequirements.targetTotalLevels ? "🎯 SPREAD LEVELS" : "💰 OPTIMIZE ROI");
+  
   ns.print(`Status: ${status}  |  Uptime: ${uptimeHours.toFixed(1)}h  |  Nodes: ${metrics.totalNodes}/${ns.hacknet.maxNumNodes()}`);
+  ns.print(`Netburners Faction: ${factionProgress}  |  Strategy: ${strategy}`);
   ns.print("");
   
   // Financial overview
-  ns.print("┌─ FINANCIAL OVERVIEW ──────────────────────────────────────────────────────┐");
-  ns.print(`│ Total Investment:    $${ns.formatNumber(metrics.totalInvestment).padStart(12)}           │`);
-  ns.print(`│ Total Return:        $${ns.formatNumber(metrics.totalReturn).padStart(12)}           │`);
-  ns.print(`│ Net Profit:          $${ns.formatNumber(metrics.totalReturn - metrics.totalInvestment).padStart(12)}           │`);
-  ns.print(`│ Current Production:  $${ns.formatNumber(metrics.totalProduction).padStart(12)}/sec      │`);
-  ns.print(`│ Available to Spend:  $${ns.formatNumber(maxSpendable).padStart(12)}           │`);
-  ns.print("└───────────────────────────────────────────────────────────────────────────┘");
+  ns.print("┌─ FINANCIAL OVERVIEW");
+  ns.print(`│ Total Investment:    $${ns.formatNumber(metrics.totalInvestment)}`);
+  ns.print(`│ Total Return:        $${ns.formatNumber(metrics.totalReturn)}`);
+  ns.print(`│ Net Profit:          $${ns.formatNumber(metrics.totalReturn - metrics.totalInvestment)}`);
+  ns.print(`│ Current Production:  $${ns.formatNumber(metrics.totalProduction)}/sec`);
+  ns.print(`│ Available to Spend:  $${ns.formatNumber(maxSpendable)}`);
   ns.print("");
   
   // Nodes overview
   if (nodes.length > 0) {
-    ns.print("┌─ HACKNET NODES ───────────────────────────────────────────────────────────┐");
+    ns.print("┌─ HACKNET NODES");
     
     // Show top 6 most productive nodes
     const sortedNodes = [...nodes].sort((a, b) => b.production - a.production);
     const displayNodes = sortedNodes.slice(0, 6);
     
     for (const node of displayNodes) {
-      const prodDisplay = `$${ns.formatNumber(node.production)}/s`.padStart(10);
-      const levelDisplay = `L${node.level}`.padStart(4);
-      const ramDisplay = `${node.ram}GB`.padStart(6);
-      const coresDisplay = `${node.cores}c`.padStart(4);
-      const totalDisplay = `$${ns.formatNumber(node.totalProduction)}`.padStart(10);
+      const prodDisplay = `$${ns.formatNumber(node.production)}/s`;
+      const levelDisplay = `L${node.level}`;
+      const ramDisplay = `${node.ram}GB`;
+      const coresDisplay = `${node.cores}c`;
+      const totalDisplay = `$${ns.formatNumber(node.totalProduction)}`;
       
-      ns.print(`│ ${node.name.padEnd(15)} ${prodDisplay} ${levelDisplay} ${ramDisplay} ${coresDisplay} ${totalDisplay} │`);
+      ns.print(`│ ${node.name.padEnd(15)} ${prodDisplay.padEnd(10)} ${levelDisplay.padEnd(4)} ${ramDisplay.padEnd(6)} ${coresDisplay.padEnd(4)} ${totalDisplay}`);
     }
     
     if (nodes.length > 6) {
-      ns.print(`│ ... and ${nodes.length - 6} more nodes                                           │`);
+      ns.print(`│ ... and ${nodes.length - 6} more nodes`);
     }
     
-    ns.print("└───────────────────────────────────────────────────────────────────────────┘");
     ns.print("");
   }
   
   // Upgrade opportunities
   if (opportunities.length > 0) {
-    ns.print("┌─ UPGRADE OPPORTUNITIES ───────────────────────────────────────────────────┐");
+    ns.print("┌─ UPGRADE OPPORTUNITIES");
     
     const displayOpps = opportunities.slice(0, 5);
     for (let i = 0; i < displayOpps.length; i++) {
       const opp = displayOpps[i];
-      const costDisplay = `$${ns.formatNumber(opp.cost)}`.padStart(10);
-      const roiDisplay = `${(opp.roi * 100).toFixed(1)}%`.padStart(6);
+      const costDisplay = `$${ns.formatNumber(opp.cost)}`;
+      const roiDisplay = `${(opp.roi * 100).toFixed(1)}%`;
       const priority = i === 0 ? "🔥" : "  ";
       
-      ns.print(`│ ${priority} ${opp.description.padEnd(35)} ${costDisplay} ${roiDisplay} │`);
+      ns.print(`│ ${priority} ${opp.description.padEnd(40)} ${costDisplay.padEnd(12)} ${roiDisplay}`);
     }
     
     if (opportunities.length > 5) {
-      ns.print(`│ ... and ${opportunities.length - 5} more opportunities                            │`);
+      ns.print(`│ ... and ${opportunities.length - 5} more opportunities`);
     }
     
-    ns.print("└───────────────────────────────────────────────────────────────────────────┘");
+    ns.print("");
   } else if (config.enabled) {
-    ns.print("┌─ NO OPPORTUNITIES ────────────────────────────────────────────────────────┐");
-    ns.print("│ No profitable upgrades available at current ROI threshold                  │");
-    ns.print(`│ Minimum ROI required: ${(config.minROIThreshold * 100).toFixed(1)}%                                           │`);
-    ns.print("└───────────────────────────────────────────────────────────────────────────┘");
+    ns.print("┌─ NO OPPORTUNITIES");
+    ns.print("│ No profitable upgrades available at current ROI threshold");
+    ns.print(`│ Minimum ROI required: ${(config.minROIThreshold * 100).toFixed(1)}%`);
+    ns.print("");
   }
   
   ns.print("");
   
   // Configuration summary
-  ns.print("┌─ CONFIGURATION ───────────────────────────────────────────────────────────┐");
-  ns.print(`│ Max Investment:   $${ns.formatNumber(config.maxInvestment).padStart(12)}  Min ROI: ${(config.minROIThreshold * 100).toFixed(1)}%     │`);
-  ns.print(`│ Reserve Ratio:    ${(config.capitalAllocation.reserveRatio * 100).toFixed(0)}%          Cash Buffer: $${ns.formatNumber(config.capitalAllocation.minCashBuffer).padStart(8)} │`);
-  ns.print(`│ Max Levels: ${config.upgradePreferences.maxLevel.toString().padStart(3)}   Max RAM: ${config.upgradePreferences.maxRAM.toString().padStart(3)}GB   Max Cores: ${config.upgradePreferences.maxCores.toString().padStart(2)}    │`);
-  ns.print("└───────────────────────────────────────────────────────────────────────────┘");
+  const currentTotalLevels = nodes.reduce((sum, node) => sum + node.level, 0);
+  const factionStatus = currentTotalLevels >= config.factionRequirements.targetTotalLevels ? "✅ READY" : "🎯 WORKING";
+  
+  ns.print("┌─ CONFIGURATION");
+  ns.print(`│ Max Investment:   $${ns.formatNumber(config.maxInvestment)}  Min ROI: ${(config.minROIThreshold * 100).toFixed(1)}%`);
+  ns.print(`│ Reserve Ratio:    ${(config.capitalAllocation.reserveRatio * 100).toFixed(0)}%          Cash Buffer: $${ns.formatNumber(config.capitalAllocation.minCashBuffer)}`);
+  ns.print(`│ Netburners Goal:  ${factionStatus}     Levels: ${currentTotalLevels}/${config.factionRequirements.targetTotalLevels}`);
 }
