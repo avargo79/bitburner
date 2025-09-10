@@ -10,9 +10,7 @@ features/
 ├── botnet-share/                       # Botnet RAM sharing feature
 │   └── BOTNET_SHARE_FEATURE_PLAN.md   # Complete implementation plan
 └── autopilot/                          # Intelligent autopilot system
-    ├── AUTOPILOT-PRD.md                # Product requirements document
-    ├── AUTOPILOT-FRAMEWORK-DESIGN.md   # Technical architecture design
-    └── EARLY-GAME-AUTOPILOT-SPEC.md    # Pre-Singularity automation spec
+    └── AUTOPILOT-CONSOLIDATED-PLAN.md  # Complete implementation specification
 ```
 
 ## Feature Status
@@ -29,16 +27,17 @@ features/
 - Automatic activation/deactivation based on game state
 - Conservative defaults with user configuration options
 
-### 🔬 **Autopilot System** - Research & Design Phase
-- **Status**: Multiple design approaches documented, needs direction
-- **Timeline**: 8-16 weeks depending on approach chosen
-- **Purpose**: Hands-off gameplay automation across all game phases
-- **Approach**: Three documented strategies (PRD, Framework, Early-Game)
+### 🔬 **Autopilot System** - Consolidated Implementation Plan
+- **Status**: Implementation-ready with unified specification
+- **Timeline**: 4 weeks total (1 week per phase)
+- **Purpose**: Hands-off early game automation using browser APIs
+- **Approach**: Browser-first automation building on existing navigator system
 
-**Design Options**:
-1. **Full System (PRD)**: Comprehensive autopilot with advanced decision making
-2. **Framework Approach**: Modular, iterative development with reusable components
-3. **Early Game Focus**: Pre-Singularity browser automation using existing navigator
+**Key Benefits**:
+- Works before Singularity APIs (BitNode 4) are unlocked
+- Browser automation using existing navigator system (97.9% RAM optimized)
+- Intelligent decisions based on guide system ROI analytics
+- Conservative defaults with iterative 4-week development plan
 
 ## Implementation Priorities
 
@@ -47,9 +46,9 @@ features/
   - Simple detection, minimal code changes, immediate value
 
 ### **Short-term (1-2 weeks)**
-- 🔄 **Autopilot Direction**: Choose implementation approach
-  - Recommend: Early Game Focus for practical immediate value
-  - Alternative: Framework Approach for long-term extensibility
+- 🔄 **Autopilot Implementation**: Start with Phase 1 foundation
+  - Week 1: Game state monitoring and basic faction joining
+  - Week 2: Augmentation purchasing and faction work automation
 
 ### **Medium-term (1-2 months)**
 - 📋 **Feature Integration**: Combine botnet share with autopilot systems
@@ -107,7 +106,7 @@ features/
 - ✅ **Botnet Share**: `features/botnet-share/BOTNET_SHARE_FEATURE_PLAN.md`
 
 ### **Needs Decision**
-- 🤔 **Autopilot Approach**: Review three specs in `features/autopilot/`
+- ✅ **Autopilot Ready**: `features/autopilot/AUTOPILOT-CONSOLIDATED-PLAN.md`
 
 ### **Development Tools**
 - **Navigator**: Browser automation - `src/navigator.ts`
