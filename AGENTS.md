@@ -4,31 +4,189 @@
 This is a sophisticated Bitburner game automation framework built with TypeScript. The codebase creates autonomous agents that manage servers, execute hacking operations, solve contracts, and optimize resource allocation within the Bitburner game environment. All scripts run in-game and interact with the Bitburner API through the `NS` (Netscript) interface.
 
 ## Architecture & Patterns
-- **Task-based architecture**: Core functionality organized as ScriptTask instances with priority, scheduling, and state management
-- **Database-driven**: Uses IndexedDB through custom Database singleton for persistent storage across game resets
-- **Dynamic script generation**: DynamicScript class generates and executes Netscript code on-demand
-- **Modular design**: Features separated into `/lib` (utilities), `/models` (types), `/tasks` (automation logic), `/remote` (distributed scripts)
-- **Singleton pattern**: Database, Configuration, and other core services use static getInstance() methods
-- **Event-driven**: Task scheduler with intervals, priorities, and dependency management
+- **Standalone scripts**: Each script is self-contained with main(ns: NS) function
+- **Direct NS API usage**: Scripts interact directly with Bitburner NS API
+- **Stateless operation**: Scripts gather data fresh from NS API each run (no persistent storage)
+- **Modular design**: Features separated into main scripts (`/src`), utilities (`/src/lib`), remote scripts (`/src/remote`)
+- **Distributed execution**: Remote scripts enable parallel processing across multiple servers
+- **Self-contained interfaces**: Each script defines its own types and data structures inline
 
 ## Key File Locations
-- **Main Entry**: `src/daemon.ts` - Task orchestrator
-- **Core Systems**: `src/lib/` - Database, network, configuration
-- **Task Logic**: `src/tasks/` - Individual automation modules
-- **Remote Scripts**: `src/remote/` - Distributed execution scripts
-- **Types**: `src/models/` - TypeScript interfaces
+- **Main Scripts**: `src/*.ts` - Standalone automation scripts
+- **Utilities**: `src/lib/` - Shared functions and browser API wrappers
+- **Remote Scripts**: `src/remote/` - Lightweight scripts for distributed execution
+- **Navigator**: `src/navigator.ts` - Browser automation and game interface interaction
 
-## Typical AI Agent Workflows
-### Adding a New Task
-1. Create interface in `/models/`
-2. Implement task class extending ScriptTask in `/tasks/`
-3. Register the new task in `src/daemon.ts`
-4. Add database schema if persistent state is needed
+## Feature Development Workflow
+This project follows **Spec-Driven Development** for structured, high-quality feature development.
+
+### Directory Structure
+All feature development artifacts are organized in the `features/` directory:
+
+```
+features/
+├── [feature-name]/
+│   ├── spec.md              # Phase 1: Feature specification
+│   ├── plan.md              # Phase 2: Technical implementation plan
+│   ├── research.md          # Phase 2: Technical decisions and API research
+│   ├── data-model.md        # Phase 2: Database schema and entities
+│   ├── tasks.md             # Phase 3: Implementation task breakdown
+│   ├── quickstart.md        # Phase 2: Manual testing scenarios
+│   └── contracts/           # Phase 2: Service interfaces and API definitions
+│       ├── api-interfaces.ts
+│       └── service-contracts.ts
+└── README.md                # Feature development guidelines
+```
+
+### Templates
+All phases use standardized templates from `templates/` directory:
+- `templates/spec-template.md` - Feature specification structure
+- `templates/plan-template.md` - Technical implementation planning
+- `templates/tasks-template.md` - Task breakdown and execution order
+
+### Phase 1: Specification (`/specify` command)
+**Goal**: Define WHAT the feature does and WHY it's needed (no implementation details)
+
+**Template**: Uses `templates/spec-template.md` with Bitburner-specific:
+- Game Integration Requirements (GI-xxx) - NS API integration, stateless script execution
+- Performance Requirements (PR-xxx) - RAM constraints, execution timing
+- Data Requirements (DR-xxx) - Dynamic data gathering via NS API, in-memory state
+- Automation Requirements (AR-xxx) - Autonomous operation, logging
+
+**Example prompt**:
+```
+/specify Create an autonomous contract solver that analyzes Bitburner coding contracts,
+determines the optimal solution algorithm, and executes the solution. The system should
+handle all 20+ contract types, track success rates, and learn from failures to improve
+future performance. It should work across multiple servers and respect RAM constraints
+while maximizing solving throughput.
+```
+/specify Create an autonomous contract solver that analyzes Bitburner coding contracts,
+determines the optimal solution algorithm, and executes the solution. The system should
+handle all 20+ contract types, track success rates, and learn from failures to improve
+future performance. It should integrate with the existing task system and respect
+server RAM constraints while maximizing solving throughput.
+```
+
+### Phase 2: Technical Planning (`/plan` command)
+**Goal**: Define HOW to implement using our tech stack and architecture
+
+**Template**: Uses `templates/plan-template.md` with Bitburner-specific:
+- Standalone script architecture patterns
+- Direct NS API usage and RAM cost considerations
+- Stateless design principles (no persistent storage)
+- Multi-server distribution patterns
+
+**Example prompt**:
+```
+/plan The contract solver will be implemented as a standalone script that scans servers
+for contracts, analyzes each type, and executes solutions. Use localStorage to cache
+successful solution patterns and track performance metrics. Create remote scripts for
+distributed contract solving across multiple servers. Respect RAM constraints and
+implement proper error handling for network failures.
+```
+/plan The contract solver will extend the existing ScriptTask architecture with a new
+ContractSolverTask. Use the Database singleton for caching contract patterns and solutions.
+Implement as a service that interfaces with the Network component to discover contracts
+across servers. Create algorithm implementations for each contract type as separate
+modules. Use DynamicScript for execution and respect the 25GB browser API limitations.
+```
+
+### Phase 3: Task Breakdown (`/tasks` command)
+**Goal**: Generate actionable, ordered implementation tasks
+
+**Template**: Uses `templates/tasks-template.md` with Bitburner-specific:
+- Standalone script implementation patterns
+- Direct NS API integration steps
+- In-memory data management (no persistence)
+- Remote script distribution tasks
+
+**Key Principles**:
+- Use existing patterns (standalone scripts with main(ns) function)
+- Follow TypeScript conventions and import patterns
+- Respect Bitburner RAM constraints and NS API limitations
+- Design for stateless operation (gather data fresh each run)
+
+## Specification Guidelines
+
+### Functional Requirements Template
+When writing functional requirements for Bitburner features:
+
+**Game Integration Requirements**:
+- **GI-001**: System MUST integrate with existing NS API through DynamicScript
+- **GI-002**: System MUST respect server RAM constraints and report memory usage
+- **GI-003**: System MUST persist state in IndexedDB to survive game resets
+- **GI-004**: System MUST register as ScriptTask with appropriate priority and interval
+
+**Performance Requirements**:
+- **PR-001**: System MUST execute within [X]GB RAM budget per server
+- **PR-002**: System MUST complete operations within [X]ms to avoid blocking game loop
+- **PR-003**: System MUST handle [X] concurrent operations across botnet
+- **PR-004**: System MUST scale to [X] servers without performance degradation
+
+**Data Requirements**:
+- **DR-001**: System MUST store [specific data] in Database with schema version
+- **DR-002**: System MUST maintain data consistency across game sessions
+- **DR-003**: System MUST provide data migration for schema updates
+- **DR-004**: System MUST expose data through [specific interface]
+
+**Automation Requirements**:
+- **AR-001**: System MUST operate autonomously without user intervention
+- **AR-002**: System MUST adapt to changing game conditions [specify conditions]
+- **AR-003**: System MUST prioritize operations based on [criteria]
+- **AR-004**: System MUST log activities for monitoring and debugging
+
+### Common Bitburner Entities
+When defining data models, consider these standard entities:
+
+**Server Entity**:
+- Properties: hostname, maxMoney, securityLevel, hackTime, ports
+- Relationships: Network topology, target selection, execution allocation
+
+**HackingOperation Entity**:
+- Properties: target, operationType, expectedGain, startTime, threads
+- Relationships: Server, batch coordination
+
+**Contract Entity**:
+- Properties: contractType, difficulty, data, reward, location
+- Relationships: Server location, solution algorithms
+
+**Player Entity**:
+- Properties: hackingLevel, money, skills, augmentations, currentServer
+- Relationships: Available actions, progression tracking
+
+### Success Criteria Templates
+
+**Performance Metrics**:
+- Memory efficiency: RAM usage per operation
+- Execution speed: Operations per second
+- Success rate: Percentage of successful completions
+- Scalability: Performance across server count
+
+**Game Impact Metrics**:
+- Money generation rate increase
+- Experience gain optimization
+- Faction reputation improvements
+- Contract solving accuracy
+
+**System Health Metrics**:
+- Task execution reliability
+- Database operation success rate
+- Network topology discovery completeness
+- Error recovery effectiveness
+
+### Legacy: Adding a New Script (Direct Implementation)
+For simple scripts that don't require full spec-driven development:
+1. Create standalone script in `src/[script-name].ts`
+2. Implement main(ns: NS) function with automation logic
+3. Add remote script in `src/remote/` if multi-server execution needed
+4. Design for stateless operation (gather data fresh from NS API each run)
 
 ### Debugging Issues
-1. Check `src/daemon.ts` for task registration and scheduling
-2. Verify database schema and store names in `src/lib/database.ts`
-3. Monitor script execution and logs in `/remote/` scripts
+1. Check script execution via `run [script-name].js` in Bitburner terminal
+2. Monitor script output using ns.print() and ns.tprint() logs
+3. Verify RAM constraints and NS API usage patterns
+4. Test script restart behavior (stateless operation)
 
 ## Common Issues & Solutions
 - **Build errors**: Check TypeScript import paths and module resolution
@@ -91,37 +249,38 @@ This is a sophisticated Bitburner game automation framework built with TypeScrip
 - **Network topology**: Automatically discover and root servers for botnet expansion
 
 ## Key Components
-### Core Systems
-- **Database** (`/lib/database.ts`): IndexedDB wrapper with typed store management
-- **DynamicScript** (`/lib/system.ts`): Runtime script generation and execution
-- **Network** (`/lib/network.ts`): Server discovery, routing, and topology mapping
-- **Configuration** (`/lib/configuration.ts`): Persistent settings and parameters
+### Core Scripts
+- **Botnet** (`botnet.ts`): Advanced HWGW batching with multi-server coordination
+- **Navigator** (`navigator.ts`): Browser automation and game interface interaction
+- **Contracts** (`contracts.ts`): Coding contract solver and automation
+- **Casino Bot** (`casino-bot.ts`): Automated gambling and money generation
 
-### Task Management
-- **ScriptTask** (`/models/ScriptTask.ts`): Base class for all automation tasks
-- **Daemon** (`daemon.ts`): Task scheduler and orchestration engine
-- **Task implementations**: Server management, hacking operations, contract solving
+### Utilities & Libraries
+- **React utilities** (`lib/react.ts`): Browser DOM manipulation and UI automation
+- **Remote scripts** (`remote/`): Lightweight distributed execution scripts
+- **Data patterns**: In-memory structures, fresh NS API data gathering each run
 
-### Distributed Computing
-- **Remote scripts** (`/remote/`): Lightweight scripts for multi-server execution
-- **Batching** (`batcher.ts`): Coordinated hack/grow/weaken operations
-- **Resource allocation**: Dynamic server provisioning and workload distribution
+### Browser Integration
+- **Zero-cost DOM access**: Stealth techniques bypass Bitburner's RAM penalties
+- **Game interface automation**: Direct UI manipulation and state reading
+- **Cross-script communication**: localStorage and browser APIs for coordination
 
 ## Development Guidelines
 ### DO
-- Use the singleton pattern for stateful services
-- Leverage IndexedDB for all persistent data
-- Follow the task-based architecture for new features
-- Use dynamic script generation for NS API interactions
-- Implement proper priority and scheduling for tasks
-- Write RAM-efficient code for game constraints
+- Use standalone scripts with main(ns: NS) function pattern
+- Design for stateless operation (gather data fresh from NS API each run)
+- Follow self-contained script architecture for new features
+- Use direct NS API calls for game interactions
+- Implement proper logging with ns.print() and ns.tprint()
+- Write RAM-efficient code for Bitburner constraints
 
 ### AVOID
-- Hardcoded values - use Configuration system instead
-- Synchronous operations - prefer async/await
-- Memory leaks - clean up resources properly
-- Blocking operations in the main daemon loop
-- Direct file system access - use the build system
+- Hardcoded values - use script arguments or dynamic NS API queries
+- Persistent state storage - design scripts to work statelessly
+- Synchronous operations that block game performance
+- Memory leaks - clean up resources and intervals properly
+- Complex abstractions - keep scripts simple and focused
+- External dependencies - scripts should be self-contained
 
 ### Testing & Debugging
 - Test in-game using the built-in development console
