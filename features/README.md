@@ -1,117 +1,203 @@
 # Bitburner Features - Development Planning
 
-This directory contains feature specifications and development plans for the Bitburner automation framework.
+This directory contains feature specifications and development plans for the Bitburner automation framework using **Spec-Driven Development** methodology.
 
 ## Directory Structure
 
 ```
 features/
-├── README.md                           # This file - feature overview
-├── botnet-share/                       # Botnet RAM sharing feature
-│   └── BOTNET_SHARE_FEATURE_PLAN.md   # Complete implementation plan
-└── autopilot/                          # Intelligent autopilot system
-    └── AUTOPILOT-CONSOLIDATED-PLAN.md  # Complete implementation specification
+├── README.md                    # This file - feature overview and guidelines
+├── navigator/                   # Browser automation framework
+│   ├── spec.md                 # Feature specification (WHAT/WHY)
+│   ├── plan.md                 # Technical implementation plan (HOW)
+│   └── research.md             # Technical decisions and research
+├── botnet/                      # HWGW batching and server management
+│   ├── spec.md                 # Feature specification  
+│   ├── plan.md                 # Technical implementation plan
+│   └── research.md             # Algorithm research and optimization
+├── contracts/                   # Coding contract solver automation
+│   ├── spec.md                 # Feature specification
+│   ├── plan.md                 # Technical implementation plan
+│   └── research.md             # Algorithm research and contract analysis
+├── casino-bot/                  # Automated casino gambling system
+│   ├── spec.md                 # Feature specification
+│   ├── plan.md                 # Technical implementation plan
+│   └── research.md             # Browser automation and blackjack strategy
+├── autopilot/                   # Intelligent early game automation
+│   ├── spec.md                 # Feature specification
+│   ├── plan.md                 # Technical implementation plan
+│   └── research.md             # Technical decisions and integration
+└── botnet-share/                # RAM sharing for faction reputation
+    ├── spec.md                 # Feature specification
+    ├── plan.md                 # Technical implementation plan
+    └── research.md             # Share mechanics and optimization
 ```
 
 ## Feature Status
 
-### 🚀 **Botnet Share** - Ready for Implementation
-- **Status**: Implementation-ready with complete technical specs
-- **Timeline**: 2-3 hours total implementation
-- **Purpose**: 25-45% faction reputation boost during faction work
-- **Approach**: Minimal integration with existing botnet system
+### ✅ **Fully Documented Features** (Ready for Enhancement/Reference)
+All features have complete standardized documentation following spec-driven development:
 
-**Key Benefits**:
-- Zero RAM cost faction detection using browser API stealth technique
-- 15% RAM allocation for sharing when "Working for " text detected
-- Automatic activation/deactivation based on game state
-- Conservative defaults with user configuration options
+#### **🎯 Navigator** - Browser Automation Framework
+- **Status**: Implemented + Fully Documented
+- **Purpose**: Zero-cost browser automation for game interface interaction
+- **Key Innovation**: Stealth DOM access bypassing 25GB RAM penalties
 
-### 🔬 **Autopilot System** - Consolidated Implementation Plan
-- **Status**: Implementation-ready with unified specification
-- **Timeline**: 4 weeks total (1 week per phase)
-- **Purpose**: Hands-off early game automation using browser APIs
-- **Approach**: Browser-first automation building on existing navigator system
+#### **💰 Botnet** - HWGW Income Generation
+- **Status**: Implemented + Fully Documented  
+- **Purpose**: Advanced HWGW batching with multi-server coordination
+- **Key Innovation**: Sophisticated timing algorithms and network management
 
-**Key Benefits**:
-- Works before Singularity APIs (BitNode 4) are unlocked
-- Browser automation using existing navigator system (97.9% RAM optimized)
-- Intelligent decisions based on guide system ROI analytics
-- Conservative defaults with iterative 4-week development plan
+#### **🧮 Contracts** - Coding Contract Solver
+- **Status**: Implemented + Fully Documented
+- **Purpose**: Automated solving of all 20+ contract types with high success rates
+- **Key Innovation**: Comprehensive algorithm library with error recovery
 
-## Implementation Priorities
+#### **🎲 Casino Bot** - Blackjack Automation
+- **Status**: Implemented + Fully Documented
+- **Purpose**: Optimal basic strategy blackjack for alternative income
+- **Key Innovation**: Focus management and reliable browser automation
 
-### **Immediate (Next Session)**
-- ✅ **Botnet Share**: All specs complete, ready to implement
-  - Simple detection, minimal code changes, immediate value
+#### **🤖 Autopilot** - Early Game Automation  
+- **Status**: Fully Documented (Ready for Implementation)
+- **Purpose**: Hands-off faction joining and augmentation purchasing
+- **Key Innovation**: Browser-first automation before Singularity APIs
 
-### **Short-term (1-2 weeks)**
-- 🔄 **Autopilot Implementation**: Start with Phase 1 foundation
-  - Week 1: Game state monitoring and basic faction joining
-  - Week 2: Augmentation purchasing and faction work automation
+#### **🤝 Botnet Share** - Faction Reputation Boost
+- **Status**: Fully Documented (Ready for Implementation)
+- **Purpose**: 25-45% faction reputation bonus during faction work
+- **Key Innovation**: Zero-cost faction detection with intelligent RAM allocation
 
-### **Medium-term (1-2 months)**
-- 📋 **Feature Integration**: Combine botnet share with autopilot systems
-- 🔧 **Performance Optimization**: Refine based on real-world usage
+## Spec-Driven Development Methodology
+
+### **Documentation Structure**
+Each feature follows standardized documentation pattern:
+
+1. **`spec.md`** - Feature Specification (WHAT/WHY)
+   - User scenarios and acceptance criteria
+   - Functional requirements and success metrics
+   - Written for stakeholders, not developers
+
+2. **`plan.md`** - Technical Implementation Plan (HOW)
+   - Architecture decisions and integration points
+   - Technical constraints and performance targets
+   - Implementation phases and task planning
+
+3. **`research.md`** - Technical Research and Decisions
+   - Algorithm analysis and mathematical foundations
+   - Technology choices and alternative evaluations
+   - Performance optimization and risk assessment
+
+### **Development Commands**
+- **`/specify [description]`** - Generate feature specification from user requirements
+- **`/plan [spec-path]`** - Create technical implementation plan from specification  
+- **`/tasks [plan-path]`** - Generate actionable task breakdown for implementation
+
+### **Quality Standards**
+- **Separation of Concerns**: User requirements vs technical implementation
+- **Standardized Templates**: Consistent documentation structure across features
+- **Research Foundation**: Technical decisions backed by analysis and alternatives
+- **Implementation Ready**: Clear path from specification to working code
+
+## Enhancement Development Workflow
+
+### **For Major Feature Enhancements**
+Use sub-feature approach for significant additions:
+
+```
+features/
+├── botnet/                     # Core system
+├── botnet-share/              # RAM sharing enhancement  
+├── botnet-analytics/          # Performance monitoring (future)
+└── botnet-intelligence/       # Smart targeting (future)
+```
+
+### **For Minor Improvements**
+- Direct implementation in existing codebase
+- Update existing documentation to reflect changes
+- No new feature directory needed
+
+### **For Major Rewrites**
+- Version-based approach: `botnet-v2/`
+- Include migration planning and compatibility analysis
+- Separate feature directory for new architecture
 
 ## Technical Foundation
 
-### **Existing Systems Ready for Integration**
-- ✅ **Navigator**: Browser automation framework (97.9% RAM optimized)
-- ✅ **Guide System**: ROI analytics and progression logic
-- ✅ **Botnet**: Income generation and server management
-- ✅ **Browser API Breakthrough**: Zero-cost DOM access techniques
+### **Proven Integration Patterns**
+- ✅ **Zero-cost browser automation**: Stealth DOM access techniques
+- ✅ **Standalone script architecture**: Self-contained main(ns) functions
+- ✅ **Direct NS API usage**: Minimal abstractions and dependencies
+- ✅ **Stateless operation**: Fresh data gathering each execution cycle
 
-### **Key Architectural Decisions Made**
-- **Browser-first automation**: Use DOM manipulation for pre-Singularity features
-- **Minimal integration**: Build on existing systems vs new architecture
+### **Key Architectural Principles**
+- **Browser-first automation**: DOM manipulation for pre-Singularity features
+- **Minimal integration**: Build on existing systems vs new architecture  
 - **Conservative defaults**: User-configurable with safe starting points
-- **Stealth techniques**: Bypass RAM penalties for browser API access
+- **Performance optimization**: RAM efficiency and execution timing
+
+### **Research Resources**
+Comprehensive research resources documented in [AGENTS.md](../AGENTS.md):
+- Official Bitburner documentation and source code
+- Community repositories and automation examples
+- Mathematical foundations and strategy optimization
+- Browser API documentation and optimization techniques
+
+## Implementation Priorities
+
+### **High Priority** (Ready for Implementation)
+- 🚀 **Botnet Share**: Simple enhancement with immediate value
+- 🤖 **Autopilot System**: Comprehensive early game automation
+
+### **Medium Priority** (Future Enhancements)
+- 📊 **Analytics Dashboard**: Performance monitoring across all features
+- 🎯 **Advanced Targeting**: AI-driven server selection optimization
+- 🔄 **Multi-BitNode Support**: Adaptation for different game modes
+
+### **Low Priority** (Research Phase)
+- 🧠 **Machine Learning**: Pattern recognition for optimization
+- 🌐 **Distributed Computing**: Cross-player botnet coordination
+- 🎮 **Game Theory**: Advanced strategic decision making
 
 ## Development Guidelines
 
-### **For New Features**
-1. **Document first**: Create feature spec before implementation
-2. **Build on existing**: Leverage navigator, guide, and botnet systems
-3. **Browser API stealth**: Use `globalThis['doc' + 'ument']` pattern for DOM access
-4. **Conservative defaults**: Safe settings that work out of the box
-5. **User configuration**: CLI flags for customization
+### **Creating New Features**
+1. **Start with specification**: Use `/specify` command with clear user requirements
+2. **Research thoroughly**: Leverage documented research resources
+3. **Plan implementation**: Use `/plan` command for technical approach
+4. **Generate tasks**: Use `/tasks` command for actionable breakdown
+5. **Follow patterns**: Use existing features as architectural examples
 
-### **File Organization**
-- **Feature specs**: Complete implementation plans with technical details
-- **Research docs**: Investigation results and design explorations
-- **Status tracking**: Clear indicators of implementation readiness
-- **Integration notes**: How features work together
+### **Enhancing Existing Features**  
+1. **Assess enhancement scope**: Minor fix vs major addition vs rewrite
+2. **Choose approach**: Direct modification vs sub-feature vs versioning
+3. **Follow documentation standards**: Update specs, plans, and research
+4. **Maintain compatibility**: Ensure existing functionality continues working
 
-## Next Steps
-
-1. **Implement Botnet Share** (2-3 hours)
-   - All technical details specified and verified
-   - Minimal risk, immediate value delivery
-
-2. **Choose Autopilot Approach** (planning session)
-   - Evaluate three documented approaches
-   - Consider timeline, complexity, and value delivery
-
-3. **Establish Feature Development Process**
-   - Template for new feature specifications
-   - Integration testing approach
-   - User feedback collection
+### **Quality Assurance**
+- **Documentation completeness**: All three files (spec, plan, research) present
+- **Template compliance**: Follow standardized structure and content requirements
+- **Research validation**: Technical decisions backed by analysis
+- **Implementation readiness**: Clear path from documentation to working code
 
 ---
 
 ## Quick Reference
 
-### **Ready to Implement**
-- ✅ **Botnet Share**: `features/botnet-share/BOTNET_SHARE_FEATURE_PLAN.md`
+### **Documentation Templates**
+- `templates/spec-template.md` - Feature specification structure
+- `templates/plan-template.md` - Technical implementation planning
+- `templates/tasks-template.md` - Task breakdown format
 
-### **Needs Decision**
-- ✅ **Autopilot Ready**: `features/autopilot/AUTOPILOT-CONSOLIDATED-PLAN.md`
+### **Enhancement Patterns**
+- **Sub-features**: `botnet-share/`, `botnet-analytics/`
+- **Versioning**: `feature-v2/` for major architectural changes
+- **Direct modification**: For minor improvements and bug fixes
 
-### **Development Tools**
-- **Navigator**: Browser automation - `src/navigator.ts`
-- **Guide**: Progression logic - `src/guide.ts`  
-- **Botnet**: Server management - `src/botnet.ts`
-- **Browser Utils**: API stealth techniques - `src/browser-utils.ts`
+### **Research Resources**
+- **AGENTS.md**: Comprehensive development and research guide
+- **Official sources**: Bitburner GitHub, documentation, formulas
+- **Community resources**: Reddit, Discord, proven automation repositories
+- **Technical references**: Browser APIs, TypeScript, mathematical foundations
 
-This organization provides clear separation of concerns while maintaining visibility into the overall feature roadmap and implementation status.
+This organization provides structured, high-quality feature development with clear separation between user requirements, technical implementation, and research foundations. All features follow identical documentation patterns, making the codebase highly maintainable and discoverable.

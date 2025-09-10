@@ -107,6 +107,102 @@ modules. Use DynamicScript for execution and respect the 25GB browser API limita
 - Respect Bitburner RAM constraints and NS API limitations
 - Design for stateless operation (gather data fresh each run)
 
+## Research Resources
+
+When researching Bitburner features, game mechanics, or implementation approaches, these resources provide valuable information for development decisions:
+
+### **Official Documentation & Source**
+- **Bitburner Official GitHub**: https://github.com/bitburner-official/bitburner-src
+  - Source code for game mechanics, NS API implementations
+  - Issue tracker for known bugs and upcoming features
+  - Release notes and version history
+- **Bitburner Documentation**: https://bitburner.readthedocs.io/
+  - Complete NS API reference with examples
+  - Game mechanics documentation
+  - Advanced topics and tutorials
+- **Bitburner Wiki**: https://bitburner.fandom.com/
+  - Community-maintained game guides
+  - Faction requirements and augmentation details
+  - BitNode mechanics and progression paths
+
+### **Community Resources & Forums**
+- **r/Bitburner Subreddit**: https://www.reddit.com/r/Bitburner/
+  - Active community discussions
+  - Strategy guides and optimization tips
+  - Script sharing and troubleshooting
+- **Bitburner Discord**: https://discord.gg/TFc3hKD
+  - Real-time community support
+  - Development discussions and announcements
+  - Advanced strategy channels
+
+### **Community Scripts & Repositories**
+- **Alain's Scripts**: https://github.com/alainbryden/bitburner-scripts
+  - High-quality automation examples
+  - Advanced HWGW implementations
+  - Comprehensive game state management
+- **Mysteyes' Repository**: https://github.com/mysteyes/bitburner-scripts
+  - Creative automation approaches
+  - UI automation techniques
+  - Advanced mathematical optimization
+- **Insight's Scripts**: https://github.com/InSightBlue/BitBurner
+  - Enterprise-level automation frameworks
+  - Multi-BitNode progression strategies
+  - Performance optimization patterns
+- **CodingContractsStandalone**: https://github.com/danielyxie/bitburner/tree/dev/src/data/codingcontracttypes
+  - Official contract type implementations
+  - Algorithm references for contract solving
+  - Test case data and validation logic
+
+### **Technical References**
+- **Browser API Documentation**: https://developer.mozilla.org/en-US/docs/Web/API
+  - Complete browser API reference for DOM automation
+  - Performance optimization techniques
+  - Security considerations for browser scripting
+- **TypeScript Handbook**: https://www.typescriptlang.org/docs/
+  - Advanced TypeScript patterns
+  - Type system best practices
+  - Module resolution and configuration
+
+### **Game Mechanics & Strategy Resources**
+- **Bitburner Formulas**: https://github.com/bitburner-official/bitburner-src/tree/dev/src/PersonObjects/formulas
+  - Official calculation formulas for hacking, experience, reputation
+  - Augmentation effect calculations
+  - Faction requirement algorithms
+- **HWGW Calculator**: https://github.com/bitburner-official/bitburner-src/blob/dev/src/Hacking.ts
+  - Official hacking mechanics implementation
+  - Timing calculation algorithms
+  - Security and money growth formulas
+- **BitNode Information**: https://github.com/bitburner-official/bitburner-src/tree/dev/src/BitNode
+  - Official BitNode mechanics and multipliers
+  - Source file effects and interactions
+  - Progression requirements and rewards
+- **Augmentation Database**: https://docs.google.com/spreadsheets/d/1jAmijErKvqwffbu9nBF9SnP905WzZ8gGr-Fe3UbUAOQ/edit?gid=358538604#gid=358538604
+  - Community-maintained comprehensive augmentation database
+  - Faction requirements, costs, and effects for all augmentations
+  - ROI analysis and progression optimization data
+  - BitNode-specific augmentation availability and modifications
+
+### **Research Methodology**
+When using these resources for feature development:
+
+1. **Start with Official Sources**: Always verify game mechanics against official documentation and source code
+2. **Cross-Reference Community Solutions**: Compare multiple community implementations for best practices
+3. **Validate Performance Claims**: Test performance optimizations in actual game environment
+4. **Check Version Compatibility**: Ensure techniques work with current game version
+5. **Document Findings**: Capture research results in `research.md` files for future reference
+
+### **Common Research Areas**
+- **NS API Capabilities**: What data is available through official APIs vs DOM scraping
+- **RAM Cost Analysis**: Exact memory costs for different operations and optimizations
+- **Game State Persistence**: How game resets affect automation and data storage
+- **Performance Bottlenecks**: Identifying and resolving automation performance issues
+- **Security Mechanics**: Understanding hacking formulas and optimization strategies
+- **Faction Progression**: Optimal paths for reputation building and augmentation access
+- **Contract Algorithms**: Mathematical solutions for coding contract types
+- **Browser Automation**: DOM manipulation techniques and reliability patterns
+
+Use these resources to inform technical decisions and validate implementation approaches during the research phase of feature development.
+
 ## Specification Guidelines
 
 ### Functional Requirements Template
