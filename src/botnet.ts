@@ -14,9 +14,8 @@ import { AutocompleteData, NS, ScriptArg } from "@ns";
  * --debug=true          Enable detailed debug output
  * --repeat=true         Run continuously (vs single batch)
  * --rooting=true        Enable automatic server rooting
- * --purchasing=true     Enable purchased server management
  * --max-servers=25      Maximum purchased servers to buy
- * --target-ram-power=20 Target RAM power (2^20 = 1TB per server)
+ * --target-ram-power=13 Target RAM power (2^13 = 8GB per server)
  */
 
 // Self-contained interfaces - no external imports
@@ -172,9 +171,8 @@ const argsSchema: [string, string | number | boolean | string[]][] = [
     ['debug', false],
     ['repeat', true],
     ['rooting', true],
-    ['purchasing', true],
     ['max-servers', 25],
-    ['target-ram-power', 20],
+    ['target-ram-power', 13],
 ];
 
 // Simple performance tracking
@@ -247,7 +245,7 @@ export async function main(ns: NS): Promise<void> {
     }
     
     if (options.debug) {
-        ns.tprint(`Botnet System: Starting with PID ${ns.getRunningScript()?.pid} (rooting=${options.rooting}, purchasing=${options.purchasing})`);
+        ns.tprint(`Botnet System: Starting with PID ${ns.getRunningScript()?.pid} (rooting=${options.rooting})`);
     }
     
     ns.atExit(() => {
@@ -287,7 +285,7 @@ export async function main(ns: NS): Promise<void> {
         const playerHackLevel = ns.getHackingLevel();
         const servers = buildServerData(ns);
         
-        // PHASE 1: Server Management (if enabled)
+        // PHASE 1: Server Management (always enabled)
         if (options.rooting) {
             const rootedCount = performServerRooting(ns, servers);
             if (rootedCount > 0) {
@@ -295,13 +293,15 @@ export async function main(ns: NS): Promise<void> {
             }
         }
         
-        if (options.purchasing) {
-            const maxServers = options['max-servers'] as number;
-            const targetRamPower = options['target-ram-power'] as number;
-            const serverManagement = managePurchasedServers(ns, servers, maxServers, targetRamPower);
-            if (serverManagement.bought > 0 || serverManagement.upgraded > 0) {
-                ns.print(`Server management: bought ${serverManagement.bought}, upgraded ${serverManagement.upgraded}`);
-            }
+        // Always manage purchased servers
+        const maxServers = options['max-servers'] as number;
+        const targetRamPower = options['target-ram-power'] as number;
+        const serverManagement = managePurchasedServers(ns, servers, maxServers, targetRamPower);
+        if (options.debug) {
+            ns.print(`Server management: bought ${serverManagement.bought}, upgraded ${serverManagement.upgraded}`);
+        }
+        if (serverManagement.bought > 0 || serverManagement.upgraded > 0) {
+            ns.print(`Server management: bought ${serverManagement.bought}, upgraded ${serverManagement.upgraded}`);
         }
         
         // PHASE 2: HWGW Batching
@@ -407,6 +407,18 @@ export async function main(ns: NS): Promise<void> {
             ns.clearLog();
             
             const currentServers = buildServerData(ns);
+            
+            // Server management in the continuous loop
+            const maxServers = options['max-servers'] as number;
+            const targetRamPower = options['target-ram-power'] as number;
+            const serverManagement = managePurchasedServers(ns, currentServers, maxServers, targetRamPower);
+            if (options.debug) {
+                ns.print(`Server management: bought ${serverManagement.bought}, upgraded ${serverManagement.upgraded}`);
+            }
+            if (serverManagement.bought > 0 || serverManagement.upgraded > 0) {
+                ns.print(`Server management: bought ${serverManagement.bought}, upgraded ${serverManagement.upgraded}`);
+            }
+            
             const currentAttackers = currentServers.filter(isAttacker).sort(byAvailableRam);
             const currentTargets = currentServers.filter(s => isTarget(s) && s.requiredHackingSkill <= playerHackLevel).sort(byValue);
             

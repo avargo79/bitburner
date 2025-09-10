@@ -3,912 +3,1034 @@
 import type { NS } from '@ns'
 
 export async function main(ns: NS): Promise<void> {
-	// RAM-OPTIMIZED CONTRACT SOLVER
-	// Main script RAM: Only sleep(0GB) + print(0GB) + run(0.2GB) + read(0GB) = ~0.2GB
-	// Helper scripts run separately with their own RAM costs
-	
+	// UNIFIED CONTRACT SOLVER
+	// All functionality inlined - no helper scripts needed
+	// RAM: scan(0.2GB) + ls(0.2GB) + contract APIs(17GB) + sleep(0GB) + print(0GB) = ~17.4GB total
+
 	ns.disableLog('ALL')
-	
+
 	// Core performance monitoring
 	const startTime = Date.now()
 	let totalSolved = 0
 	let totalAttempted = 0
 	let cycleCount = 0
-	
+
 	// Contract tracking with failure handling
 	const solvedContracts = new Set<string>()
 	const failedContracts = new Map<string, number>()
 	const MAX_RETRIES = 3
-	
-	// Helper function to convert 2D arrays to string format
-	function convert2DArrayToString(arr: any): string {
-		const components: string[] = []
-		arr.forEach(function (e: any) {
-			let s = e.toString()
-			s = ['[', s, ']'].join('')
-			components.push(s)
-		})
-		return components.join(',').replace(/\s/g, '')
-	}
-	
-	// Contract solver algorithms - embedded from /src/lib/contracts.ts
-	const solvers: Record<string, (data: any) => any> = {}
-	
-	solvers['Find Largest Prime Factor'] = function (data) {
-		let fac = 2
-		let n = data
-		while (n > (fac - 1) * (fac - 1)) {
-			while (n % fac === 0) {
-				n = Math.round(n / fac)
-			}
-			++fac
-		}
-		return n === 1 ? fac - 1 : n
-	}
-	
-	solvers['Subarray with Maximum Sum'] = function (data) {
-		const nums = data.slice()
-		for (let i = 1; i < nums.length; i++) {
-			nums[i] = Math.max(nums[i], nums[i] + nums[i - 1])
-		}
-		return Math.max.apply(Math, nums)
-	}
-	
-	solvers['Total Ways to Sum'] = function (data) {
-		const ways = [1]
-		ways.length = data + 1
-		ways.fill(0, 1)
-		for (let i = 1; i < data; ++i) {
-			for (let j = i; j <= data; ++j) {
-				ways[j] += ways[j - i]
-			}
-		}
-		return ways[data]
-	}
-	
-	solvers['Total Ways to Sum II'] = function (data) {
-		const n = data[0];
-		const s = data[1];
-		const ways = [1];
-		ways.length = n + 1;
-		ways.fill(0, 1);
-		for (let i = 0; i < s.length; i++) {
-			for (let j = s[i]; j <= n; j++) {
-				ways[j] += ways[j - s[i]];
-			}
-		}
-		return ways[n];
-	}
-	
-	solvers['Spiralize Matrix'] = function (data) {
-		const spiral = []
-		const m = data.length
-		const n = data[0].length
-		let u = 0
-		let d = m - 1
-		let l = 0
-		let r = n - 1
-		let k = 0
-		while (true) {
-			// Up
-			for (let col = l; col <= r; col++) {
-				spiral[k] = data[u][col]
-				++k
-			}
-			if (++u > d) {
-				break
-			}
-			// Right
-			for (let row = u; row <= d; row++) {
-				spiral[k] = data[row][r]
-				++k
-			}
-			if (--r < l) {
-				break
-			}
-			// Down
-			for (let col = r; col >= l; col--) {
-				spiral[k] = data[d][col]
-				++k
-			}
-			if (--d < u) {
-				break
-			}
-			// Left
-			for (let row = d; row >= u; row--) {
-				spiral[k] = data[row][l]
-				++k
-			}
-			if (++l > r) {
-				break
-			}
-		}
-		return spiral
-	}
-	
-	solvers['Array Jumping Game'] = function (data) {
-		const n = data.length
-		let i = 0
-		for (let reach = 0; i < n && i <= reach; ++i) {
-			reach = Math.max(i + data[i], reach)
-		}
-		const solution = i === n
-		return solution ? 1 : 0
-	}
-	
-	solvers['Array Jumping Game II'] = function (data) {
-		if (data[0] == 0)
-			return '0';
-		const n = data.length;
-		let reach = 0;
-		let jumps = 0;
-		let lastJump = -1;
-		while (reach < n - 1) {
-			let jumpedFrom = -1;
-			for (let i = reach; i > lastJump; i--) {
-				if (i + data[i] > reach) {
-					reach = i + data[i];
-					jumpedFrom = i;
-				}
-			}
-			if (jumpedFrom === -1) {
-				jumps = 0;
-				break;
-			}
-			lastJump = jumpedFrom;
-			jumps++;
-		}
-		return jumps;
-	}
-	
-	solvers['Merge Overlapping Intervals'] = function (data) {
-		const intervals = data.slice()
-		intervals.sort(function (a: any, b: any) {
-			return a[0] - b[0]
-		})
-		const result = []
-		let start = intervals[0][0]
-		let end = intervals[0][1]
-		for (const interval of intervals) {
-			if (interval[0] <= end) {
-				end = Math.max(end, interval[1])
-			} else {
-				result.push([start, end])
-				start = interval[0]
-				end = interval[1]
-			}
-		}
-		result.push([start, end])
-		const sanitizedResult = convert2DArrayToString(result)
-		return sanitizedResult
-	}
-	
-	solvers['Generate IP Addresses'] = function (data) {
-		const ret = []
-		for (let a = 1; a <= 3; ++a) {
-			for (let b = 1; b <= 3; ++b) {
-				for (let c = 1; c <= 3; ++c) {
-					for (let d = 1; d <= 3; ++d) {
-						if (a + b + c + d === data.length) {
-							const A = parseInt(data.substring(0, a), 10)
-							const B = parseInt(data.substring(a, a + b), 10)
-							const C = parseInt(data.substring(a + b, a + b + c), 10)
-							const D = parseInt(data.substring(a + b + c, a + b + c + d), 10)
-							if (A <= 255 && B <= 255 && C <= 255 && D <= 255) {
-								const ip = [A.toString(), '.', B.toString(), '.', C.toString(), '.', D.toString()].join('')
-								if (ip.length === data.length + 3) {
-									ret.push(ip)
-	}
-	
-	solvers['Encryption II: Vigenère Cipher'] = function (data) {
-		const cipher = [...data[0]]
-			.map((a, i) => {
-				return a === " "
-					? a
-					: String.fromCharCode(((a.charCodeAt(0) - 2 * 65 + data[1].charCodeAt(i % data[1].length)) % 26) + 65);
-			})
-			.join("");
-		return cipher;
-	}
-	
-							}
-						}
-					}
-				}
-			}
-		}
-		return ret.toString();
-	}
-	
-	// [Continuing with all remaining solver algorithms]
-	
-	solvers['Algorithmic Stock Trader I'] = function (data) {
-		let maxCur = 0
-		let maxSoFar = 0
-		for (let i = 1; i < data.length; ++i) {
-			maxCur = Math.max(0, (maxCur += data[i] - data[i - 1]))
-			maxSoFar = Math.max(maxCur, maxSoFar)
-		}
-		return maxSoFar.toString()
-	}
-	
-	solvers['Algorithmic Stock Trader II'] = function (data) {
-		let profit = 0
-		for (let p = 1; p < data.length; ++p) {
-			profit += Math.max(data[p] - data[p - 1], 0)
-		}
-		return profit.toString()
-	}
-	
-	solvers['Algorithmic Stock Trader III'] = function (data) {
-		let hold1 = Number.MIN_SAFE_INTEGER
-		let hold2 = Number.MIN_SAFE_INTEGER
-		let release1 = 0
-		let release2 = 0
-		for (const price of data) {
-			release2 = Math.max(release2, hold2 + price)
-			hold2 = Math.max(hold2, release1 - price)
-			release1 = Math.max(release1, hold1 + price)
-			hold1 = Math.max(hold1, price * -1)
-		}
-		return release2.toString()
-	}
-	
-	solvers['Algorithmic Stock Trader IV'] = function (data) {
-		const k = data[0]
-		const prices = data[1]
-		const len = prices.length
-		if (len < 2) {
-			return 0
-		}
-		if (k > len / 2) {
-			let res = 0
-			for (let i = 1; i < len; ++i) {
-				res += Math.max(prices[i] - prices[i - 1], 0)
-			}
-			return res
-		}
-		const hold = []
-		const rele = []
-		hold.length = k + 1
-		rele.length = k + 1
-		for (let i = 0; i <= k; ++i) {
-			hold[i] = Number.MIN_SAFE_INTEGER
-			rele[i] = 0
-		}
-		let cur
-		for (let i = 0; i < len; ++i) {
-			cur = prices[i]
-			for (let j = k; j > 0; --j) {
-				rele[j] = Math.max(rele[j], hold[j] + cur)
-				hold[j] = Math.max(hold[j], rele[j - 1] - cur)
-			}
-		}
-		return rele[k]
-	}
-	
-	solvers['Minimum Path Sum in a Triangle'] = function (data) {
-		const n = data.length
-		const dp = data[n - 1].slice()
-		for (let i = n - 2; i > -1; --i) {
-			for (let j = 0; j < data[i].length; ++j) {
-				dp[j] = Math.min(dp[j], dp[j + 1]) + data[i][j]
-			}
-		}
-		return dp[0]
-	}
-	
-	solvers['Unique Paths in a Grid I'] = function (data) {
-		const n = data[0]
-		const m = data[1]
-		const currentRow = []
-		currentRow.length = n
-		for (let i = 0; i < n; i++) {
-			currentRow[i] = 1
-		}
-		for (let row = 1; row < m; row++) {
-			for (let i = 1; i < n; i++) {
-				currentRow[i] += currentRow[i - 1]
-			}
-		}
-		return currentRow[n - 1]
-	}
-	
-	solvers['Unique Paths in a Grid II'] = function (data) {
-		const obstacleGrid = []
-		obstacleGrid.length = data.length
-		for (let i = 0; i < obstacleGrid.length; ++i) {
-			obstacleGrid[i] = data[i].slice()
-		}
-		for (let i = 0; i < obstacleGrid.length; i++) {
-			for (let j = 0; j < obstacleGrid[0].length; j++) {
-				if (obstacleGrid[i][j] == 1) {
-					obstacleGrid[i][j] = 0
-				} else if (i == 0 && j == 0) {
-					obstacleGrid[0][0] = 1
-				} else {
-					obstacleGrid[i][j] = (i > 0 ? obstacleGrid[i - 1][j] : 0) + (j > 0 ? obstacleGrid[i][j - 1] : 0)
-				}
-			}
-		}
-		return obstacleGrid[obstacleGrid.length - 1][obstacleGrid[0].length - 1]
-	}
-	
-	// Add all remaining complex algorithms
-	solvers['Shortest Path in a Grid'] = function (data) {
-		const width = data[0].length;
-		const height = data.length;
-		const dstY = height - 1;
-		const dstX = width - 1;
-	
-		const distance = new Array(height);
-		const queue: any = [];
-	
-		for (let y = 0; y < height; y++) {
-			distance[y] = new Array(width).fill(Infinity);
-		}
-	
-		function validPosition(y: number, x: number) {
-			return y >= 0 && y < height && x >= 0 && x < width && data[y][x] == 0;
-		}
-	
-		function* neighbors(y: number, x: number) {
-			if (validPosition(y - 1, x)) yield [y - 1, x];
-			if (validPosition(y + 1, x)) yield [y + 1, x];
-			if (validPosition(y, x - 1)) yield [y, x - 1];
-			if (validPosition(y, x + 1)) yield [y, x + 1];
-		}
-	
-		distance[0][0] = 0;
-		queue.push([0, 0]);
+
+	// Get all contracts using direct scanning - no helper scripts needed
+	async function getAllContracts(): Promise<Array<{ server: string, contracts: string[] }>> {
+		// Inlined contract scanning - no helper script needed
+		// RAM: scan(0.2GB) + ls(0.2GB) = 0.4GB total
+
+		const visited = new Set<string>()
+		const queue = ['home']
+		const result: Array<{ server: string, contracts: string[] }> = []
+
+		// Breadth-first network scan
 		while (queue.length > 0) {
-			const [y, x] = queue.shift()
-			for (const [yN, xN] of neighbors(y, x)) {
-				if (distance[yN][xN] == Infinity) {
-					queue.push([yN, xN])
-					distance[yN][xN] = distance[y][x] + 1 
-				}
-			}
-		}
-	
-		if (distance[dstY][dstX] == Infinity) return "";
-	
-		let path = ""
-		let [yC, xC] = [dstY, dstX]
-		while (xC != 0 || yC != 0) {
-			const dist = distance[yC][xC];
-			for (const [yF, xF] of neighbors(yC, xC)) {
-				if (distance[yF][xF] == dist - 1) {
-					path = (xC == xF ? (yC == yF + 1 ? "D" : "U") : (xC == xF + 1 ? "R" : "L")) + path;
-					[yC, xC] = [yF, xF]
-					break
-				}
-			}
-		}
-		return path;
-	}
-	
-	// [Continue with compression, encryption, etc. - abbreviated for space]
-	solvers['Compression I: RLE Compression'] = function (data) {
-		return data.replace(/([\w])\1{0,8}/g, (group: any, chr: any) => group.length + chr)
-	}
+			const current = queue.shift()!
+			if (visited.has(current)) continue
 
-	solvers['Compression II: LZ Decompression'] = function (compr) {
-		let plain = "";
+			visited.add(current)
 
-		for (let i = 0; i < compr.length;) {
-			const literal_length = compr.charCodeAt(i) - 0x30;
+			try {
+				// Skip home - contracts never spawn there
+				if (current !== 'home') {
+					// Get all contracts on this server - ns.ls already filters for .cct
+					const contracts = ns.ls(current, '.cct')
 
-			if (literal_length < 0 || literal_length > 9 || i + 1 + literal_length > compr.length) {
-				return null;
-			}
-
-			plain += compr.substring(i + 1, i + 1 + literal_length);
-			i += 1 + literal_length;
-
-			if (i >= compr.length) {
-				break;
-			}
-			const backref_length = compr.charCodeAt(i) - 0x30;
-
-			if (backref_length < 0 || backref_length > 9) {
-				return null;
-			} else if (backref_length === 0) {
-				++i;
-			} else {
-				if (i + 1 >= compr.length) {
-					return null;
-				}
-
-				const backref_offset = compr.charCodeAt(i + 1) - 0x30;
-				if ((backref_length > 0 && (backref_offset < 1 || backref_offset > 9)) || backref_offset > plain.length) {
-					return null;
-				}
-
-				for (let j = 0; j < backref_length; ++j) {
-					plain += plain[plain.length - backref_offset];
-				}
-
-				i += 2;
-			}
-		}
-
-		return plain;
-	}
-
-	solvers['Compression III: LZ Compression'] = function (plain) {
-		let cur_state = Array.from(Array(10), () => Array(10).fill(null));
-		let new_state = Array.from(Array(10), () => Array(10));
-
-		function set(state: any, i: any, j: any, str: any) {
-			const current = state[i][j];
-			if (current == null || str.length < current.length) {
-				state[i][j] = str;
-			} else if (str.length === current.length && Math.random() < 0.5) {
-				state[i][j] = str;
-			}
-		}
-
-		cur_state[0][1] = "";
-
-		for (let i = 1; i < plain.length; ++i) {
-			for (const row of new_state) {
-				row.fill(null);
-			}
-			const c = plain[i];
-
-			for (let length = 1; length <= 9; ++length) {
-				const string = cur_state[0][length];
-				if (string == null) {
-					continue;
-				}
-
-				if (length < 9) {
-					set(new_state, 0, length + 1, string);
-				} else {
-					set(new_state, 0, 1, string + "9" + plain.substring(i - 9, i) + "0");
-				}
-
-				for (let offset = 1; offset <= Math.min(9, i); ++offset) {
-					if (plain[i - offset] === c) {
-						set(new_state, offset, 1, string + length + plain.substring(i - length, i));
+					if (contracts.length > 0) {
+						result.push({ server: current, contracts })
 					}
 				}
-			}
 
-			for (let offset = 1; offset <= 9; ++offset) {
-				for (let length = 1; length <= 9; ++length) {
-					const string = cur_state[offset][length];
-					if (string == null) {
-						continue;
-					}
-
-					if (plain[i - offset] === c) {
-						if (length < 9) {
-							set(new_state, offset, length + 1, string);
-						} else {
-							set(new_state, offset, 1, string + "9" + offset + "0");
-						}
-					}
-
-					set(new_state, 0, 1, string + length + offset);
-
-					for (let new_offset = 1; new_offset <= Math.min(9, i); ++new_offset) {
-						if (plain[i - new_offset] === c) {
-							set(new_state, new_offset, 1, string + length + offset + "0");
-						}
+				// Add neighbors to queue
+				const neighbors = ns.scan(current)
+				for (const neighbor of neighbors) {
+					if (!visited.has(neighbor)) {
+						queue.push(neighbor)
 					}
 				}
-			}
-
-			const tmp_state = new_state;
-			new_state = cur_state;
-			cur_state = tmp_state;
-		}
-
-		let result = null;
-
-		for (let len = 1; len <= 9; ++len) {
-			let string = cur_state[0][len];
-			if (string == null) {
-				continue;
-			}
-
-			string += len + plain.substring(plain.length - len, plain.length);
-			if (result == null || string.length < result.length) {
-				result = string;
-			} else if (string.length == result.length && Math.random() < 0.5) {
-				result = string;
+			} catch (e) {
+				// Skip inaccessible servers
+				continue
 			}
 		}
 
-		for (let offset = 1; offset <= 9; ++offset) {
-			for (let len = 1; len <= 9; ++len) {
-				let string = cur_state[offset][len];
-				if (string == null) {
-					continue;
-				}
-
-				string += len + "" + offset;
-				if (result == null || string.length < result.length) {
-					result = string;
-				} else if (string.length == result.length && Math.random() < 0.5) {
-					result = string;
-				}
-			}
-		}
-
-		return result ?? "";
-	}
-	
-	solvers['Encryption I: Caesar Cipher'] = function (data) {
-		const cipher = [...data[0]]
-			.map((a) => (a === " " ? a : String.fromCharCode(((a.charCodeAt(0) - 65 - data[1] + 26) % 26) + 65)))
-			.join("");
-		return cipher;
-	}
-
-	solvers['Sanitize Parentheses in Expression'] = function (data) {
-		let left = 0
-		let right = 0
-		const res: any = []
-		for (let i = 0; i < data.length; ++i) {
-			if (data[i] === '(') {
-				++left
-			} else if (data[i] === ')') {
-				left > 0 ? --left : ++right
-			}
-		}
-
-		function dfs(pair: any, index: any, left: any, right: any, s: any, solution: any, res: any) {
-			if (s.length === index) {
-				if (left === 0 && right === 0 && pair === 0) {
-					for (let i = 0; i < res.length; i++) {
-						if (res[i] === solution) {
-							return
-						}
-					}
-					res.push(solution)
-				}
-				return
-			}
-			if (s[index] === '(') {
-				if (left > 0) {
-					dfs(pair, index + 1, left - 1, right, s, solution, res)
-				}
-				dfs(pair + 1, index + 1, left, right, s, solution + s[index], res)
-			} else if (s[index] === ')') {
-				if (right > 0) dfs(pair, index + 1, left, right - 1, s, solution, res)
-				if (pair > 0) dfs(pair - 1, index + 1, left, right, s, solution + s[index], res)
-			} else {
-				dfs(pair, index + 1, left, right, s, solution + s[index], res)
-			}
-		}
-		dfs(0, 0, left, right, data, '', res)
-
-		return res
-	}
-
-	solvers['Find All Valid Math Expressions'] = function (data) {
-		const num: any = data[0]
-		const target: any = data[1]
-
-		function helper(res: any, path: any, num: any, target: any, pos: any, evaluated: any, multed: any) {
-			if (pos === num.length) {
-				if (target === evaluated) {
-					res.push(path)
-				}
-				return
-			}
-			for (let i = pos; i < num.length; ++i) {
-				if (i != pos && num[pos] == '0') {
-					break
-				}
-				const cur = parseInt(num.substring(pos, i + 1))
-				if (pos === 0) {
-					helper(res, path + cur, num, target, i + 1, cur, cur)
-				} else {
-					helper(res, path + '+' + cur, num, target, i + 1, evaluated + cur, cur)
-					helper(res, path + '-' + cur, num, target, i + 1, evaluated - cur, -cur)
-					helper(res, path + '*' + cur, num, target, i + 1, evaluated - multed + multed * cur, multed * cur)
-				}
-			}
-		}
-
-		if (num == null || num.length === 0) {
-			return []
-		}
-		const result: any = []
-		helper(result, '', num, target, 0, 0, 0)
 		return result
 	}
 
-	solvers['HammingCodes: Integer to Encoded Binary'] = function (value) {
-		const HammingSumOfParity = 
-			(lengthOfDBits: any) => lengthOfDBits == 0 ? 0 : lengthOfDBits < 3 ? lengthOfDBits + 1 :
-			Math.ceil(Math.log2(lengthOfDBits * 2)) <= Math.ceil(Math.log2(1 + lengthOfDBits + Math.ceil(Math.log2(lengthOfDBits)))) ?
-				Math.ceil(Math.log2(lengthOfDBits) + 1) : Math.ceil(Math.log2(lengthOfDBits));
-		const data = value.toString(2).split("");
-		const sumParity = HammingSumOfParity(data.length);
-		const count = (arr: any, val: any) => arr.reduce((a: any, v: any) => (v === val ? a + 1 : a), 0);
-		const build = ["x", "x", ...data.splice(0, 1)];
-		for (let i = 2; i < sumParity; i++)
-			build.push("x", ...data.splice(0, Math.pow(2, i) - 1));
-		const parityBits = build.map((e, i) => [e, i]).filter(([e, _]) => e == "x").map(([_, i]) => i);
-		for (const index of parityBits) {
-			const tempcount = index + 1;
-			const temparray = [];
-			const tempdata = [...build];
-			while (tempdata[index] !== undefined) {
-				const temp = tempdata.splice(index, tempcount * 2);
-				temparray.push(...temp.splice(0, tempcount));
-			}
-			temparray.splice(0, 1);
-			build[index] = (count(temparray, "1") % 2).toString();
-		}
-		build.unshift((count(build, "1") % 2).toString());
-		return build.join("");
-	}
-
-	solvers['HammingCodes: Encoded Binary to Integer'] = function (data) {
-		const build = data.split("");
-		const testArray = [];
-		const sumParity = Math.ceil(Math.log2(data.length));
-		const count = (arr: any, val: any) => arr.reduce((a: any, v: any) => (v === val ? a + 1 : a), 0);
-		let overallParity = build.splice(0, 1).join("");
-		testArray.push(overallParity == (count(build, "1") % 2).toString() ? true : false);
-		for (let i = 0; i < sumParity; i++) {
-			const tempIndex = Math.pow(2, i) - 1;
-			const tempStep = tempIndex + 1;
-			const tempData = [...build];
-			const tempArray = [];
-			while (tempData[tempIndex] != undefined) {
-				const temp = [...tempData.splice(tempIndex, tempStep * 2)];
-				tempArray.push(...temp.splice(0, tempStep));
-			}
-			const tempParity = tempArray.shift();
-			testArray.push(tempParity == (count(tempArray, "1") % 2).toString() ? true : false);
-		}
-		let fixIndex = 0;
-		for (let i = 1; i < sumParity + 1; i++) {
-			fixIndex += testArray[i] ? 0 : Math.pow(2, i) / 2;
-		}
-		build.unshift(overallParity);
-		if (fixIndex > 0 && testArray[0] == false) {
-			build[fixIndex] = build[fixIndex] == "0" ? "1" : "0";
-		} else if (testArray[0] == false) {
-			overallParity = overallParity == "0" ? "1" : "0";
-		} else if (testArray[0] == true && testArray.some((truth) => truth == false)) {
-			return 0;
-		}
-		for (let i = sumParity; i >= 0; i--) {
-			build.splice(Math.pow(2, i), 1);
-		}
-		build.splice(0, 1);
-		return parseInt(build.join(""), 2);
-	}
-
-	solvers['Proper 2-Coloring of a Graph'] = function (data) {
-		const nodes: any = new Array(data[0]).fill(0).map(() => [])
-		for (const e of data[1]) {
-			nodes[e[0]].push(e[1])
-			nodes[e[1]].push(e[0])
-		}
-		const solution = new Array(data[0]).fill(undefined)
-		let oddCycleFound = false
-		const traverse = (index: any, color: any) => {
-			if (oddCycleFound) {
-				return
-			}
-			if (solution[index] === color) {
-				return
-			}
-			if (solution[index] === (color ^ 1)) {
-				oddCycleFound = true
-				return
-			}
-			solution[index] = color
-			for (const n of nodes[index]) {
-				traverse(n, color ^ 1)
-			}
-		}
-		while (!oddCycleFound && solution.some(e => e === undefined)) {
-			traverse(solution.indexOf(undefined), 0)
-		}
-		if (oddCycleFound) return "[]";
-		return solution
-	}
-	
-	// Helper function to run a script and wait for results
-	async function runHelperScript(script: string, args: any[] = [], maxWaitTime = 10000): Promise<any> {
-		const pid = ns.run(script, 1, ...args)
-		if (pid === 0) {
-			throw new Error(`Failed to start ${script}`)
-		}
-		
-		// Wait for script to complete and write results
-		const startTime = Date.now()
-		while (ns.isRunning(pid) && (Date.now() - startTime) < maxWaitTime) {
-			await ns.sleep(100)
-		}
-		
-		// Kill if still running
-		if (ns.isRunning(pid)) {
-			ns.kill(pid)
-			throw new Error(`${script} timed out`)
-		}
-		
-		return true
-	}
-	
-	// Get all contracts using helper script
-	async function getAllContracts(): Promise<Array<{server: string, contracts: string[]}>> {
-		try {
-			// Run scanner script
-			await runHelperScript('contract-scan.js')
-			
-			// Read results
-			const resultData = ns.read('/temp/contract-scan-results.txt')
-			if (!resultData) {
-				throw new Error('No scan results found')
-			}
-			
-			const result = JSON.parse(resultData)
-			return result.contractData || []
-		} catch (error) {
-			ns.print(`! Error scanning contracts: ${error}`)
-			return []
-		}
-	}
-	
-	// Get contract info using helper script
+	// Get contract info directly - no helper script needed
 	async function getContractInfo(contractFile: string, server: string): Promise<any> {
+		// RAM: getContractType(5GB) + getData(5GB) + getNumTriesRemaining(2GB) + getDescription(1GB) = 13GB total
+
 		try {
-			await runHelperScript('contract-info.js', [contractFile, server])
-			
-			const filename = `/temp/contract-info-${server}-${contractFile.replace('.cct', '')}.txt`
-			const resultData = ns.read(filename)
-			if (!resultData) {
-				throw new Error('No contract info found')
+			const contractType = ns.codingcontract.getContractType(contractFile, server)
+			const data = ns.codingcontract.getData(contractFile, server)
+			const triesRemaining = ns.codingcontract.getNumTriesRemaining(contractFile, server)
+			const description = ns.codingcontract.getDescription(contractFile, server)
+
+			return {
+				success: true,
+				contractType,
+				data,
+				triesRemaining,
+				description,
+				contractFile,
+				server,
+				timestamp: Date.now()
 			}
-			
-			return JSON.parse(resultData)
 		} catch (error) {
-			ns.print(`! Error getting contract info: ${error}`)
-			return { success: false, error: String(error) }
+			return {
+				success: false,
+				error: String(error),
+				contractFile,
+				server,
+				timestamp: Date.now()
+			}
 		}
 	}
-	
-	// Solve contract using helper script
+
+	// Solve contract directly - no helper script needed
 	async function solveContract(solution: any, contractFile: string, server: string): Promise<any> {
+		// RAM: attempt(10GB) = 10GB total
+
 		try {
-			// Convert solution to string for command line argument
-			const solutionArg = typeof solution === 'string' ? solution : JSON.stringify(solution)
-			
-			await runHelperScript('contract-solve.js', [solutionArg, contractFile, server])
-			
-			const filename = `/temp/contract-solve-${server}-${contractFile.replace('.cct', '')}.txt`
-			const resultData = ns.read(filename)
-			if (!resultData) {
-				throw new Error('No solve results found')
+			// Parse solution if it's a JSON string
+			let parsedSolution = solution
+			if (typeof solution === 'string' && (solution.startsWith('[') || solution.startsWith('{'))) {
+				try {
+					parsedSolution = JSON.parse(solution)
+				} catch {
+					// Use as-is if JSON parsing fails
+				}
 			}
-			
-			return JSON.parse(resultData)
+
+			const reward = ns.codingcontract.attempt(parsedSolution, contractFile, server)
+
+			return {
+				success: !!reward,
+				reward: reward || null,
+				solution: parsedSolution,
+				contractFile,
+				server,
+				timestamp: Date.now()
+			}
 		} catch (error) {
-			ns.print(`! Error solving contract: ${error}`)
-			return { success: false, error: String(error) }
+			return {
+				success: false,
+				error: String(error),
+				solution,
+				contractFile,
+				server,
+				timestamp: Date.now()
+			}
 		}
 	}
-	
+
 	// Main contract processing logic
 	async function processContracts(): Promise<{ solved: number, attempted: number, skipped: number }> {
 		let solved = 0
 		let attempted = 0
 		let skipped = 0
-		
+
 		const contractData = await getAllContracts()
-		
-		for (const {server, contracts} of contractData) {
+
+		for (const { server, contracts } of contractData) {
 			for (const contract of contracts) {
 				const contractId = `${server}:${contract}`
-				
+
 				// Skip if already solved
 				if (solvedContracts.has(contractId)) {
 					skipped++
 					continue
 				}
-				
+
 				// Skip if failed too many times
 				const failureCount = failedContracts.get(contractId) || 0
 				if (failureCount >= MAX_RETRIES) {
 					skipped++
 					continue
 				}
-				
+
 				// Get contract information
 				const info = await getContractInfo(contract, server)
 				if (!info.success) {
-					ns.print(`! Failed to get info for ${contract} on ${server}: ${info.error}`)
+					ns.tprint(`! Failed to get info for ${contract} on ${server}: ${info.error}`)
 					failedContracts.set(contractId, failureCount + 1)
 					continue
 				}
-				
+
 				attempted++
-				
+
 				// Safety check - don't attempt if only 1 try remaining and we've failed before
 				if (info.triesRemaining === 1 && failureCount > 0) {
-					ns.print(`⚠ Skipping "${info.contractType}" on ${server} (${info.triesRemaining} tries left, previous failures: ${failureCount})`)
+					ns.tprint(`⚠ Skipping "${info.contractType}" on ${server} (${info.triesRemaining} tries left, previous failures: ${failureCount})`)
 					skipped++
 					continue
 				}
-				
+
 				// Check if we have a solver for this type
 				if (!solvers[info.contractType]) {
-					ns.print(`? Unknown contract type: "${info.contractType}" on ${server}`)
+					ns.tprint(`? Unknown contract type: "${info.contractType}" on ${server}`)
 					continue
 				}
-				
+
 				try {
 					// Calculate solution
 					const solution = solvers[info.contractType](info.data)
-					
+
 					// Attempt to solve
 					const result = await solveContract(solution, contract, server)
-					
+
 					if (result.success && result.reward) {
 						solved++
 						solvedContracts.add(contractId)
 						failedContracts.delete(contractId)
-						ns.print(`✓ Solved "${info.contractType}" on ${server}: ${result.reward}`)
+						ns.tprint(`✓ Solved "${info.contractType}" on ${server}: ${result.reward}`)
+
+						// Show alert notification for successful contract solve
+						ns.toast(`🎉 CONTRACT SOLVED! ${info.contractType} on ${server}: ${result.reward}`, 'success', 5000)
 					} else {
 						const newFailureCount = failureCount + 1
 						failedContracts.set(contractId, newFailureCount)
-						ns.print(`✗ Failed "${info.contractType}" on ${server} (attempt ${newFailureCount}/${MAX_RETRIES})`)
+						
+						// Debug output for failed contracts
+						ns.tprint(`✗ Failed "${info.contractType}" on ${server} (attempt ${newFailureCount}/${MAX_RETRIES})`)
+						ns.tprint(`  📝 Description: ${info.description || 'N/A'}`)
+						
+						// Safe JSON stringify that handles BigInt
+						const safeStringify = (obj: any) => {
+							return JSON.stringify(obj, (key, value) =>
+								typeof value === 'bigint' ? value.toString() + 'n' : value
+							)
+						}
+						
+						ns.tprint(`  📊 Input Data: ${safeStringify(info.data)}`)
+						ns.tprint(`  🎯 Our Solution: ${safeStringify(solution)}`)
+						
+						// Special verification for Square Root
+						if (info.contractType === 'Square Root') {
+							try {
+								const input = typeof info.data === 'bigint' ? info.data : BigInt(info.data)
+								const result = typeof solution === 'string' ? BigInt(solution) : BigInt(solution.toString())
+								const squared = result * result
+								const squared_plus_one = (result + 1n) * (result + 1n)
+								
+								ns.tprint(`  🔍 Verification:`)
+								ns.tprint(`    ${result}² = ${squared}`)
+								ns.tprint(`    Input = ${input}`)
+								ns.tprint(`    Diff = ${input - squared}`)
+								ns.tprint(`    (${result}+1)² = ${squared_plus_one}`)
+								ns.tprint(`    Next diff = ${squared_plus_one - input}`)
+								
+								if (squared > input) {
+									ns.tprint(`  ❌ ERROR: Our result is too large!`)
+								} else if (squared_plus_one <= input) {
+									ns.tprint(`  ❌ ERROR: Our result is too small!`)
+								} else {
+									ns.tprint(`  ✅ Math is correct - issue might be format`)
+								}
+							} catch (e) {
+								ns.tprint(`  🔧 Verification error: ${e}`)
+							}
+						}
+						
+						if (info.triesRemaining <= 1) {
+							ns.tprint(`  ⚠️  WARNING: Only ${info.triesRemaining} tries remaining!`)
+						}
 					}
 				} catch (solverError) {
-					ns.print(`! Solver error for "${info.contractType}" on ${server}: ${solverError}`)
-					failedContracts.set(contractId, failureCount + 1)
+					const newFailureCount = failureCount + 1
+					failedContracts.set(contractId, newFailureCount)
+					
+					// Safe JSON stringify that handles BigInt
+					const safeStringify = (obj: any) => {
+						return JSON.stringify(obj, (key, value) =>
+							typeof value === 'bigint' ? value.toString() + 'n' : value
+						)
+					}
+					
+					// Debug output for solver errors
+					ns.tprint(`! Solver error for "${info.contractType}" on ${server}: ${solverError}`)
+					ns.tprint(`  📊 Input Data: ${safeStringify(info.data)}`)
+					ns.tprint(`  🔧 Error Details: ${String(solverError)}`)
 				}
 			}
 		}
-		
+
 		return { solved, attempted, skipped }
 	}
-	
+
 	// Status display
 	function displayStatus() {
 		const uptime = Math.floor((Date.now() - startTime) / 1000)
 		const cyclesPerMin = cycleCount > 0 ? (cycleCount / (uptime / 60)).toFixed(1) : '0.0'
 		const efficiency = totalAttempted > 0 ? ((totalSolved / totalAttempted) * 100).toFixed(1) : '0.0'
 		const failedCount = failedContracts.size
-		
+
 		ns.clearLog()
 		ns.print('═══ RAM-OPTIMIZED CONTRACT SOLVER ═══')
-		ns.print('Main script: ~0.2GB • Helper scripts: run separately')
 		ns.print(`Uptime: ${uptime}s | Cycles: ${cycleCount} (${cyclesPerMin}/min)`)
 		ns.print(`Total: ${totalSolved}/${totalAttempted} solved (${efficiency}%)`)
 		ns.print(`Failed contracts: ${failedCount} (max retries reached)`)
 		ns.print(`Algorithms: ${Object.keys(solvers).length} embedded`)
 		ns.print('─'.repeat(35))
 	}
-	
+
 	// Main execution loop
 	ns.print('═══ RAM-OPTIMIZED CONTRACT SOLVER ═══')
-	ns.print('Main script: ~0.2GB RAM')
-	ns.print('Helper scripts run separately as needed')
-	ns.print('Total system RAM usage distributed across multiple scripts')
-	ns.print('─'.repeat(35))
 	ns.print('Starting contract solver...')
-	
+
 	while (true) {
 		cycleCount++
 		displayStatus()
-		
+
 		const result = await processContracts()
 		totalSolved += result.solved
 		totalAttempted += result.attempted
-		
-		// Scan every 10 seconds (slower due to script overhead)
-		await ns.sleep(10000)
+
+		// Scan every 2 seconds for faster contract detection
+		await ns.sleep(2000)
 	}
+}
+
+// Helper function to convert 2D arrays to string format
+function convert2DArrayToString(arr: any): string {
+	const components: string[] = []
+	arr.forEach(function (e: any) {
+		let s = e.toString()
+		s = ['[', s, ']'].join('')
+		components.push(s)
+	})
+	return components.join(',').replace(/\s/g, '')
+}
+
+// Contract solver algorithms - embedded from /src/lib/contracts.ts
+const solvers: Record<string, (data: any) => any> = {}
+
+solvers['Find Largest Prime Factor'] = function (data) {
+	let fac = 2
+	let n = data
+	while (n > (fac - 1) * (fac - 1)) {
+		while (n % fac === 0) {
+			n = Math.round(n / fac)
+		}
+		++fac
+	}
+	return n === 1 ? fac - 1 : n
+}
+
+solvers['Subarray with Maximum Sum'] = function (data) {
+	const nums = data.slice()
+	for (let i = 1; i < nums.length; i++) {
+		nums[i] = Math.max(nums[i], nums[i] + nums[i - 1])
+	}
+	return Math.max.apply(Math, nums)
+}
+
+solvers['Total Ways to Sum'] = function (data) {
+	const ways = [1]
+	ways.length = data + 1
+	ways.fill(0, 1)
+	for (let i = 1; i < data; ++i) {
+		for (let j = i; j <= data; ++j) {
+			ways[j] += ways[j - i]
+		}
+	}
+	return ways[data]
+}
+
+solvers['Total Ways to Sum II'] = function (data) {
+	const n = data[0];
+	const s = data[1];
+	const ways = [1];
+	ways.length = n + 1;
+	ways.fill(0, 1);
+	for (let i = 0; i < s.length; i++) {
+		for (let j = s[i]; j <= n; j++) {
+			ways[j] += ways[j - s[i]];
+		}
+	}
+	return ways[n];
+}
+
+solvers['Spiralize Matrix'] = function (data) {
+	const spiral = []
+	const m = data.length
+	const n = data[0].length
+	let u = 0
+	let d = m - 1
+	let l = 0
+	let r = n - 1
+	let k = 0
+	while (true) {
+		// Up
+		for (let col = l; col <= r; col++) {
+			spiral[k] = data[u][col]
+			++k
+		}
+		if (++u > d) {
+			break
+		}
+		// Right
+		for (let row = u; row <= d; row++) {
+			spiral[k] = data[row][r]
+			++k
+		}
+		if (--r < l) {
+			break
+		}
+		// Down
+		for (let col = r; col >= l; col--) {
+			spiral[k] = data[d][col]
+			++k
+		}
+		if (--d < u) {
+			break
+		}
+		// Left
+		for (let row = d; row >= u; row--) {
+			spiral[k] = data[row][l]
+			++k
+		}
+		if (++l > r) {
+			break
+		}
+	}
+	return spiral
+}
+
+solvers['Array Jumping Game'] = function (data) {
+	const n = data.length
+	let i = 0
+	for (let reach = 0; i < n && i <= reach; ++i) {
+		reach = Math.max(i + data[i], reach)
+	}
+	const solution = i === n
+	return solution ? 1 : 0
+}
+
+solvers['Array Jumping Game II'] = function (data) {
+	if (data[0] == 0)
+		return '0';
+	const n = data.length;
+	let reach = 0;
+	let jumps = 0;
+	let lastJump = -1;
+	while (reach < n - 1) {
+		let jumpedFrom = -1;
+		for (let i = reach; i > lastJump; i--) {
+			if (i + data[i] > reach) {
+				reach = i + data[i];
+				jumpedFrom = i;
+			}
+		}
+		if (jumpedFrom === -1) {
+			jumps = 0;
+			break;
+		}
+		lastJump = jumpedFrom;
+		jumps++;
+	}
+	return jumps;
+}
+
+solvers['Merge Overlapping Intervals'] = function (data) {
+	const intervals = data.slice()
+	intervals.sort(function (a: any, b: any) {
+		return a[0] - b[0]
+	})
+	const result = []
+	let start = intervals[0][0]
+	let end = intervals[0][1]
+	for (const interval of intervals) {
+		if (interval[0] <= end) {
+			end = Math.max(end, interval[1])
+		} else {
+			result.push([start, end])
+			start = interval[0]
+			end = interval[1]
+		}
+	}
+	result.push([start, end])
+	// Return properly formatted array string
+	return JSON.stringify(result)
+}
+
+solvers['Generate IP Addresses'] = function (data) {
+	const ret = []
+	for (let a = 1; a <= 3; ++a) {
+		for (let b = 1; b <= 3; ++b) {
+			for (let c = 1; c <= 3; ++c) {
+				for (let d = 1; d <= 3; ++d) {
+					if (a + b + c + d === data.length) {
+						const A = parseInt(data.substring(0, a), 10)
+						const B = parseInt(data.substring(a, a + b), 10)
+						const C = parseInt(data.substring(a + b, a + b + c), 10)
+						const D = parseInt(data.substring(a + b + c, a + b + c + d), 10)
+						if (A <= 255 && B <= 255 && C <= 255 && D <= 255) {
+							const ip = [A.toString(), '.', B.toString(), '.', C.toString(), '.', D.toString()].join('')
+							if (ip.length === data.length + 3) {
+								ret.push(ip)
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	return ret.toString();
+}
+
+solvers['Encryption II: Vigenère Cipher'] = function (data) {
+	const cipher = [...data[0]]
+		.map((a, i) => {
+			return a === " "
+				? a
+				: String.fromCharCode(((a.charCodeAt(0) - 2 * 65 + data[1].charCodeAt(i % data[1].length)) % 26) + 65);
+		})
+		.join("");
+	return cipher;
+}
+
+solvers['Algorithmic Stock Trader I'] = function (data) {
+	let maxCur = 0
+	let maxSoFar = 0
+	for (let i = 1; i < data.length; ++i) {
+		maxCur = Math.max(0, (maxCur += data[i] - data[i - 1]))
+		maxSoFar = Math.max(maxCur, maxSoFar)
+	}
+	return maxSoFar.toString()
+}
+
+solvers['Algorithmic Stock Trader II'] = function (data) {
+	let profit = 0
+	for (let p = 1; p < data.length; ++p) {
+		profit += Math.max(data[p] - data[p - 1], 0)
+	}
+	return profit.toString()
+}
+
+solvers['Algorithmic Stock Trader III'] = function (data) {
+	let hold1 = Number.MIN_SAFE_INTEGER
+	let hold2 = Number.MIN_SAFE_INTEGER
+	let release1 = 0
+	let release2 = 0
+	for (const price of data) {
+		release2 = Math.max(release2, hold2 + price)
+		hold2 = Math.max(hold2, release1 - price)
+		release1 = Math.max(release1, hold1 + price)
+		hold1 = Math.max(hold1, price * -1)
+	}
+	return release2.toString()
+}
+
+solvers['Algorithmic Stock Trader IV'] = function (data) {
+	const k = data[0]
+	const prices = data[1]
+	const len = prices.length
+	if (len < 2) {
+		return 0
+	}
+	if (k > len / 2) {
+		let res = 0
+		for (let i = 1; i < len; ++i) {
+			res += Math.max(prices[i] - prices[i - 1], 0)
+		}
+		return res
+	}
+	const hold = []
+	const rele = []
+	hold.length = k + 1
+	rele.length = k + 1
+	for (let i = 0; i <= k; ++i) {
+		hold[i] = Number.MIN_SAFE_INTEGER
+		rele[i] = 0
+	}
+	let cur
+	for (let i = 0; i < len; ++i) {
+		cur = prices[i]
+		for (let j = k; j > 0; --j) {
+			rele[j] = Math.max(rele[j], hold[j] + cur)
+			hold[j] = Math.max(hold[j], rele[j - 1] - cur)
+		}
+	}
+	return rele[k]
+}
+
+solvers['Minimum Path Sum in a Triangle'] = function (data) {
+	const n = data.length
+	const dp = data[n - 1].slice()
+	for (let i = n - 2; i > -1; --i) {
+		for (let j = 0; j < data[i].length; ++j) {
+			dp[j] = Math.min(dp[j], dp[j + 1]) + data[i][j]
+		}
+	}
+	return dp[0]
+}
+
+solvers['Unique Paths in a Grid I'] = function (data) {
+	const n = data[0]
+	const m = data[1]
+	const currentRow = []
+	currentRow.length = n
+	for (let i = 0; i < n; i++) {
+		currentRow[i] = 1
+	}
+	for (let row = 1; row < m; row++) {
+		for (let i = 1; i < n; i++) {
+			currentRow[i] += currentRow[i - 1]
+		}
+	}
+	return currentRow[n - 1]
+}
+
+solvers['Unique Paths in a Grid II'] = function (data) {
+	const obstacleGrid = []
+	obstacleGrid.length = data.length
+	for (let i = 0; i < obstacleGrid.length; ++i) {
+		obstacleGrid[i] = data[i].slice()
+	}
+	for (let i = 0; i < obstacleGrid.length; i++) {
+		for (let j = 0; j < obstacleGrid[0].length; j++) {
+			if (obstacleGrid[i][j] == 1) {
+				obstacleGrid[i][j] = 0
+			} else if (i == 0 && j == 0) {
+				obstacleGrid[0][0] = 1
+			} else {
+				obstacleGrid[i][j] = (i > 0 ? obstacleGrid[i - 1][j] : 0) + (j > 0 ? obstacleGrid[i][j - 1] : 0)
+			}
+		}
+	}
+	return obstacleGrid[obstacleGrid.length - 1][obstacleGrid[0].length - 1]
+}
+
+// Add all remaining complex algorithms
+solvers['Shortest Path in a Grid'] = function (data) {
+	const width = data[0].length;
+	const height = data.length;
+	const dstY = height - 1;
+	const dstX = width - 1;
+
+	const distance = new Array(height);
+	const queue: any = [];
+
+	for (let y = 0; y < height; y++) {
+		distance[y] = new Array(width).fill(Infinity);
+	}
+
+	function validPosition(y: number, x: number) {
+		return y >= 0 && y < height && x >= 0 && x < width && data[y][x] == 0;
+	}
+
+	function* neighbors(y: number, x: number) {
+		if (validPosition(y - 1, x)) yield [y - 1, x];
+		if (validPosition(y + 1, x)) yield [y + 1, x];
+		if (validPosition(y, x - 1)) yield [y, x - 1];
+		if (validPosition(y, x + 1)) yield [y, x + 1];
+	}
+
+	distance[0][0] = 0;
+	queue.push([0, 0]);
+	while (queue.length > 0) {
+		const [y, x] = queue.shift()
+		for (const [yN, xN] of neighbors(y, x)) {
+			if (distance[yN][xN] == Infinity) {
+				queue.push([yN, xN])
+				distance[yN][xN] = distance[y][x] + 1
+			}
+		}
+	}
+
+	if (distance[dstY][dstX] == Infinity) return "";
+
+	let path = ""
+	let [yC, xC] = [dstY, dstX]
+	while (xC != 0 || yC != 0) {
+		const dist = distance[yC][xC];
+		for (const [yF, xF] of neighbors(yC, xC)) {
+			if (distance[yF][xF] == dist - 1) {
+				path = (xC == xF ? (yC == yF + 1 ? "D" : "U") : (xC == xF + 1 ? "R" : "L")) + path;
+				[yC, xC] = [yF, xF]
+				break
+			}
+		}
+	}
+	return path;
+}
+
+// [Continue with compression, encryption, etc. - abbreviated for space]
+solvers['Compression I: RLE Compression'] = function (data) {
+	return data.replace(/([\w])\1{0,8}/g, (group: any, chr: any) => group.length + chr)
+}
+
+solvers['Compression II: LZ Decompression'] = function (compr) {
+	let plain = "";
+
+	for (let i = 0; i < compr.length;) {
+		const literal_length = compr.charCodeAt(i) - 0x30;
+
+		if (literal_length < 0 || literal_length > 9 || i + 1 + literal_length > compr.length) {
+			return null;
+		}
+
+		plain += compr.substring(i + 1, i + 1 + literal_length);
+		i += 1 + literal_length;
+
+		if (i >= compr.length) {
+			break;
+		}
+		const backref_length = compr.charCodeAt(i) - 0x30;
+
+		if (backref_length < 0 || backref_length > 9) {
+			return null;
+		} else if (backref_length === 0) {
+			++i;
+		} else {
+			if (i + 1 >= compr.length) {
+				return null;
+			}
+
+			const backref_offset = compr.charCodeAt(i + 1) - 0x30;
+			if ((backref_length > 0 && (backref_offset < 1 || backref_offset > 9)) || backref_offset > plain.length) {
+				return null;
+			}
+
+			for (let j = 0; j < backref_length; ++j) {
+				plain += plain[plain.length - backref_offset];
+			}
+
+			i += 2;
+		}
+	}
+
+	return plain;
+}
+
+solvers['Compression III: LZ Compression'] = function (plain) {
+	let cur_state = Array.from(Array(10), () => Array(10).fill(null));
+	let new_state = Array.from(Array(10), () => Array(10));
+
+	function set(state: any, i: any, j: any, str: any) {
+		const current = state[i][j];
+		if (current == null || str.length < current.length) {
+			state[i][j] = str;
+		} else if (str.length === current.length && Math.random() < 0.5) {
+			state[i][j] = str;
+		}
+	}
+
+	cur_state[0][1] = "";
+
+	for (let i = 1; i < plain.length; ++i) {
+		for (const row of new_state) {
+			row.fill(null);
+		}
+		const c = plain[i];
+
+		for (let length = 1; length <= 9; ++length) {
+			const string = cur_state[0][length];
+			if (string == null) {
+				continue;
+			}
+
+			if (length < 9) {
+				set(new_state, 0, length + 1, string);
+			} else {
+				set(new_state, 0, 1, string + "9" + plain.substring(i - 9, i) + "0");
+			}
+
+			for (let offset = 1; offset <= Math.min(9, i); ++offset) {
+				if (plain[i - offset] === c) {
+					set(new_state, offset, 1, string + length + plain.substring(i - length, i));
+				}
+			}
+		}
+
+		for (let offset = 1; offset <= 9; ++offset) {
+			for (let length = 1; length <= 9; ++length) {
+				const string = cur_state[offset][length];
+				if (string == null) {
+					continue;
+				}
+
+				if (plain[i - offset] === c) {
+					if (length < 9) {
+						set(new_state, offset, length + 1, string);
+					} else {
+						set(new_state, offset, 1, string + "9" + offset + "0");
+					}
+				}
+
+				set(new_state, 0, 1, string + length + offset);
+
+				for (let new_offset = 1; new_offset <= Math.min(9, i); ++new_offset) {
+					if (plain[i - new_offset] === c) {
+						set(new_state, new_offset, 1, string + length + offset + "0");
+					}
+				}
+			}
+		}
+
+		const tmp_state = new_state;
+		new_state = cur_state;
+		cur_state = tmp_state;
+	}
+
+	let result = null;
+
+	for (let len = 1; len <= 9; ++len) {
+		let string = cur_state[0][len];
+		if (string == null) {
+			continue;
+		}
+
+		string += len + plain.substring(plain.length - len, plain.length);
+		if (result == null || string.length < result.length) {
+			result = string;
+		} else if (string.length == result.length && Math.random() < 0.5) {
+			result = string;
+		}
+	}
+
+	for (let offset = 1; offset <= 9; ++offset) {
+		for (let len = 1; len <= 9; ++len) {
+			let string = cur_state[offset][len];
+			if (string == null) {
+				continue;
+			}
+
+			string += len + "" + offset;
+			if (result == null || string.length < result.length) {
+				result = string;
+			} else if (string.length == result.length && Math.random() < 0.5) {
+				result = string;
+			}
+		}
+	}
+
+	return result ?? "";
+}
+
+solvers['Encryption I: Caesar Cipher'] = function (data) {
+	const cipher = [...data[0]]
+		.map((a) => (a === " " ? a : String.fromCharCode(((a.charCodeAt(0) - 65 - data[1] + 26) % 26) + 65)))
+		.join("");
+	return cipher;
+}
+
+solvers['Sanitize Parentheses in Expression'] = function (data) {
+	let left = 0
+	let right = 0
+	const res: any = []
+	for (let i = 0; i < data.length; ++i) {
+		if (data[i] === '(') {
+			++left
+		} else if (data[i] === ')') {
+			left > 0 ? --left : ++right
+		}
+	}
+
+	function dfs(pair: any, index: any, left: any, right: any, s: any, solution: any, res: any) {
+		if (s.length === index) {
+			if (left === 0 && right === 0 && pair === 0) {
+				for (let i = 0; i < res.length; i++) {
+					if (res[i] === solution) {
+						return
+					}
+				}
+				res.push(solution)
+			}
+			return
+		}
+		if (s[index] === '(') {
+			if (left > 0) {
+				dfs(pair, index + 1, left - 1, right, s, solution, res)
+			}
+			dfs(pair + 1, index + 1, left, right, s, solution + s[index], res)
+		} else if (s[index] === ')') {
+			if (right > 0) dfs(pair, index + 1, left, right - 1, s, solution, res)
+			if (pair > 0) dfs(pair - 1, index + 1, left, right, s, solution + s[index], res)
+		} else {
+			dfs(pair, index + 1, left, right, s, solution + s[index], res)
+		}
+	}
+	dfs(0, 0, left, right, data, '', res)
+
+	return res
+}
+
+solvers['Find All Valid Math Expressions'] = function (data) {
+	const num: any = data[0]
+	const target: any = data[1]
+
+	function helper(res: any, path: any, num: any, target: any, pos: any, evaluated: any, multed: any) {
+		if (pos === num.length) {
+			if (target === evaluated) {
+				res.push(path)
+			}
+			return
+		}
+		for (let i = pos; i < num.length; ++i) {
+			if (i != pos && num[pos] == '0') {
+				break
+			}
+			const cur = parseInt(num.substring(pos, i + 1))
+			if (pos === 0) {
+				helper(res, path + cur, num, target, i + 1, cur, cur)
+			} else {
+				helper(res, path + '+' + cur, num, target, i + 1, evaluated + cur, cur)
+				helper(res, path + '-' + cur, num, target, i + 1, evaluated - cur, -cur)
+				helper(res, path + '*' + cur, num, target, i + 1, evaluated - multed + multed * cur, multed * cur)
+			}
+		}
+	}
+
+	if (num == null || num.length === 0) {
+		return []
+	}
+	const result: any = []
+	helper(result, '', num, target, 0, 0, 0)
+	return result
+}
+
+solvers['HammingCodes: Integer to Encoded Binary'] = function (value) {
+	const HammingSumOfParity =
+		(lengthOfDBits: any) => lengthOfDBits == 0 ? 0 : lengthOfDBits < 3 ? lengthOfDBits + 1 :
+			Math.ceil(Math.log2(lengthOfDBits * 2)) <= Math.ceil(Math.log2(1 + lengthOfDBits + Math.ceil(Math.log2(lengthOfDBits)))) ?
+				Math.ceil(Math.log2(lengthOfDBits) + 1) : Math.ceil(Math.log2(lengthOfDBits));
+	const data = value.toString(2).split("");
+	const sumParity = HammingSumOfParity(data.length);
+	const count = (arr: any, val: any) => arr.reduce((a: any, v: any) => (v === val ? a + 1 : a), 0);
+	const build = ["x", "x", ...data.splice(0, 1)];
+	for (let i = 2; i < sumParity; i++)
+		build.push("x", ...data.splice(0, Math.pow(2, i) - 1));
+	const parityBits = build.map((e, i) => [e, i]).filter(([e, _]) => e == "x").map(([_, i]) => i);
+	for (const index of parityBits) {
+		const tempcount = index + 1;
+		const temparray = [];
+		const tempdata = [...build];
+		while (tempdata[index] !== undefined) {
+			const temp = tempdata.splice(index, tempcount * 2);
+			temparray.push(...temp.splice(0, tempcount));
+		}
+		temparray.splice(0, 1);
+		build[index] = (count(temparray, "1") % 2).toString();
+	}
+	build.unshift((count(build, "1") % 2).toString());
+	return build.join("");
+}
+
+solvers['HammingCodes: Encoded Binary to Integer'] = function (data) {
+	const build = data.split("");
+	const testArray = [];
+	const sumParity = Math.ceil(Math.log2(data.length));
+	const count = (arr: any, val: any) => arr.reduce((a: any, v: any) => (v === val ? a + 1 : a), 0);
+	let overallParity = build.splice(0, 1).join("");
+	testArray.push(overallParity == (count(build, "1") % 2).toString() ? true : false);
+	for (let i = 0; i < sumParity; i++) {
+		const tempIndex = Math.pow(2, i) - 1;
+		const tempStep = tempIndex + 1;
+		const tempData = [...build];
+		const tempArray = [];
+		while (tempData[tempIndex] != undefined) {
+			const temp = [...tempData.splice(tempIndex, tempStep * 2)];
+			tempArray.push(...temp.splice(0, tempStep));
+		}
+		const tempParity = tempArray.shift();
+		testArray.push(tempParity == (count(tempArray, "1") % 2).toString() ? true : false);
+	}
+	let fixIndex = 0;
+	for (let i = 1; i < sumParity + 1; i++) {
+		fixIndex += testArray[i] ? 0 : Math.pow(2, i) / 2;
+	}
+	build.unshift(overallParity);
+	if (fixIndex > 0 && testArray[0] == false) {
+		build[fixIndex] = build[fixIndex] == "0" ? "1" : "0";
+	} else if (testArray[0] == false) {
+		overallParity = overallParity == "0" ? "1" : "0";
+	} else if (testArray[0] == true && testArray.some((truth) => truth == false)) {
+		return 0;
+	}
+	for (let i = sumParity; i >= 0; i--) {
+		build.splice(Math.pow(2, i), 1);
+	}
+	build.splice(0, 1);
+	return parseInt(build.join(""), 2);
+}
+
+solvers['Proper 2-Coloring of a Graph'] = function (data) {
+	const nodes: any = new Array(data[0]).fill(0).map(() => [])
+	for (const e of data[1]) {
+		nodes[e[0]].push(e[1])
+		nodes[e[1]].push(e[0])
+	}
+	const solution = new Array(data[0]).fill(undefined)
+	let oddCycleFound = false
+	const traverse = (index: any, color: any) => {
+		if (oddCycleFound) {
+			return
+		}
+		if (solution[index] === color) {
+			return
+		}
+		if (solution[index] === (color ^ 1)) {
+			oddCycleFound = true
+			return
+		}
+		solution[index] = color
+		for (const n of nodes[index]) {
+			traverse(n, color ^ 1)
+		}
+	}
+	while (!oddCycleFound && solution.some(e => e === undefined)) {
+		traverse(solution.indexOf(undefined), 0)
+	}
+	if (oddCycleFound) return "[]";
+	return solution
+}
+
+solvers['Square Root'] = function (data) {
+	// Handle BigInt inputs (both actual BigInt and string with 'n' suffix)
+	let n: bigint
+	
+	if (typeof data === 'bigint') {
+		n = data
+	} else if (typeof data === 'string' && data.endsWith('n')) {
+		// String representation of BigInt with 'n' suffix
+		n = BigInt(data.slice(0, -1))
+	} else if (typeof data === 'string') {
+		// Parse as BigInt for very large numbers
+		n = BigInt(data)
+	} else {
+		// Convert number to BigInt
+		n = BigInt(data)
+	}
+	
+	// Uses the Newton-Raphson method to iteratively improve the guess until the answer is found.
+	const two = BigInt(2);
+	if (n < two) return n.toString(); // Square root of 1 is 1, square root of 0 is 0
+	let root = n / two; // Initial guess
+	let x1 = (root + n / root) / two;
+	while (x1 < root) {
+		root = x1;
+		x1 = (root + n / root) / two;
+	}
+	// That's it, solved! At least, we've converged an an answer which should be as close as we can get (might be off by 1)
+	// We want the answer to the "nearest integer". Check the answer on either side of the one we converged on to see what's closest
+	const bigAbs = (x: bigint) => x < 0n ? -x : x; // There's no Math.abs where we're going...
+	let absDiff = bigAbs(root * root - n); // How far off we from the perfect square root
+	if (absDiff == 0n) return root.toString(); // Note that this coding contract doesn't guarantee there's an exact integer square root
+	else if (absDiff > bigAbs((root - 1n) * (root - 1n) - n)) root = root - 1n; // Do we get a better answer by subtracting 1?
+	else if (absDiff > bigAbs((root + 1n) * (root + 1n) - n)) root = root + 1n; // Do we get a better answer by adding 1?
+	// Validation: We should be able to tell if we got this right without wasting a guess. Adding/Subtracting 1 should now always be worse
+	absDiff = bigAbs(root * root - n);
+	if (absDiff > bigAbs((root - 1n) * (root - 1n) - n) ||
+		absDiff > bigAbs((root + 1n) * (root + 1n) - n))
+		throw new Error(`Square Root did not converge. Arrived at answer:\n${root} - which when squared, gives:\n${root * root} instead of\n${n}`);
+	return root.toString();
 }

@@ -376,9 +376,9 @@ function createBitNodeInfo(id: number, name: string, completionLevel?: number): 
 }
 
 function createDependencyRequirement(
-    type: DependencyRequirement['type'], 
-    description: string, 
-    critical = false, 
+    type: DependencyRequirement['type'],
+    description: string,
+    critical = false,
     level?: number
 ): DependencyRequirement {
     return { type, description, level, critical };
@@ -407,7 +407,7 @@ const PROGRESSION_DEPENDENCIES: ProgressionDependency[] = [
             createDependencyRequirement('EXPERIENCE', "Understanding of stat growth acceleration", true),
             createDependencyRequirement('PREPARATION', "Knowledge of corporate mechanics", false)
         ],
-        type: 'RECOMMENDED', 
+        type: 'RECOMMENDED',
         reason: "Intelligence dramatically speeds up corporate skill training"
     },
 
@@ -435,13 +435,13 @@ const RECOMMENDED_PROGRESSION_PATHS = {
 
 function getOptimalNextBitNode(completedSourceFiles: number[], playerGoal: keyof typeof RECOMMENDED_PROGRESSION_PATHS = 'newPlayer'): number | null {
     const path = RECOMMENDED_PROGRESSION_PATHS[playerGoal];
-    
+
     for (const bitNode of path) {
         if (!completedSourceFiles.includes(bitNode)) {
             return bitNode;
         }
     }
-    
+
     return null; // All BitNodes completed
 }
 
@@ -452,7 +452,7 @@ function getBitNodeDependencies(targetBitNode: number): ProgressionDependency[] 
 function isReadyForBitNode(targetBitNode: number, completedSourceFiles: { id: number, level: number }[]): { ready: boolean, missingDependencies: string[] } {
     const dependencies = getBitNodeDependencies(targetBitNode);
     const missingDependencies: string[] = [];
-    
+
     for (const dep of dependencies) {
         if (dep.type === 'REQUIRED') {
             for (const req of dep.dependencies) {
@@ -472,7 +472,7 @@ function isReadyForBitNode(targetBitNode: number, completedSourceFiles: { id: nu
             }
         }
     }
-    
+
     return {
         ready: missingDependencies.length === 0,
         missingDependencies
@@ -638,15 +638,15 @@ function parseCommand(args: string[]): { command: GuideCommand | null, parameter
     }
 
     const commandName = args[0].toLowerCase();
-    const command = GUIDE_COMMANDS.find(cmd => 
+    const command = GUIDE_COMMANDS.find(cmd =>
         cmd.name === commandName || cmd.aliases.includes(commandName)
     );
 
     if (!command) {
-        return { 
-            command: null, 
-            parameters: {}, 
-            errors: [`Unknown command: ${commandName}. Available commands: ${GUIDE_COMMANDS.map(c => c.name).join(', ')}`] 
+        return {
+            command: null,
+            parameters: {},
+            errors: [`Unknown command: ${commandName}. Available commands: ${GUIDE_COMMANDS.map(c => c.name).join(', ')}`]
         };
     }
 
@@ -658,7 +658,7 @@ function parseCommand(args: string[]): { command: GuideCommand | null, parameter
     for (const param of command.parameters) {
         if (argIndex < args.length) {
             const argValue = args[argIndex];
-            
+
             if (param.type === 'number') {
                 const num = parseInt(argValue);
                 parameters[param.name] = isNaN(num) ? argValue : num;
@@ -678,10 +678,10 @@ function parseCommand(args: string[]): { command: GuideCommand | null, parameter
 
 function getCommandHelp(commandName?: string): string {
     if (commandName) {
-        const command = GUIDE_COMMANDS.find(cmd => 
+        const command = GUIDE_COMMANDS.find(cmd =>
             cmd.name === commandName || cmd.aliases.includes(commandName)
         );
-        
+
         if (!command) {
             return `Unknown command: ${commandName}`;
         }
@@ -690,7 +690,7 @@ function getCommandHelp(commandName?: string): string {
         if (command.aliases.length > 0) {
             help += `Aliases: ${command.aliases.join(', ')}\n`;
         }
-        
+
         help += '\nParameters:\n';
         for (const param of command.parameters) {
             const required = param.required ? ' (required)' : '';
@@ -698,7 +698,7 @@ function getCommandHelp(commandName?: string): string {
             const options = param.options ? ` (options: ${param.options.join(', ')})` : '';
             help += `  --${param.name}: ${param.description}${required}${defaultVal}${options}\n`;
         }
-        
+
         return help;
     } else {
         let help = 'Bitburner Multi-BitNode Augmentation Guide\n\nAvailable commands:\n';
@@ -725,17 +725,17 @@ class AdvancedAnalytics {
 
     analyzeAugmentations(budget?: number, focusAreas?: string[]): any[] {
         let augments = ENHANCED_AUGMENT_DATABASE;
-        
+
         if (budget) {
             augments = augments.filter(aug => aug.baseCost <= budget);
         }
-        
+
         if (focusAreas) {
-            augments = augments.filter(aug => 
+            augments = augments.filter(aug =>
                 aug.categories.some(cat => focusAreas.includes(cat.category))
             );
         }
-        
+
         return augments.map(aug => ({
             name: aug.name,
             roi: this.calculateROI(aug),
@@ -769,7 +769,7 @@ class AdvancedAnalytics {
     displayAugmentAnalysis(ns: NS, analyses: any[], limit = 10): void {
         ns.tprint("\n🔬 AUGMENTATION ROI ANALYSIS");
         ns.tprint("═".repeat(50));
-        
+
         analyses.slice(0, limit).forEach((analysis, index) => {
             ns.tprint(`${index + 1}. ${analysis.name}`);
             ns.tprint(`   ROI: ${analysis.roi.toFixed(2)} | Efficiency: ${analysis.efficiency.toFixed(2)}`);
@@ -806,7 +806,7 @@ class InteractiveProgressionPlanner {
         this.ns.tprint("═".repeat(50));
         this.ns.tprint(`Mode: ${options.mode}`);
         this.ns.tprint(`Focus Areas: ${options.focusAreas.join(', ')}`);
-        
+
         // Generate plan based on current state
         const plan = this.generatePlan(options);
         this.displayPlan(plan);
@@ -822,7 +822,7 @@ class InteractiveProgressionPlanner {
                     priority: "CRITICAL"
                 },
                 {
-                    name: "Mid Game Expansion", 
+                    name: "Mid Game Expansion",
                     duration: "8-12 hours",
                     objectives: ["Join NiteSec", "Get Neural-Retention Enhancement"],
                     priority: "HIGH"
@@ -843,7 +843,7 @@ class InteractiveProgressionPlanner {
                 this.ns.tprint(`  • ${obj}`);
             });
         });
-        
+
         this.ns.tprint(`\n⏱️ Total Estimated Time: ${plan.totalTime}`);
         this.ns.tprint("\n⚠️ Risk Factors:");
         plan.riskFactors.forEach((risk: string) => {
@@ -874,7 +874,7 @@ class AutomationIntegration {
                 when: "After joining CyberSec"
             },
             {
-                script: "faction-work.js", 
+                script: "faction-work.js",
                 description: "Automated faction reputation farming",
                 priority: "MEDIUM",
                 when: "After joining multiple factions"
@@ -885,7 +885,7 @@ class AutomationIntegration {
     executeRecommendations(recommendations: any[], maxExecutions: number): void {
         this.ns.tprint("\n🤖 AUTOMATION RECOMMENDATIONS");
         this.ns.tprint("═".repeat(50));
-        
+
         recommendations.slice(0, maxExecutions).forEach((rec, index) => {
             this.ns.tprint(`${index + 1}. ${rec.script}`);
             this.ns.tprint(`   ${rec.description}`);
@@ -961,7 +961,7 @@ const ENHANCED_AUGMENT_DATABASE: EnhancedAugmentData[] = [
         ],
         costMultiplier: 1.9
     },
-    
+
     {
         name: "Synaptic Enhancement Implant",
         factions: ["CyberSec"],
@@ -1078,7 +1078,7 @@ const BN1_AUGMENTS: StaticAugmentData[] = [
         notes: "First augment to buy. Cheap and provides hacking boost."
     },
     {
-        name: "Synaptic Enhancement Implant", 
+        name: "Synaptic Enhancement Implant",
         factions: ["CyberSec"],
         baseCost: 7500,
         repRequired: 1000,
@@ -1101,7 +1101,7 @@ const BN1_AUGMENTS: StaticAugmentData[] = [
         prereqs: [],
         notes: "Essential for combat. Helps with crime/hacking requirements."
     },
-    
+
     // HIGH PRIORITY MID GAME
     {
         name: "Neural-Retention Enhancement",
@@ -1139,7 +1139,7 @@ const BN1_AUGMENTS: StaticAugmentData[] = [
         prereqs: [],
         notes: "Major money boost. Essential for income scaling."
     },
-    
+
     // CITY FACTION UNIQUE AUGMENTS (From Steam Guide Research)
     {
         name: "CashRoot Starter Kit",
@@ -1545,7 +1545,7 @@ const BN1_AUGMENTS: StaticAugmentData[] = [
         prereqs: [],
         notes: "Illuminati unique. Most expensive but extremely powerful hacking augment."
     },
-    
+
     // LATE GAME ESSENTIALS
     {
         name: "The Red Pill",
@@ -1559,7 +1559,7 @@ const BN1_AUGMENTS: StaticAugmentData[] = [
         prereqs: [],
         notes: "Required to complete BN1.1. Need $100B+ and 2.5M rep."
     },
-    
+
     // ADDITIONAL HIGH VALUE
     {
         name: "Cranial Signal Processors - Gen I",
@@ -1598,7 +1598,7 @@ const FACTION_GUIDES: FactionGuide[] = [
         difficulty: 'EASY'
     },
     {
-        name: "NiteSec", 
+        name: "NiteSec",
         howToJoin: "Install backdoor on avmnite-02h server",
         requirements: "Hack avmnite-02h server (requires ~200 hacking skill)",
         keyAugments: ["Neural-Retention Enhancement", "CRTX42-AA Gene Modification", "Artificial Synaptic Potentiation"],
@@ -1606,7 +1606,7 @@ const FACTION_GUIDES: FactionGuide[] = [
     },
     {
         name: "The Black Hand",
-        howToJoin: "Install backdoor on I.I.I.I server", 
+        howToJoin: "Install backdoor on I.I.I.I server",
         requirements: "Hack I.I.I.I server (requires ~350 hacking skill)",
         keyAugments: ["The Black Hand", "Artificial Synaptic Potentiation"],
         difficulty: 'MEDIUM'
@@ -1629,7 +1629,7 @@ const FACTION_GUIDES: FactionGuide[] = [
     },
     {
         name: "Aevum",
-        howToJoin: "Travel to Aevum and meet requirements", 
+        howToJoin: "Travel to Aevum and meet requirements",
         requirements: "Be in Aevum, money varies by approach",
         keyAugments: ["PCMatrix"],
         difficulty: 'EASY'
@@ -1637,7 +1637,7 @@ const FACTION_GUIDES: FactionGuide[] = [
     {
         name: "Volhaven",
         howToJoin: "Travel to Volhaven and meet requirements",
-        requirements: "Be in Volhaven, money varies by approach", 
+        requirements: "Be in Volhaven, money varies by approach",
         keyAugments: ["DermaForce Particle Barrier"],
         difficulty: 'EASY'
     },
@@ -1701,7 +1701,7 @@ const FACTION_GUIDES: FactionGuide[] = [
     },
     {
         name: "The Syndicate",
-        howToJoin: "High skills and negative karma", 
+        howToJoin: "High skills and negative karma",
         requirements: "Hacking 200+, Combat 200+, Be in Aevum or Sector-12, $10M+, -90+ negative karma",
         keyAugments: ["BrachiBlades"],
         difficulty: 'MEDIUM'
@@ -1765,7 +1765,7 @@ const FACTION_GUIDES: FactionGuide[] = [
         difficulty: 'MEDIUM'
     },
     {
-        name: "KuaiGong International", 
+        name: "KuaiGong International",
         howToJoin: "Work for KuaiGong International",
         requirements: "Work for KuaiGong International company, gain company reputation",
         keyAugments: ["Photosynthetic Cells"],
@@ -1869,7 +1869,7 @@ const PROGRESSION_TIMELINE = [
 
 export async function main(ns: NS): Promise<void> {
     const args = ns.args as string[];
-    
+
     // Handle legacy compatibility - no args defaults to BN1 guide
     if (args.length === 0) {
         showMainGuide(ns);
@@ -1897,10 +1897,10 @@ export async function main(ns: NS): Promise<void> {
     ]);
 
     // Check if legacy flags are used
-    if (legacyFlags.timeline || legacyFlags.factions || legacyFlags.augments || 
-        legacyFlags.priority || legacyFlags.faction || legacyFlags.budget || 
+    if (legacyFlags.timeline || legacyFlags.factions || legacyFlags.augments ||
+        legacyFlags.priority || legacyFlags.faction || legacyFlags.budget ||
         legacyFlags["shopping-list"] || legacyFlags.export) {
-        
+
         // Handle legacy functionality
         handleLegacyCommands(ns, legacyFlags);
         return;
@@ -1908,7 +1908,7 @@ export async function main(ns: NS): Promise<void> {
 
     // Parse new command system
     const { command, parameters, errors } = parseCommand(args);
-    
+
     if (errors.length > 0) {
         ns.tprint(`❌ Errors:`);
         errors.forEach(error => ns.tprint(`  ${error}`));
@@ -1942,7 +1942,7 @@ export async function main(ns: NS): Promise<void> {
 
 function handleLegacyCommands(ns: NS, args: any): void {
     ns.clearLog();
-    
+
     if (args.timeline) {
         showProgressionTimeline(ns);
     } else if (args.factions) {
@@ -1958,7 +1958,7 @@ function handleLegacyCommands(ns: NS, args: any): void {
     } else {
         showMainGuide(ns);
     }
-    
+
     if (args.export) {
         exportData(ns);
     }
@@ -1967,77 +1967,77 @@ function handleLegacyCommands(ns: NS, args: any): void {
 function handleBitNodeCommand(ns: NS, params: any): void {
     const bitNodeId = params.id;
     const detail = params.detail || 'standard';
-    
+
     if (!BITNODE_GUIDES[bitNodeId]) {
         ns.tprint(`❌ BitNode ${bitNodeId} guide not yet implemented`);
         ns.tprint(`📋 Available BitNodes: ${Object.keys(BITNODE_GUIDES).join(', ')}`);
         return;
     }
-    
+
     showBitNodeGuide(ns, bitNodeId, detail);
 }
 
 function showBitNodeGuide(ns: NS, bitNodeId: number, detail: string): void {
     const guide = BITNODE_GUIDES[bitNodeId];
     if (!guide) return;
-    
+
     ns.tprint(`\n🎯 BitNode ${guide.id}: ${guide.name}`);
     ns.tprint(`${'='.repeat(50)}`);
-    
+
     // Source File info
     ns.tprint(`\n📁 ${guide.sourceFile.name}`);
     ns.tprint(`Priority: ${guide.sourceFile.priority}`);
     ns.tprint(`Max Level: ${guide.sourceFile.maxLevel}`);
     ns.tprint(`Description: ${guide.sourceFile.description}`);
-    
+
     if (detail === 'detailed' || detail === 'complete') {
         // Source File benefits
         ns.tprint(`\n💪 Source File Benefits:`);
         guide.sourceFile.benefits.forEach(benefit => {
             ns.tprint(`  Level ${benefit.level}: ${benefit.description}`);
         });
-        
+
         // Unlocks
         if (guide.sourceFile.unlocks.length > 0) {
             ns.tprint(`\n🔓 Unlocks: ${guide.sourceFile.unlocks.join(', ')}`);
         }
     }
-    
+
     // Difficulty overview
     ns.tprint(`\n📊 Difficulty: ${guide.difficulty.overall}`);
     ns.tprint(`New Player Friendly: ${guide.difficulty.newPlayerFriendly ? 'Yes' : 'No'}`);
     ns.tprint(`Estimated Time: ${guide.difficulty.timeToComplete} hours`);
-    
+
     // Progression phases
     ns.tprint(`\n📈 Progression Phases:`);
     guide.optimalProgression.phases.forEach(phase => {
         ns.tprint(`  Phase ${phase.phase}: ${phase.name} (${phase.estimatedTime}h)`);
         ns.tprint(`    ${phase.description}`);
-        
+
         if (detail === 'detailed' || detail === 'complete') {
             ns.tprint(`    Objectives:`);
             phase.objectives.slice(0, 3).forEach(obj => {
                 ns.tprint(`      ${obj.priority} - ${obj.description}`);
             });
-            
+
             if (phase.recommendedAugments.length > 0) {
                 ns.tprint(`    Key Augments: ${phase.recommendedAugments.slice(0, 3).join(', ')}`);
             }
         }
     });
-    
+
     ns.tprint(`\n💡 Use 'guide help' for more commands and options`);
 }
 
 function handleProgressionCommand(ns: NS, params: any): void {
     const style = params.style || 'newPlayer';
     const completed = params.completed || [];
-    
+
     ns.tprint(`\n🗺️  Optimal BitNode Progression (${style})`);
     ns.tprint(`${'='.repeat(50)}`);
-    
+
     const nextBitNode = getOptimalNextBitNode(completed, style);
-    
+
     if (nextBitNode) {
         ns.tprint(`\n🎯 Recommended Next: BitNode ${nextBitNode}`);
         if (BITNODE_GUIDES[nextBitNode]) {
@@ -2048,7 +2048,7 @@ function handleProgressionCommand(ns: NS, params: any): void {
     } else {
         ns.tprint(`\n🎉 All BitNodes completed!`);
     }
-    
+
     // Show dependencies for next BitNode
     if (nextBitNode) {
         const dependencies = getBitNodeDependencies(nextBitNode);
@@ -2079,157 +2079,157 @@ function handleAnalyticsCommand(ns: NS, params: any): void {
         intelligence: ns.getPlayer().skills.intelligence,
         money: ns.getPlayer().money
     };
-    
+
     const analytics = new AdvancedAnalytics(ns, currentStats);
-    
+
     // Generate augment analysis
     const budget = params.budget;
     const focusAreas = params.focus ? [params.focus.toUpperCase()] : undefined;
     const augmentAnalyses = analytics.analyzeAugmentations(budget, focusAreas);
-    
+
     // Generate progression analysis
     const progressionAnalytics = analytics.analyzeProgression();
-    
+
     // Display results
     analytics.displayAugmentAnalysis(ns, augmentAnalyses, 10);
     analytics.displayAnalytics(ns, progressionAnalytics);
 }
 
 function showMainGuide(ns: NS): void {
-    ns.print("═══ BITNODE 1.1 AUGMENTATION GUIDE ═══");
-    ns.print("No Singularity API required - Manual guidance");
-    ns.print("");
-    
-    ns.print("🎯 QUICK START RECOMMENDATIONS:");
-    ns.print("");
-    
+    ns.tprint("═══ BITNODE 1.1 AUGMENTATION GUIDE ═══");
+    ns.tprint("No Singularity API required - Manual guidance");
+    ns.tprint("");
+
+    ns.tprint("🎯 QUICK START RECOMMENDATIONS:");
+    ns.tprint("");
+
     // Essential early augments
-    const essentialEarly = BN1_AUGMENTS.filter(a => 
+    const essentialEarly = BN1_AUGMENTS.filter(a =>
         a.priority === 'ESSENTIAL' && a.gamePhase === 'EARLY'
     );
-    
-    ns.print("1. ESSENTIAL EARLY AUGMENTS:");
+
+    ns.tprint("1. ESSENTIAL EARLY AUGMENTS:");
     essentialEarly.forEach(aug => {
-        ns.print(`   • ${aug.name} (${aug.factions[0]})`);
-        ns.print(`     Cost: $${ns.formatNumber(aug.baseCost)} | Rep: ${ns.formatNumber(aug.repRequired)}`);
-        ns.print(`     ${aug.effects.join(', ')}`);
-        ns.print("");
+        ns.tprint(`   • ${aug.name} (${aug.factions[0]})`);
+        ns.tprint(`     Cost: $${ns.formatNumber(aug.baseCost)} | Rep: ${ns.formatNumber(aug.repRequired)}`);
+        ns.tprint(`     ${aug.effects.join(', ')}`);
+        ns.tprint("");
     });
-    
-    ns.print("2. PROGRESSION PATH:");
-    ns.print("   Phase 1: Join CyberSec → Get BitWire + Synaptic Enhancement");
-    ns.print("   Phase 2: Join Slum Snakes → Get Augmented Targeting I");
-    ns.print("   Phase 3: Join NiteSec → Get Neural-Retention Enhancement");
-    ns.print("   Phase 4: Scale up → DataJack and other high-value augments");
-    ns.print("   Phase 5: End game → Join Daedalus → Get Red Pill");
-    ns.print("");
-    
-    ns.print("3. COMMANDS:");
-    ns.print("   --timeline : See detailed progression guide");
-    ns.print("   --factions : See how to join each faction");
-    ns.print("   --augments : See full augmentation database");
-    ns.print("");
-    
-    ns.print("💡 TIP: Since this is BN1.1, focus on hacking augments");
-    ns.print("    Combat augments are only needed for faction requirements.");
+
+    ns.tprint("2. PROGRESSION PATH:");
+    ns.tprint("   Phase 1: Join CyberSec → Get BitWire + Synaptic Enhancement");
+    ns.tprint("   Phase 2: Join Slum Snakes → Get Augmented Targeting I");
+    ns.tprint("   Phase 3: Join NiteSec → Get Neural-Retention Enhancement");
+    ns.tprint("   Phase 4: Scale up → DataJack and other high-value augments");
+    ns.tprint("   Phase 5: End game → Join Daedalus → Get Red Pill");
+    ns.tprint("");
+
+    ns.tprint("3. COMMANDS:");
+    ns.tprint("   --timeline : See detailed progression guide");
+    ns.tprint("   --factions : See how to join each faction");
+    ns.tprint("   --augments : See full augmentation database");
+    ns.tprint("");
+
+    ns.tprint("💡 TIP: Since this is BN1.1, focus on hacking augments");
+    ns.tprint("    Combat augments are only needed for faction requirements.");
 }
 
 function showProgressionTimeline(ns: NS): void {
-    ns.print("═══ BN1.1 AUGMENTATION PROGRESSION TIMELINE ═══");
-    ns.print("");
-    
+    ns.tprint("═══ BN1.1 AUGMENTATION PROGRESSION TIMELINE ═══");
+    ns.tprint("");
+
     PROGRESSION_TIMELINE.forEach((phase, index) => {
-        ns.print(`${index + 1}. ${phase.phase.toUpperCase()}`);
-        ns.print(`   Goals: ${phase.goals.join(', ')}`);
-        ns.print(`   Target Augments: ${phase.augments.join(', ')}`);
-        ns.print("   Actions:");
+        ns.tprint(`${index + 1}. ${phase.phase.toUpperCase()}`);
+        ns.tprint(`   Goals: ${phase.goals.join(', ')}`);
+        ns.tprint(`   Target Augments: ${phase.augments.join(', ')}`);
+        ns.tprint("   Actions:");
         phase.actions.forEach(action => {
-            ns.print(`     • ${action}`);
+            ns.tprint(`     • ${action}`);
         });
-        ns.print("");
+        ns.tprint("");
     });
-    
-    ns.print("🎯 ESTIMATED COSTS BY PHASE:");
-    ns.print("   Phase 1: ~$20k (first two augments)");
-    ns.print("   Phase 2: ~$100k (combat + processing augments)"); 
-    ns.print("   Phase 3: ~$500k (Neural-Retention + DataJack)");
-    ns.print("   Phase 4: $100B+ (Red Pill requirements)");
-    ns.print("");
-    
-    ns.print("⏱️  ESTIMATED TIMELINE:");
-    ns.print("   Phases 1-2: First few hours of gameplay");
-    ns.print("   Phase 3: Mid-game scaling (depends on HWGW setup)");
-    ns.print("   Phase 4: Late game (requires significant automation)");
+
+    ns.tprint("🎯 ESTIMATED COSTS BY PHASE:");
+    ns.tprint("   Phase 1: ~$20k (first two augments)");
+    ns.tprint("   Phase 2: ~$100k (combat + processing augments)");
+    ns.tprint("   Phase 3: ~$500k (Neural-Retention + DataJack)");
+    ns.tprint("   Phase 4: $100B+ (Red Pill requirements)");
+    ns.tprint("");
+
+    ns.tprint("⏱️  ESTIMATED TIMELINE:");
+    ns.tprint("   Phases 1-2: First few hours of gameplay");
+    ns.tprint("   Phase 3: Mid-game scaling (depends on HWGW setup)");
+    ns.tprint("   Phase 4: Late game (requires significant automation)");
 }
 
 function showFactionGuide(ns: NS): void {
-    ns.print("═══ BN1.1 FACTION JOINING GUIDE ═══");
-    ns.print("");
-    
+    ns.tprint("═══ BN1.1 FACTION JOINING GUIDE ═══");
+    ns.tprint("");
+
     FACTION_GUIDES.forEach(faction => {
-        const difficulty = faction.difficulty === 'EASY' ? '🟢' : 
-                          faction.difficulty === 'MEDIUM' ? '🟡' : '🔴';
-        
-        ns.print(`${difficulty} ${faction.name.toUpperCase()}`);
-        ns.print(`   How to Join: ${faction.howToJoin}`);
-        ns.print(`   Requirements: ${faction.requirements}`);
-        ns.print(`   Key Augments: ${faction.keyAugments.join(', ')}`);
-        ns.print("");
+        const difficulty = faction.difficulty === 'EASY' ? '🟢' :
+            faction.difficulty === 'MEDIUM' ? '🟡' : '🔴';
+
+        ns.tprint(`${difficulty} ${faction.name.toUpperCase()}`);
+        ns.tprint(`   How to Join: ${faction.howToJoin}`);
+        ns.tprint(`   Requirements: ${faction.requirements}`);
+        ns.tprint(`   Key Augments: ${faction.keyAugments.join(', ')}`);
+        ns.tprint("");
     });
-    
-    ns.print("📋 JOINING ORDER RECOMMENDATION:");
-    ns.print("   1. CyberSec (easy, great starter augments)");
-    ns.print("   2. Slum Snakes/Tetrads (combat augments)");
-    ns.print("   3. NiteSec (Neural-Retention Enhancement)");
-    ns.print("   4. The Black Hand (more options for DataJack)");
-    ns.print("   5. BitRunners (higher level, more augment options)");
-    ns.print("   6. Daedalus (end game, Red Pill)");
+
+    ns.tprint("📋 JOINING ORDER RECOMMENDATION:");
+    ns.tprint("   1. CyberSec (easy, great starter augments)");
+    ns.tprint("   2. Slum Snakes/Tetrads (combat augments)");
+    ns.tprint("   3. NiteSec (Neural-Retention Enhancement)");
+    ns.tprint("   4. The Black Hand (more options for DataJack)");
+    ns.tprint("   5. BitRunners (higher level, more augment options)");
+    ns.tprint("   6. Daedalus (end game, Red Pill)");
 }
 
 function showAugmentDatabase(ns: NS, priorityFilter: string): void {
-    ns.print("═══ BN1.1 AUGMENTATION DATABASE ═══");
-    ns.print("");
-    
+    ns.tprint("═══ BN1.1 AUGMENTATION DATABASE ═══");
+    ns.tprint("");
+
     let augments = BN1_AUGMENTS;
     if (priorityFilter) {
         augments = augments.filter(a => a.priority === priorityFilter.toUpperCase());
-        ns.print(`Filtered by priority: ${priorityFilter.toUpperCase()}`);
-        ns.print("");
+        ns.tprint(`Filtered by priority: ${priorityFilter.toUpperCase()}`);
+        ns.tprint("");
     }
-    
+
     // Group by priority
     const priorities = ['ESSENTIAL', 'HIGH', 'MEDIUM', 'LOW'];
-    
+
     priorities.forEach(priority => {
         const categoryAugments = augments.filter(a => a.priority === priority);
         if (categoryAugments.length === 0) return;
-        
-        ns.print(`${priority} PRIORITY:`);
-        ns.print("─".repeat(40));
-        
+
+        ns.tprint(`${priority} PRIORITY:`);
+        ns.tprint("─".repeat(40));
+
         categoryAugments.forEach(aug => {
-            ns.print(`📦 ${aug.name}`);
-            ns.print(`   Factions: ${aug.factions.join(', ')}`);
-            ns.print(`   Cost: $${ns.formatNumber(aug.baseCost)} | Rep: ${ns.formatNumber(aug.repRequired)}`);
-            ns.print(`   Effects: ${aug.effects.join(', ')}`);
-            ns.print(`   Phase: ${aug.gamePhase} | Notes: ${aug.notes}`);
+            ns.tprint(`📦 ${aug.name}`);
+            ns.tprint(`   Factions: ${aug.factions.join(', ')}`);
+            ns.tprint(`   Cost: $${ns.formatNumber(aug.baseCost)} | Rep: ${ns.formatNumber(aug.repRequired)}`);
+            ns.tprint(`   Effects: ${aug.effects.join(', ')}`);
+            ns.tprint(`   Phase: ${aug.gamePhase} | Notes: ${aug.notes}`);
             if (aug.prereqs.length > 0) {
-                ns.print(`   Prerequisites: ${aug.prereqs.join(', ')}`);
+                ns.tprint(`   Prerequisites: ${aug.prereqs.join(', ')}`);
             }
-            ns.print("");
+            ns.tprint("");
         });
     });
-    
-    ns.print("💰 COST PLANNING:");
+
+    ns.tprint("💰 COST PLANNING:");
     const totalEssential = augments
         .filter(a => a.priority === 'ESSENTIAL')
         .reduce((sum, a) => sum + a.baseCost, 0);
-    ns.print(`   Essential augments: $${ns.formatNumber(totalEssential)}`);
-    
+    ns.tprint(`   Essential augments: $${ns.formatNumber(totalEssential)}`);
+
     const totalHigh = augments
         .filter(a => a.priority === 'HIGH')
         .reduce((sum, a) => sum + a.baseCost, 0);
-    ns.print(`   + High priority: $${ns.formatNumber(totalEssential + totalHigh)}`);
+    ns.tprint(`   + High priority: $${ns.formatNumber(totalEssential + totalHigh)}`);
 }
 
 function exportData(ns: NS): void {
@@ -2245,10 +2245,10 @@ function exportData(ns: NS): void {
             totalBaseCost: BN1_AUGMENTS.reduce((sum, a) => sum + a.baseCost, 0)
         }
     };
-    
+
     ns.write("/temp/bn1-augment-guide.txt", JSON.stringify(data, null, 2), "w");
-    ns.print("📁 Data exported to /temp/bn1-augment-guide.txt");
-    
+    ns.tprint("📁 Data exported to /temp/bn1-augment-guide.txt");
+
     // Also create a simple shopping list
     const shoppingList = BN1_AUGMENTS
         .filter(a => a.priority === 'ESSENTIAL' || a.priority === 'HIGH')
@@ -2260,67 +2260,67 @@ function exportData(ns: NS): void {
             rep: a.repRequired,
             priority: a.priority
         }));
-    
+
     ns.write("/temp/augment-shopping-list.txt", JSON.stringify(shoppingList, null, 2), "w");
-    ns.print("🛒 Shopping list exported to /temp/augment-shopping-list.txt");
+    ns.tprint("🛒 Shopping list exported to /temp/augment-shopping-list.txt");
 }
 
 function showSpecificFactionGuide(ns: NS, factionName: string): void {
-    ns.print(`═══ FACTION GUIDE: ${factionName.toUpperCase()} ═══`);
-    ns.print("");
-    
+    ns.tprint(`═══ FACTION GUIDE: ${factionName.toUpperCase()} ═══`);
+    ns.tprint("");
+
     const faction = FACTION_GUIDES.find(f => f.name.toLowerCase() === factionName.toLowerCase());
     if (!faction) {
-        ns.print(`❌ Faction '${factionName}' not found!`);
-        ns.print("");
-        ns.print("Available factions:");
-        FACTION_GUIDES.forEach(f => ns.print(`  • ${f.name}`));
+        ns.tprint(`❌ Faction '${factionName}' not found!`);
+        ns.tprint("");
+        ns.tprint("Available factions:");
+        FACTION_GUIDES.forEach(f => ns.tprint(`  • ${f.name}`));
         return;
     }
-    
-    ns.print(`🏛️ ${faction.name}`);
-    ns.print(`   Difficulty: ${faction.difficulty}`);
-    ns.print(`   How to Join: ${faction.howToJoin}`);
-    ns.print(`   Requirements: ${faction.requirements}`);
-    ns.print("");
-    
+
+    ns.tprint(`🏛️ ${faction.name}`);
+    ns.tprint(`   Difficulty: ${faction.difficulty}`);
+    ns.tprint(`   How to Join: ${faction.howToJoin}`);
+    ns.tprint(`   Requirements: ${faction.requirements}`);
+    ns.tprint("");
+
     // Show faction-specific augments
-    const factionAugments = BN1_AUGMENTS.filter(aug => 
+    const factionAugments = BN1_AUGMENTS.filter(aug =>
         aug.factions.some(f => f.toLowerCase() === factionName.toLowerCase())
     );
-    
+
     if (factionAugments.length > 0) {
-        ns.print("🧬 AVAILABLE AUGMENTATIONS:");
-        ns.print("─".repeat(50));
-        
+        ns.tprint("🧬 AVAILABLE AUGMENTATIONS:");
+        ns.tprint("─".repeat(50));
+
         factionAugments
             .sort((a, b) => a.baseCost - b.baseCost)
             .forEach(aug => {
-                ns.print(`📦 ${aug.name} (${aug.priority})`);
-                ns.print(`   Cost: $${ns.formatNumber(aug.baseCost)} | Rep: ${ns.formatNumber(aug.repRequired)}`);
-                ns.print(`   Effects: ${aug.effects.join(', ')}`);
-                ns.print(`   Notes: ${aug.notes}`);
+                ns.tprint(`📦 ${aug.name} (${aug.priority})`);
+                ns.tprint(`   Cost: $${ns.formatNumber(aug.baseCost)} | Rep: ${ns.formatNumber(aug.repRequired)}`);
+                ns.tprint(`   Effects: ${aug.effects.join(', ')}`);
+                ns.tprint(`   Notes: ${aug.notes}`);
                 if (aug.prereqs.length > 0) {
-                    ns.print(`   Prerequisites: ${aug.prereqs.join(', ')}`);
+                    ns.tprint(`   Prerequisites: ${aug.prereqs.join(', ')}`);
                 }
-                ns.print("");
+                ns.tprint("");
             });
-        
+
         const totalCost = factionAugments.reduce((sum, a) => sum + a.baseCost, 0);
         const totalRep = Math.max(...factionAugments.map(a => a.repRequired));
-        ns.print("💰 FACTION SUMMARY:");
-        ns.print(`   Total augments: ${factionAugments.length}`);
-        ns.print(`   Total cost: $${ns.formatNumber(totalCost)}`);
-        ns.print(`   Max reputation needed: ${ns.formatNumber(totalRep)}`);
+        ns.tprint("💰 FACTION SUMMARY:");
+        ns.tprint(`   Total augments: ${factionAugments.length}`);
+        ns.tprint(`   Total cost: $${ns.formatNumber(totalCost)}`);
+        ns.tprint(`   Max reputation needed: ${ns.formatNumber(totalRep)}`);
     } else {
-        ns.print("❌ No unique augmentations found for this faction.");
+        ns.tprint("❌ No unique augmentations found for this faction.");
     }
 }
 
 function showBudgetFilteredAugments(ns: NS, budget: number): void {
-    ns.print(`═══ AUGMENTS WITHIN BUDGET: $${ns.formatNumber(budget)} ═══`);
-    ns.print("");
-    
+    ns.tprint(`═══ AUGMENTS WITHIN BUDGET: $${ns.formatNumber(budget)} ═══`);
+    ns.tprint("");
+
     const affordableAugments = BN1_AUGMENTS
         .filter(aug => aug.baseCost <= budget)
         .sort((a, b) => {
@@ -2331,121 +2331,121 @@ function showBudgetFilteredAugments(ns: NS, budget: number): void {
             if (aPriority !== bPriority) return aPriority - bPriority;
             return a.baseCost - b.baseCost;
         });
-    
+
     if (affordableAugments.length === 0) {
-        ns.print("❌ No augmentations found within your budget.");
-        ns.print("💡 Try increasing your budget or focusing on cheaper early-game augments.");
+        ns.tprint("❌ No augmentations found within your budget.");
+        ns.tprint("💡 Try increasing your budget or focusing on cheaper early-game augments.");
         return;
     }
-    
-    ns.print(`Found ${affordableAugments.length} augmentations within budget:`);
-    ns.print("");
-    
+
+    ns.tprint(`Found ${affordableAugments.length} augmentations within budget:`);
+    ns.tprint("");
+
     // Group by priority for better organization
     const priorities = ['ESSENTIAL', 'HIGH', 'MEDIUM', 'LOW'];
-    
+
     priorities.forEach(priority => {
         const categoryAugments = affordableAugments.filter(a => a.priority === priority);
         if (categoryAugments.length === 0) return;
-        
-        ns.print(`${priority} PRIORITY (${categoryAugments.length} augments):`);
-        ns.print("─".repeat(40));
-        
+
+        ns.tprint(`${priority} PRIORITY (${categoryAugments.length} augments):`);
+        ns.tprint("─".repeat(40));
+
         categoryAugments.forEach(aug => {
             const costPercent = ((aug.baseCost / budget) * 100).toFixed(1);
-            ns.print(`📦 ${aug.name}`);
-            ns.print(`   Cost: $${ns.formatNumber(aug.baseCost)} (${costPercent}% of budget)`);
-            ns.print(`   Factions: ${aug.factions.join(', ')}`);
-            ns.print(`   Effects: ${aug.effects.join(', ')}`);
-            ns.print(`   Rep Required: ${ns.formatNumber(aug.repRequired)}`);
-            ns.print("");
+            ns.tprint(`📦 ${aug.name}`);
+            ns.tprint(`   Cost: $${ns.formatNumber(aug.baseCost)} (${costPercent}% of budget)`);
+            ns.tprint(`   Factions: ${aug.factions.join(', ')}`);
+            ns.tprint(`   Effects: ${aug.effects.join(', ')}`);
+            ns.tprint(`   Rep Required: ${ns.formatNumber(aug.repRequired)}`);
+            ns.tprint("");
         });
     });
-    
+
     const totalCost = affordableAugments.reduce((sum, a) => sum + a.baseCost, 0);
     const remainingBudget = budget - totalCost;
-    
-    ns.print("💰 BUDGET ANALYSIS:");
-    ns.print(`   Total cost if buying all: $${ns.formatNumber(totalCost)}`);
-    ns.print(`   Remaining budget: $${ns.formatNumber(remainingBudget)}`);
-    ns.print(`   Budget utilization: ${((totalCost / budget) * 100).toFixed(1)}%`);
+
+    ns.tprint("💰 BUDGET ANALYSIS:");
+    ns.tprint(`   Total cost if buying all: $${ns.formatNumber(totalCost)}`);
+    ns.tprint(`   Remaining budget: $${ns.formatNumber(remainingBudget)}`);
+    ns.tprint(`   Budget utilization: ${((totalCost / budget) * 100).toFixed(1)}%`);
 }
 
 function showOptimizedShoppingList(ns: NS): void {
-    ns.print("═══ OPTIMIZED AUGMENTATION SHOPPING LIST ═══");
-    ns.print("Ordered by cost-effectiveness and progression logic");
-    ns.print("");
-    
+    ns.tprint("═══ OPTIMIZED AUGMENTATION SHOPPING LIST ═══");
+    ns.tprint("Ordered by cost-effectiveness and progression logic");
+    ns.tprint("");
+
     // Create a progression-optimized shopping list
     const shoppingList = [...BN1_AUGMENTS]
         .filter(aug => aug.priority === 'ESSENTIAL' || aug.priority === 'HIGH')
         .sort((a, b) => {
             // Custom sorting for optimal progression:
             // 1. Essential early game first
-            if (a.priority === 'ESSENTIAL' && a.gamePhase === 'EARLY' && 
+            if (a.priority === 'ESSENTIAL' && a.gamePhase === 'EARLY' &&
                 !(b.priority === 'ESSENTIAL' && b.gamePhase === 'EARLY')) return -1;
-            if (b.priority === 'ESSENTIAL' && b.gamePhase === 'EARLY' && 
+            if (b.priority === 'ESSENTIAL' && b.gamePhase === 'EARLY' &&
                 !(a.priority === 'ESSENTIAL' && a.gamePhase === 'EARLY')) return 1;
-                
+
             // 2. Then by game phase
             const phaseOrder = { 'EARLY': 0, 'MID': 1, 'LATE': 2 };
             const aPhase = phaseOrder[a.gamePhase];
             const bPhase = phaseOrder[b.gamePhase];
             if (aPhase !== bPhase) return aPhase - bPhase;
-            
+
             // 3. Then by priority
             const priorityOrder = { 'ESSENTIAL': 0, 'HIGH': 1, 'MEDIUM': 2, 'LOW': 3 };
             const aPriority = priorityOrder[a.priority];
             const bPriority = priorityOrder[b.priority];
             if (aPriority !== bPriority) return aPriority - bPriority;
-            
+
             // 4. Finally by cost (cheaper first within same priority/phase)
             return a.baseCost - b.baseCost;
         });
-    
+
     let runningTotal = 0;
     let currentPhase = '';
-    
+
     shoppingList.forEach((aug, index) => {
         if (aug.gamePhase !== currentPhase) {
             currentPhase = aug.gamePhase;
-            ns.print(`\n🎯 ${currentPhase} GAME PHASE:`);
-            ns.print("─".repeat(50));
+            ns.tprint(`\n🎯 ${currentPhase} GAME PHASE:`);
+            ns.tprint("─".repeat(50));
         }
-        
+
         runningTotal += aug.baseCost;
         const orderNum = (index + 1).toString().padStart(2, '0');
-        
-        ns.print(`${orderNum}. ${aug.name} [${aug.priority}]`);
-        ns.print(`    💰 Cost: $${ns.formatNumber(aug.baseCost)} (Total: $${ns.formatNumber(runningTotal)})`);
-        ns.print(`    🏛️ Faction: ${aug.factions[0]} | Rep: ${ns.formatNumber(aug.repRequired)}`);
-        ns.print(`    ⚡ Effects: ${aug.effects.join(', ')}`);
+
+        ns.tprint(`${orderNum}. ${aug.name} [${aug.priority}]`);
+        ns.tprint(`    💰 Cost: $${ns.formatNumber(aug.baseCost)} (Total: $${ns.formatNumber(runningTotal)})`);
+        ns.tprint(`    🏛️ Faction: ${aug.factions[0]} | Rep: ${ns.formatNumber(aug.repRequired)}`);
+        ns.tprint(`    ⚡ Effects: ${aug.effects.join(', ')}`);
         if (aug.prereqs.length > 0) {
-            ns.print(`    📋 Prerequisites: ${aug.prereqs.join(', ')}`);
+            ns.tprint(`    📋 Prerequisites: ${aug.prereqs.join(', ')}`);
         }
-        ns.print(`    📝 ${aug.notes}`);
-        ns.print("");
+        ns.tprint(`    📝 ${aug.notes}`);
+        ns.tprint("");
     });
-    
-    ns.print("💡 SHOPPING STRATEGY:");
-    ns.print(`   • Total augments in optimal order: ${shoppingList.length}`);
-    ns.print(`   • Total investment required: $${ns.formatNumber(runningTotal)}`);
-    ns.print(`   • Follow this order for maximum progression efficiency`);
-    ns.print(`   • Remember: Augment costs increase exponentially with each purchase!`);
-    ns.print(`   • Consider using cost multipliers (each augment increases next costs by ~1.9x)`);
-    
+
+    ns.tprint("💡 SHOPPING STRATEGY:");
+    ns.tprint(`   • Total augments in optimal order: ${shoppingList.length}`);
+    ns.tprint(`   • Total investment required: $${ns.formatNumber(runningTotal)}`);
+    ns.tprint(`   • Follow this order for maximum progression efficiency`);
+    ns.tprint(`   • Remember: Augment costs increase exponentially with each purchase!`);
+    ns.tprint(`   • Consider using cost multipliers (each augment increases next costs by ~1.9x)`);
+
     // Calculate with multipliers
     let multipliedTotal = 0;
     let multiplier = 1;
     const COST_MULTIPLIER = 1.9; // Approximate Bitburner augment cost multiplier
-    
+
     shoppingList.forEach(aug => {
         multipliedTotal += aug.baseCost * multiplier;
         multiplier *= COST_MULTIPLIER;
     });
-    
-    ns.print("");
-    ns.print("⚠️  REALISTIC COST ESTIMATION (with multipliers):");
-    ns.print(`   • Actual total cost: $${ns.formatNumber(multipliedTotal)}`);
-    ns.print(`   • This assumes ~1.9x cost increase per augment purchased`);
+
+    ns.tprint("");
+    ns.tprint("⚠️  REALISTIC COST ESTIMATION (with multipliers):");
+    ns.tprint(`   • Actual total cost: $${ns.formatNumber(multipliedTotal)}`);
+    ns.tprint(`   • This assumes ~1.9x cost increase per augment purchased`);
 }
