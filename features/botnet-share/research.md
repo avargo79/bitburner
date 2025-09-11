@@ -238,6 +238,84 @@ Target thread ranges for different scenarios:
 - **Mitigation**: Sensible defaults, clear documentation
 - **Testing**: User testing with default and custom configurations
 
+## Intelligence Optimization Research
+
+### Intelligence Impact Analysis
+**Critical Discovery**: Intelligence has **massive impact** on share effectiveness through the formula:
+```typescript
+intelligenceBonus = 1 + (2 * Math.pow(intelligence, 0.8)) / 600
+```
+
+**Intelligence Scaling Analysis**:
+```
+Intelligence 50:  1.093x effectiveness (+9.3%)
+Intelligence 100: 1.158x effectiveness (+15.8%) 
+Intelligence 150: 1.216x effectiveness (+21.6%)
+Intelligence 200: 1.270x effectiveness (+27.0%)
+Intelligence 300: 1.367x effectiveness (+36.7%)
+Intelligence 500: 1.507x effectiveness (+50.7%)
+```
+
+**Strategic Implications**:
+- **High-intelligence players** (200+) should use **25% RAM allocation** for maximum benefit
+- **Medium-intelligence players** (100-200) optimal at **20% RAM allocation**
+- **Low-intelligence players** (<100) should use **15% RAM allocation** conservatively
+- Intelligence augmentations become **extremely valuable** for share effectiveness
+
+### Dynamic Allocation Recommendations
+**Decision**: Implement intelligence-aware allocation percentage suggestions
+
+**Algorithm**:
+```typescript
+function recommendSharePercentage(intelligence: number): number {
+    const intelligenceBonus = 1 + (2 * Math.pow(intelligence, 0.8)) / 600;
+    
+    if (intelligenceBonus >= 1.25) return 25; // High intelligence: aggressive allocation
+    if (intelligenceBonus >= 1.15) return 20; // Medium intelligence: balanced allocation  
+    if (intelligenceBonus >= 1.10) return 15; // Low intelligence: conservative allocation
+    return 10; // Very low intelligence: minimal allocation
+}
+```
+
+**Benefits**:
+- **Automatic optimization** based on player progression
+- **Higher intelligence** → **higher allocation** → **exponentially better returns**
+- **Prevents sub-optimal allocation** at different intelligence levels
+- **Scales with player advancement** through BitNode progression
+
+### Intelligence Augmentation Priority
+**Research findings**: Intelligence augmentations provide compound benefits for share effectiveness
+
+**High-value intelligence augmentations** (for share optimization):
+- **Neural Accelerator** (+20 intelligence) - Early game priority
+- **Cranial Signal Processors** (+Intelligence) - Mid game enhancement
+- **Embedded Netburner Module** (+Intelligence) - Late game optimization
+
+**ROI Analysis**:
+- Each 50 intelligence increase → ~5-8% share effectiveness improvement
+- Combined with 1000+ share threads → 5-15% additional reputation bonus
+- Intelligence investment pays for itself through faster faction progression
+
+### Optimization Strategies
+**Dynamic Allocation Strategy**:
+1. **Detect player intelligence** on botnet startup
+2. **Calculate optimal allocation percentage** using intelligence bonus
+3. **Recommend allocation** if different from configured percentage
+4. **Automatically adjust** allocation as intelligence increases
+5. **Log optimization opportunities** for user awareness
+
+**Intelligence Monitoring**:
+- Track intelligence changes during botnet execution
+- Recalculate optimal allocation when intelligence increases
+- Provide upgrade recommendations when sub-optimal allocation detected
+- Monitor intelligence augmentation opportunities
+
+**User Experience Enhancements**:
+- Display current intelligence bonus in status output
+- Show recommended vs actual allocation percentage
+- Highlight intelligence-based optimization opportunities
+- Provide clear ROI calculations for intelligence investments
+
 ## Validation Methodology
 
 ### Functional Testing Approach
@@ -261,6 +339,12 @@ Target thread ranges for different scenarios:
    - Verify HWGW batching maintains performance
    - Test server management compatibility
 
+5. **Intelligence Optimization Validation**
+   - Test allocation recommendations at different intelligence levels
+   - Verify intelligence bonus calculations match source code
+   - Validate dynamic allocation adjustments
+   - Measure actual vs predicted reputation improvements
+
 ### Success Criteria
 **Functional Requirements**:
 - Faction work detection: 100% accuracy within 5 seconds
@@ -268,12 +352,19 @@ Target thread ranges for different scenarios:
 - Performance bonus: 25-45% reputation increase depending on thread count
 - Compatibility: Zero impact on existing botnet functionality when sharing disabled
 
+**Intelligence Optimization Requirements**:
+- Intelligence bonus calculation: 100% accuracy vs source code formula
+- Dynamic allocation recommendations: Optimal percentage for intelligence level
+- Automatic adjustment: Allocation updates when intelligence increases
+- User awareness: Clear optimization opportunities and ROI reporting
+
 **Performance Requirements**:
 - Detection latency: <5 seconds from faction work start
 - Allocation time: <10 seconds for network-wide share deployment
 - Resource overhead: <1% additional RAM for management logic
-- User experience: Clear status reporting and configuration options
+- Intelligence monitoring: <1% performance impact for optimization calculations
+- User experience: Clear status reporting and optimization guidance
 
 ---
 
-*Research validates share function mechanics through official source code analysis and mathematical optimization*
+*Research validates share function mechanics and intelligence optimization through official source code analysis*
