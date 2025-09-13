@@ -76,14 +76,15 @@ interface BatchTracker {
 }
 
 interface BatchEvent {
-  type: 'hack' | 'grow' | 'weaken';
+  type: 'hack' | 'grow' | 'weaken' | 'share';
   batchId: string;
   timestamp: number;
   threads: number;
   success: boolean;
-  value: number; // money for hack, multiplier for grow, security for weaken
+  value: number; // money for hack, multiplier for grow, security for weaken, threads for share
   server: string;
   target: string;
+  shareEvent?: 'share_started' | 'share_completed' | 'share_update'; // Optional field for share event type
 }
 
 interface BatchStats {
@@ -401,7 +402,7 @@ class BotnetUtilities {
       }
 
       const currentMoneyRatio = maxMoney > 0 ? currentMoney / maxMoney : 0;
-      
+
       // Skip servers with very low current money (less than 5% unless we're growing them)
       if (currentMoneyRatio < 0.05 && currentMoneyRatio < config.targetMoneyDepletedThreshold) {
         return null;
@@ -419,7 +420,7 @@ class BotnetUtilities {
       const expectedMoney = Math.max(currentMoney, maxMoney * Math.max(currentMoneyRatio, 0.1));
       const timeToHack = Math.max(hackTime, growTime, weakenTime);
       const moneyPerSecond = (expectedMoney * hackChance) / (timeToHack / 1000);
-      
+
       // Penalize efficiency for depleted servers heavily
       const moneyPenalty = Math.max(0.1, currentMoneyRatio);
       const efficiencyScore = moneyPerSecond * hackChance * moneyPenalty * (1 / Math.max(hackLevel / playerHackLevel, 0.1));
@@ -493,7 +494,7 @@ class BotnetUtilities {
   } {
     // Safety check: limit batchSize to prevent unrealistic calculations
     const safeBatchSize = Math.min(batchSize, 1000);
-    
+
     const hackThreads = Math.max(1, Math.floor(safeBatchSize * config.hackPercentage));
 
     const moneyStolen = ns.hackAnalyze(target) * hackThreads;
@@ -501,7 +502,7 @@ class BotnetUtilities {
     // Never steal more than 95% to ensure growth calculation remains valid
     const safemoneyStolen = Math.min(moneyStolen, 0.95);
     const growthNeeded = 1 / (1 - safemoneyStolen);
-    
+
     // Add safety check for grow threads calculation
     let growThreads;
     try {
@@ -549,7 +550,7 @@ class BotnetUtilities {
     for (let iterations = 0; iterations < 15; iterations++) { // Reduced iterations
       const testSize = Math.floor((minSize + maxSize) / 2);
       const threads = BotnetUtilities.calculateHWGWThreads(ns, target, testSize, config);
-      
+
       // Add safety check for unrealistic thread counts
       const totalThreads = threads.hackThreads + threads.growThreads + threads.weakenHackThreads + threads.weakenGrowThreads;
       if (totalThreads > 50000) {
@@ -557,8 +558,8 @@ class BotnetUtilities {
         maxSize = Math.floor(testSize * 0.1);
         continue;
       }
-      
-      const totalRAMNeeded = 
+
+      const totalRAMNeeded =
         threads.hackThreads * scriptCosts.hack +
         threads.growThreads * scriptCosts.grow +
         threads.weakenHackThreads * scriptCosts.weaken +
@@ -964,7 +965,7 @@ class ProfessionalWaveScheduler {
           if (!this.ns.fileExists(scriptName, server.name)) {
             this.logger.debug(`Copying ${scriptName} to ${server.name}`);
             await this.ns.scp([scriptName], server.name);
-            
+
             // Verify the copy succeeded
             if (!this.ns.fileExists(scriptName, server.name)) {
               this.logger.error(`Failed to copy ${scriptName} to ${server.name}`);
@@ -1003,14 +1004,14 @@ class ProfessionalWaveScheduler {
 
     if (remainingThreads > 0) {
       this.logger.error(`Could only launch ${threads - remainingThreads}/${threads} ${scriptType} threads - insufficient RAM across network`);
-      
+
       // Additional diagnostic information
       const totalRAMAvailable = serversWithRAM.reduce((sum, s) => sum + s.availableRAM, 0);
       const estimatedRAMNeeded = remainingThreads * 1.75;
       this.logger.error(`  Total network RAM available: ${totalRAMAvailable.toFixed(1)}GB`);
       this.logger.error(`  RAM needed for remaining threads: ${estimatedRAMNeeded.toFixed(1)}GB`);
       this.logger.error(`  Servers checked: ${serversWithRAM.length}`);
-      
+
       return false;
     }
 
@@ -1233,7 +1234,7 @@ class BotnetTargetManager {
 
     // Evaluate more frequently if utilization is low (enables faster target rotation)
     const utilizationRatio = this.calculateCurrentUtilizationRatio();
-    const dynamicInterval = utilizationRatio < 0.6 ? 
+    const dynamicInterval = utilizationRatio < 0.6 ?
       this.config.targetEvaluationInterval * 0.5 : // 50% faster when underutilized
       this.config.targetEvaluationInterval;
 
@@ -1296,7 +1297,7 @@ class BotnetTargetManager {
 
     // More aggressive switching when utilization is low
     const utilizationRatio = this.calculateCurrentUtilizationRatio();
-    const improvementThreshold = utilizationRatio < 0.6 ? 
+    const improvementThreshold = utilizationRatio < 0.6 ?
       this.config.targetImprovementThreshold * 0.8 : // Lower bar when underutilized
       this.config.targetImprovementThreshold;
 
@@ -1457,8 +1458,23 @@ class BotnetEventProcessor {
       const result = parseFloat(resultStr);
       const threads = parseInt(threadsStr);
 
-      // Extract target from batchId (format: target-timestamp)
-      const target = batchId.split('-')[0];
+      // Extract target from batchId (format: target-timestamp or share-server-timestamp)
+      const target = batchId.split('-')[0] === 'share' ? batchId.split('-')[1] : batchId.split('-')[0];
+
+      // Handle share events
+      if (eventType === 'share_started' || eventType === 'share_completed' || eventType === 'share_update') {
+        return {
+          type: 'share',
+          batchId,
+          timestamp: Date.now(),
+          threads,
+          success: true,
+          value: result,
+          server: target, // For share events, target is actually the server
+          target: target,
+          shareEvent: eventType
+        };
+      }
 
       // Determine event type and success based on event type string
       let type: 'hack' | 'grow' | 'weaken';
@@ -1522,6 +1538,18 @@ class BotnetEventProcessor {
         this.stats.totalSecurityReduced += event.value;
         this.logger.info(`Weaken completed: ${event.target} -> -${event.value.toFixed(2)} security (${event.threads} threads)`);
         break;
+
+      case 'share':
+        // Share events don't belong to batches, handle them separately
+        if (event.shareEvent === 'share_started') {
+          this.logger.info(`📤 Share started: ${event.server} -> ${event.threads} threads`);
+        } else if (event.shareEvent === 'share_completed') {
+          this.logger.info(`📥 Share completed: ${event.server} -> ${event.threads} threads`);
+        } else if (event.shareEvent === 'share_update') {
+          this.logger.debug(`📊 Share update: ${event.server} -> ${event.threads} threads, ${event.value} shares completed`);
+        }
+        // Note: Share statistics are tracked separately in the share management system
+        break;
     }
   }
 }
@@ -1553,6 +1581,10 @@ class BotnetController {
   private lastBatchTime: number;
   private isShuttingDown: boolean;
 
+  // Share script management
+  private enableSharing: boolean;
+  private activeShareScripts: Map<string, number>; // server -> pid
+
   constructor(ns: NS, debugMode: boolean = false) {
     this.ns = ns;
     this.config = { ...DEFAULT_BOTNET_CONFIG };
@@ -1575,6 +1607,10 @@ class BotnetController {
     this.targetPerformance = new Map();
     this.lastBatchTime = 0;
     this.isShuttingDown = false;
+
+    // Initialize share script management
+    this.enableSharing = false; // Will be set based on command line args
+    this.activeShareScripts = new Map();
 
     this.performanceMetrics = {
       startTime: Date.now(),
@@ -1631,7 +1667,7 @@ class BotnetController {
     if (debugMode) {
       this.logger.debug('🔍 DEBUG MODE ENABLED - Enhanced logging active');
     }
-   }
+  }
 
   /**
    * Deploy all remote scripts to all accessible servers
@@ -1639,12 +1675,13 @@ class BotnetController {
    */
   async deployRemoteScripts(): Promise<void> {
     this.logger.info('🚀 Deploying remote scripts to all servers...');
-    
+
     // List of all remote scripts to deploy (compiled .js versions)
     const remoteScripts = [
       '/remote/hk.js',
-      '/remote/gr.js', 
+      '/remote/gr.js',
       '/remote/wk.js',
+      '/remote/sh.js',
       '/remote/root.js'
     ];
 
@@ -1660,7 +1697,7 @@ class BotnetController {
       try {
         // Deploy all remote scripts to this server
         const copyResult = await this.ns.scp(remoteScripts, server);
-        
+
         if (copyResult) {
           deploymentCount++;
           this.logger.debug(`✅ Deployed scripts to ${server}`);
@@ -1675,7 +1712,7 @@ class BotnetController {
     }
 
     this.logger.info(`📦 Script deployment complete: ${deploymentCount} servers updated, ${errorCount} errors`);
-    
+
     // Verify deployment on a few key servers
     await this.verifyScriptDeployment(allServers.slice(0, 5));
   }
@@ -1710,7 +1747,7 @@ class BotnetController {
     while (queue.length > 0) {
       const current = queue.shift()!;
       if (visited.has(current)) continue;
-      
+
       visited.add(current);
       servers.push(current);
 
@@ -1724,6 +1761,157 @@ class BotnetController {
     }
 
     return servers;
+  }
+
+  /**
+   * Manage share scripts on servers with excess RAM
+   */
+  async manageShareScripts(): Promise<void> {
+    if (!this.enableSharing) {
+      this.logger.debug('💰 Share management: Disabled');
+      return;
+    }
+
+    // Get all servers with available RAM (minimum 4.45GB for share script)
+    const allServers = BotnetUtilities.getAllServers(this.ns).filter(s => this.ns.hasRootAccess(s));
+    const serversWithRAM = allServers.map(s => ({
+      name: s,
+      availableRAM: BotnetUtilities.getAvailableRAM(this.ns, s),
+      maxRAM: this.ns.getServerMaxRam(s),
+      usedRAM: this.ns.getServerUsedRam(s),
+      hasShareScript: this.activeShareScripts.has(s),
+      hasShareFile: this.ns.fileExists('/remote/sh.js', s)
+    }));
+
+    // Debug logging - require 4.45GB for share script
+    const SHARE_SCRIPT_RAM = 4.45;
+    const serversOver4GB = serversWithRAM.filter(s => s.availableRAM >= SHARE_SCRIPT_RAM);
+    const serversWithFile = serversWithRAM.filter(s => s.hasShareFile);
+
+    this.logger.debug(`💰 Share analysis: ${allServers.length} total servers, ${serversOver4GB.length} with ${SHARE_SCRIPT_RAM}GB+ available, ${serversWithFile.length} have sh.js`);
+
+    if (serversOver4GB.length === 0) {
+      this.logger.debug(`💰 No servers with ${SHARE_SCRIPT_RAM}GB+ available RAM for sharing`);
+      return;
+    }
+
+    if (serversWithFile.length === 0) {
+      this.logger.warn('💰 No servers have sh.js file - deployment may have failed');
+      return;
+    }
+
+    let shareScriptsLaunched = 0;
+    let shareScriptsKilled = 0;
+
+    for (const server of serversOver4GB) {
+      if (!server.hasShareFile) {
+        this.logger.debug(`💰 ${server.name}: Missing sh.js file, skipping`);
+        continue;
+      }
+
+      const SHARE_SCRIPT_RAM = 4.45; // Actual RAM cost of share script
+      const shareThreads = Math.floor(server.availableRAM / SHARE_SCRIPT_RAM);
+
+      if (shareThreads > 0 && !server.hasShareScript) {
+        // Launch share script
+        try {
+          const batchId = `share-${server.name}-${Date.now()}`;
+          this.logger.debug(`💰 Launching share on ${server.name}: ${shareThreads} threads (${server.availableRAM.toFixed(1)}GB available)`);
+
+          // Enhanced debugging - check all conditions that might cause exec failure
+          const fileExists = this.ns.fileExists('/remote/sh.js', server.name);
+          const serverMaxRam = this.ns.getServerMaxRam(server.name);
+          const serverUsedRam = this.ns.getServerUsedRam(server.name);
+          const requiredRam = shareThreads * SHARE_SCRIPT_RAM;
+          const actualAvailable = serverMaxRam - serverUsedRam;
+
+          this.logger.debug(`💰 ${server.name} Pre-exec check: file=${fileExists}, maxRam=${serverMaxRam}GB, used=${serverUsedRam}GB, available=${actualAvailable}GB, required=${requiredRam}GB`);
+
+          if (!fileExists) {
+            this.logger.warn(`💰 ${server.name}: sh.js file not found - attempting copy`);
+            const copySuccess = await this.ns.scp('/remote/sh.js', server.name);
+            this.logger.debug(`💰 ${server.name}: Copy result: ${copySuccess}`);
+          }
+
+          // Check if we have sufficient RAM
+          if (actualAvailable < requiredRam) {
+            this.logger.warn(`💰 ${server.name}: Insufficient RAM - available: ${actualAvailable.toFixed(2)}GB, required: ${requiredRam.toFixed(2)}GB`);
+            continue;
+          }
+
+          const pid = this.ns.exec('/remote/sh.js', server.name, shareThreads, batchId, 1.0);
+
+          if (pid !== 0) {
+            this.activeShareScripts.set(server.name, pid);
+            shareScriptsLaunched++;
+            this.logger.info(`✅ Started sharing on ${server.name}: ${shareThreads} threads (PID: ${pid})`);
+          } else {
+            // Enhanced failure debugging
+            const postExecFileExists = this.ns.fileExists('/remote/sh.js', server.name);
+            const postExecUsedRam = this.ns.getServerUsedRam(server.name);
+            this.logger.warn(`💰 ${server.name}: exec failed - post-check: file=${postExecFileExists}, newUsed=${postExecUsedRam}GB`);
+
+            // For servers with less than 2x share script RAM, skip retry
+            if (serverMaxRam < SHARE_SCRIPT_RAM * 2) {
+              this.logger.debug(`💰 ${server.name}: Skipping retry on small server (${serverMaxRam.toFixed(1)}GB < ${(SHARE_SCRIPT_RAM * 2).toFixed(1)}GB)`);
+              continue;
+            }
+
+            // Try with fewer threads for larger servers
+            const minThreads = Math.max(1, Math.floor(shareThreads / 2));
+            if (minThreads !== shareThreads && actualAvailable >= minThreads * SHARE_SCRIPT_RAM) {
+              this.logger.debug(`💰 ${server.name}: Retrying with ${minThreads} threads`);
+              const retryPid = this.ns.exec('/remote/sh.js', server.name, minThreads, batchId, 1.0, true);
+              if (retryPid !== 0) {
+                this.activeShareScripts.set(server.name, retryPid);
+                shareScriptsLaunched++;
+                this.logger.info(`✅ Started sharing on ${server.name}: ${minThreads} threads (PID: ${retryPid}) [retry]`);
+              } else {
+                this.logger.error(`💰 ${server.name}: Even retry with ${minThreads} threads failed`);
+              }
+            }
+          }
+        } catch (error) {
+          this.logger.error(`💰 Failed to start sharing on ${server.name}: ${error}`);
+        }
+      } else if (shareThreads === 0 && server.hasShareScript) {
+        // Kill share script when RAM is needed
+        try {
+          const pid = this.activeShareScripts.get(server.name)!;
+          this.ns.kill(pid);
+          this.activeShareScripts.delete(server.name);
+          shareScriptsKilled++;
+          this.logger.info(`🛑 Stopped sharing on ${server.name}: RAM needed for HWGW`);
+        } catch (error) {
+          this.logger.debug(`Failed to stop sharing on ${server.name}: ${error}`);
+        }
+      }
+    }
+
+    if (shareScriptsLaunched > 0 || shareScriptsKilled > 0 || this.activeShareScripts.size > 0) {
+      this.logger.info(`💰 Share management: +${shareScriptsLaunched} started, -${shareScriptsKilled} stopped (${this.activeShareScripts.size} active)`);
+    }
+  }
+
+  /**
+   * Enable or disable sharing functionality
+   */
+  setSharing(enabled: boolean): void {
+    this.enableSharing = enabled;
+    if (!enabled) {
+      // Kill all active share scripts
+      for (const [server, pid] of this.activeShareScripts) {
+        try {
+          this.ns.kill(pid);
+        } catch (error) {
+          // Ignore errors when killing
+        }
+      }
+      this.activeShareScripts.clear();
+      this.logger.info('🚫 Sharing disabled - all share scripts stopped');
+    } else {
+      this.logger.info('✅ Sharing enabled - will utilize excess RAM');
+    }
   }
 
   async run(): Promise<void> {
@@ -1780,6 +1968,9 @@ class BotnetController {
         const maxTargetsFromUtilization = this.utilizationTracker.getMaxTargets();
         this.config.maxBatches = Math.min(40, maxTargetsFromUtilization * 5); // Allow ~5 batches per target
 
+        // Manage share scripts on servers with excess RAM
+        await this.manageShareScripts();
+
         // Show dashboard
         await this.performanceTracker.showDashboard(this.targetManager);
 
@@ -1815,12 +2006,19 @@ class BotnetController {
 }
 
 // ===== MAIN FUNCTION =====
+// Usage: run botnet.js [--debug|-d] [--share|-s] [--cleanup|-c]
+//   --debug/-d:   Enable debug mode with enhanced logging
+//   --share/-s:   Enable automatic sharing on servers with excess RAM
+//   --cleanup/-c: Clean up remote scripts and exit
 
 export async function main(ns: NS): Promise<void> {
   ns.disableLog('ALL');
 
   // Check for debug flag
   const debugMode = ns.args.includes('--debug') || ns.args.includes('-d');
+
+  // Check for share flag
+  const shareMode = ns.args.includes('--share') || ns.args.includes('-s');
 
   // Check for cleanup flag
   if (ns.args.includes('--cleanup') || ns.args.includes('-c') || ns.args.includes('--clean')) {
@@ -1829,6 +2027,11 @@ export async function main(ns: NS): Promise<void> {
   }
 
   const controller = new BotnetController(ns, debugMode);
+
+  // Enable sharing if requested
+  if (shareMode) {
+    controller.setSharing(true);
+  }
 
   // Register cleanup function to run when script exits
   ns.atExit(() => {
@@ -1848,7 +2051,7 @@ function cleanupRemoteScriptsSync(ns: NS): void {
 
   let killedCount = 0;
   let totalScanned = 0;
-  const remoteScripts = ['remote/hk.js', 'remote/gr.js', 'remote/wk.js'];
+  const remoteScripts = ['remote/hk.js', 'remote/gr.js', 'remote/wk.js', 'remote/sh.js'];
 
   ns.tprint(`🔍 Scanning ${servers.length} servers for remote scripts...`);
 
@@ -1859,9 +2062,7 @@ function cleanupRemoteScriptsSync(ns: NS): void {
       // Get all running scripts on this server for debugging
       const runningScripts = ns.ps(server);
       const botnetScripts = runningScripts.filter(script =>
-        script.filename.includes('remote/hk.js') ||
-        script.filename.includes('remote/gr.js') ||
-        script.filename.includes('remote/wk.js')
+        script.filename.startsWith('remote/')
       );
 
       if (botnetScripts.length > 0) {
