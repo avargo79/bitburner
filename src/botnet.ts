@@ -186,9 +186,9 @@ const DEFAULT_BOTNET_CONFIG: BotnetConfiguration = {
   // Performance tuning
   maxEventsPerCycle: 50,
   maxActiveBatches: 15,
-  batchSize: 25,
-  dynamicBatchSizeMin: 10,
-  dynamicBatchSizeMax: 100,
+  batchSize: 10,
+  dynamicBatchSizeMin: 5,
+  dynamicBatchSizeMax: 50,
   dynamicBatchSizeMultiplier: 1.2,
   maxRAMUtilization: 0.8,
 
@@ -347,6 +347,7 @@ class BotnetUtilities {
     const visited = new Set<string>();
     const queue = ['home'];
 
+    // Discover network-connected servers
     while (queue.length > 0) {
       const current = queue.shift()!;
       if (visited.has(current)) continue;
@@ -362,6 +363,16 @@ class BotnetUtilities {
       } catch (error) {
         // Skip servers we can't scan
       }
+    }
+
+    // Add purchased servers (not connected to network topology)
+    try {
+      const purchasedServers = ns.getPurchasedServers();
+      for (const server of purchasedServers) {
+        visited.add(server);
+      }
+    } catch (error) {
+      // Continue if we can't get purchased servers
     }
 
     return Array.from(visited);
@@ -390,6 +401,11 @@ class BotnetUtilities {
       }
 
       const currentMoneyRatio = maxMoney > 0 ? currentMoney / maxMoney : 0;
+      
+      // Skip servers with very low current money (less than 5% unless we're growing them)
+      if (currentMoneyRatio < 0.05 && currentMoneyRatio < config.targetMoneyDepletedThreshold) {
+        return null;
+      }
       const securityLevel = ns.getServerSecurityLevel(hostname);
       const minSecurityLevel = ns.getServerMinSecurityLevel(hostname);
 
@@ -399,10 +415,14 @@ class BotnetUtilities {
       const hackChance = ns.hackAnalyzeChance(hostname);
 
       // Calculate efficiency score
-      const expectedMoney = Math.max(currentMoney, maxMoney * 0.5); // Conservative estimate
+      // Use actual current money, not artificial 50% boost for depleted servers
+      const expectedMoney = Math.max(currentMoney, maxMoney * Math.max(currentMoneyRatio, 0.1));
       const timeToHack = Math.max(hackTime, growTime, weakenTime);
       const moneyPerSecond = (expectedMoney * hackChance) / (timeToHack / 1000);
-      const efficiencyScore = moneyPerSecond * hackChance * (1 / Math.max(hackLevel / playerHackLevel, 0.1));
+      
+      // Penalize efficiency for depleted servers heavily
+      const moneyPenalty = Math.max(0.1, currentMoneyRatio);
+      const efficiencyScore = moneyPerSecond * hackChance * moneyPenalty * (1 / Math.max(hackLevel / playerHackLevel, 0.1));
 
       const isOptimal = currentMoneyRatio >= config.moneyOptimalRatio &&
         securityLevel <= minSecurityLevel + config.securityOptimalThreshold;
@@ -471,11 +491,27 @@ class BotnetUtilities {
     weakenHackThreads: number,
     weakenGrowThreads: number
   } {
-    const hackThreads = Math.max(1, Math.floor(batchSize * config.hackPercentage));
+    // Safety check: limit batchSize to prevent unrealistic calculations
+    const safeBatchSize = Math.min(batchSize, 1000);
+    
+    const hackThreads = Math.max(1, Math.floor(safeBatchSize * config.hackPercentage));
 
     const moneyStolen = ns.hackAnalyze(target) * hackThreads;
-    const growthNeeded = 1 / (1 - moneyStolen);
-    const growThreads = Math.max(1, Math.ceil(ns.growthAnalyze(target, growthNeeded * config.growthBufferMultiplier)));
+    // Clamp moneyStolen to prevent growthAnalyze() from getting negative multiplier
+    // Never steal more than 95% to ensure growth calculation remains valid
+    const safemoneyStolen = Math.min(moneyStolen, 0.95);
+    const growthNeeded = 1 / (1 - safemoneyStolen);
+    
+    // Add safety check for grow threads calculation
+    let growThreads;
+    try {
+      const rawGrowThreads = ns.growthAnalyze(target, growthNeeded * config.growthBufferMultiplier);
+      // Cap grow threads to prevent unrealistic values
+      growThreads = Math.max(1, Math.min(Math.ceil(rawGrowThreads), 10000));
+    } catch (error) {
+      // Fallback if growthAnalyze fails
+      growThreads = hackThreads * 10; // Conservative fallback
+    }
 
     const hackSecurityIncrease = hackThreads * config.weakenHackSecurityIncrease;
     const growSecurityIncrease = growThreads * config.weakenGrowSecurityIncrease;
@@ -500,20 +536,40 @@ class BotnetUtilities {
       weaken: 1.75   // wk.js (both hack and grow weaken)
     };
 
-    // Binary search for optimal batch size
-    let minSize = config.batchSize; // Use config as minimum
-    let maxSize = 10000; // Start with reasonable upper bound
+    // Start with conservative bounds to prevent massive thread calculations
+    let minSize = Math.max(1, config.batchSize); // Use config as minimum, but at least 1
+    let maxSize = Math.min(200, Math.floor(availableForBatch / 50)); // Much more conservative max
     let optimalSize = minSize;
 
-    for (let iterations = 0; iterations < 20; iterations++) { // Limit iterations
+    // Safety check: if maxSize is too small, use a reasonable default
+    if (maxSize < minSize) {
+      maxSize = Math.max(minSize, 100);
+    }
+
+    for (let iterations = 0; iterations < 15; iterations++) { // Reduced iterations
       const testSize = Math.floor((minSize + maxSize) / 2);
       const threads = BotnetUtilities.calculateHWGWThreads(ns, target, testSize, config);
+      
+      // Add safety check for unrealistic thread counts
+      const totalThreads = threads.hackThreads + threads.growThreads + threads.weakenHackThreads + threads.weakenGrowThreads;
+      if (totalThreads > 50000) {
+        // If thread count is unrealistic, reduce maxSize dramatically
+        maxSize = Math.floor(testSize * 0.1);
+        continue;
+      }
       
       const totalRAMNeeded = 
         threads.hackThreads * scriptCosts.hack +
         threads.growThreads * scriptCosts.grow +
         threads.weakenHackThreads * scriptCosts.weaken +
         threads.weakenGrowThreads * scriptCosts.weaken;
+
+      // Add another safety check for RAM requirements
+      if (totalRAMNeeded > availableForBatch * 2) {
+        // If RAM needed is more than double available, this is unrealistic
+        maxSize = Math.floor(testSize * 0.5);
+        continue;
+      }
 
       if (totalRAMNeeded <= availableForBatch) {
         optimalSize = testSize;
@@ -533,6 +589,13 @@ class BotnetUtilities {
    * Get total available RAM across all network servers
    */
   static getTotalNetworkRAM(ns: NS): number {
+    const servers = BotnetUtilities.getAllServers(ns).filter(s => ns.hasRootAccess(s));
+    return servers.reduce((total, server) => {
+      return total + ns.getServerMaxRam(server);
+    }, 0);
+  }
+
+  static calculateAvailableRAM(ns: NS): number {
     const servers = BotnetUtilities.getAllServers(ns).filter(s => ns.hasRootAccess(s));
     return servers.reduce((total, server) => {
       return total + BotnetUtilities.getAvailableRAM(ns, server);
@@ -866,20 +929,93 @@ class ProfessionalWaveScheduler {
   private async launchScript(scriptType: string, target: string, startTime: number, threads: number, batchId: string): Promise<boolean> {
     if (threads <= 0) return true;
 
-    const server = BotnetUtilities.findBestExecutionServer(this.ns);
-    if (!server) return false;
-
     const scriptName = `remote/${scriptType}.js`;
     // Remote scripts expect: batchId, delayUntil, unused, unused
     const args = [batchId, startTime, 0, 0];
 
-    try {
-      const pid = this.ns.exec(scriptName, server, threads, ...args);
-      return pid !== 0;
-    } catch (error) {
-      this.logger.error(`Failed to launch ${scriptType} script: ${error}`);
+    // Try to distribute threads across multiple servers if needed
+    const serversWithRAM = BotnetUtilities.getAllServers(this.ns)
+      .filter(s => this.ns.hasRootAccess(s))
+      .map(s => ({
+        name: s,
+        availableRAM: BotnetUtilities.getAvailableRAM(this.ns, s)
+      }))
+      .filter(s => s.availableRAM >= 1.75) // Need at least 1.75GB per thread
+      .sort((a, b) => b.availableRAM - a.availableRAM);
+
+    if (serversWithRAM.length === 0) {
+      this.logger.debug(`No servers with available RAM for ${scriptType} (${threads} threads needed)`);
       return false;
     }
+
+    let remainingThreads = threads;
+    const launchedPids: number[] = [];
+
+    // Distribute threads across servers based on available RAM
+    for (const server of serversWithRAM) {
+      if (remainingThreads <= 0) break;
+
+      const maxThreadsOnServer = Math.floor(server.availableRAM / 1.75);
+      const threadsToLaunch = Math.min(remainingThreads, maxThreadsOnServer);
+
+      if (threadsToLaunch > 0) {
+        try {
+          // Ensure script exists on target server before execution
+          if (!this.ns.fileExists(scriptName, server.name)) {
+            this.logger.debug(`Copying ${scriptName} to ${server.name}`);
+            await this.ns.scp([scriptName], server.name);
+            
+            // Verify the copy succeeded
+            if (!this.ns.fileExists(scriptName, server.name)) {
+              this.logger.error(`Failed to copy ${scriptName} to ${server.name}`);
+              continue; // Skip this server
+            }
+          }
+
+          // Get actual RAM costs for better diagnostics
+          const scriptRAM = this.ns.getScriptRam(scriptName, server.name);
+          const totalRAMNeeded = scriptRAM * threadsToLaunch;
+          const actualAvailableRAM = BotnetUtilities.getAvailableRAM(this.ns, server.name);
+
+          if (totalRAMNeeded > actualAvailableRAM) {
+            this.logger.debug(`Insufficient RAM on ${server.name}: need ${totalRAMNeeded.toFixed(2)}GB, have ${actualAvailableRAM.toFixed(2)}GB`);
+            continue; // Skip this server
+          }
+
+          const pid = this.ns.exec(scriptName, server.name, threadsToLaunch, ...args);
+          if (pid !== 0) {
+            launchedPids.push(pid);
+            remainingThreads -= threadsToLaunch;
+            this.logger.debug(`Launched ${scriptType}: ${threadsToLaunch} threads on ${server.name} (${actualAvailableRAM.toFixed(1)}GB available, ${totalRAMNeeded.toFixed(2)}GB used)`);
+          } else {
+            // Enhanced diagnostics for failed launches
+            this.logger.error(`Failed to launch ${scriptType} on ${server.name}: exec returned 0`);
+            this.logger.error(`  Script: ${scriptName}, Threads: ${threadsToLaunch}, RAM needed: ${totalRAMNeeded.toFixed(2)}GB`);
+            this.logger.error(`  Server RAM: ${this.ns.getServerUsedRam(server.name).toFixed(2)}/${this.ns.getServerMaxRam(server.name)}GB used`);
+            this.logger.error(`  Available RAM: ${actualAvailableRAM.toFixed(2)}GB`);
+            this.logger.error(`  Script exists: ${this.ns.fileExists(scriptName, server.name)}`);
+          }
+        } catch (error) {
+          this.logger.error(`Failed to launch ${scriptType} on ${server.name}: ${error}`);
+        }
+      }
+    }
+
+    if (remainingThreads > 0) {
+      this.logger.error(`Could only launch ${threads - remainingThreads}/${threads} ${scriptType} threads - insufficient RAM across network`);
+      
+      // Additional diagnostic information
+      const totalRAMAvailable = serversWithRAM.reduce((sum, s) => sum + s.availableRAM, 0);
+      const estimatedRAMNeeded = remainingThreads * 1.75;
+      this.logger.error(`  Total network RAM available: ${totalRAMAvailable.toFixed(1)}GB`);
+      this.logger.error(`  RAM needed for remaining threads: ${estimatedRAMNeeded.toFixed(1)}GB`);
+      this.logger.error(`  Servers checked: ${serversWithRAM.length}`);
+      
+      return false;
+    }
+
+    this.logger.debug(`Successfully launched ${threads} ${scriptType} threads across ${launchedPids.length} servers`);
+    return launchedPids.length > 0;
   }
 
   private estimateBatchRAMCost(target: string, batchSize?: number): number {
@@ -1095,8 +1231,14 @@ class BotnetTargetManager {
   async evaluateAndSelectTarget(): Promise<void> {
     const now = Date.now();
 
+    // Evaluate more frequently if utilization is low (enables faster target rotation)
+    const utilizationRatio = this.calculateCurrentUtilizationRatio();
+    const dynamicInterval = utilizationRatio < 0.6 ? 
+      this.config.targetEvaluationInterval * 0.5 : // 50% faster when underutilized
+      this.config.targetEvaluationInterval;
+
     // Only evaluate periodically to avoid excessive overhead
-    if (now - this.lastEvaluationTime < this.config.targetEvaluationInterval) {
+    if (now - this.lastEvaluationTime < dynamicInterval) {
       return;
     }
 
@@ -1152,8 +1294,14 @@ class BotnetTargetManager {
     const currentEfficiency = this.currentTarget.analysis.efficiencyScore;
     const candidateEfficiency = candidate.analysis.efficiencyScore;
 
+    // More aggressive switching when utilization is low
+    const utilizationRatio = this.calculateCurrentUtilizationRatio();
+    const improvementThreshold = utilizationRatio < 0.6 ? 
+      this.config.targetImprovementThreshold * 0.8 : // Lower bar when underutilized
+      this.config.targetImprovementThreshold;
+
     // Switch if candidate is significantly better
-    if (candidateEfficiency > currentEfficiency * this.config.targetImprovementThreshold) {
+    if (candidateEfficiency > currentEfficiency * improvementThreshold) {
       return true;
     }
 
@@ -1226,6 +1374,12 @@ class BotnetTargetManager {
 
   getDynamicBatchSize(): number {
     return this.dynamicBatchSize;
+  }
+
+  private calculateCurrentUtilizationRatio(): number {
+    const totalRAM = BotnetUtilities.getTotalNetworkRAM(this.ns);
+    const usedRAM = totalRAM - BotnetUtilities.calculateAvailableRAM(this.ns);
+    return totalRAM > 0 ? usedRAM / totalRAM : 0;
   }
 }
 
@@ -1477,11 +1631,107 @@ class BotnetController {
     if (debugMode) {
       this.logger.debug('🔍 DEBUG MODE ENABLED - Enhanced logging active');
     }
+   }
+
+  /**
+   * Deploy all remote scripts to all accessible servers
+   * This ensures all servers can execute HWGW operations
+   */
+  async deployRemoteScripts(): Promise<void> {
+    this.logger.info('🚀 Deploying remote scripts to all servers...');
+    
+    // List of all remote scripts to deploy (compiled .js versions)
+    const remoteScripts = [
+      '/remote/hk.js',
+      '/remote/gr.js', 
+      '/remote/wk.js',
+      '/remote/root.js'
+    ];
+
+    // Get all accessible servers
+    const allServers = this.getAllAccessibleServers();
+    let deploymentCount = 0;
+    let errorCount = 0;
+
+    for (const server of allServers) {
+      // Skip home server - scripts already exist there
+      if (server === 'home') continue;
+
+      try {
+        // Deploy all remote scripts to this server
+        const copyResult = await this.ns.scp(remoteScripts, server);
+        
+        if (copyResult) {
+          deploymentCount++;
+          this.logger.debug(`✅ Deployed scripts to ${server}`);
+        } else {
+          errorCount++;
+          this.logger.warn(`⚠️ Failed to deploy scripts to ${server}`);
+        }
+      } catch (error) {
+        errorCount++;
+        this.logger.error(`❌ Error deploying to ${server}: ${error}`);
+      }
+    }
+
+    this.logger.info(`📦 Script deployment complete: ${deploymentCount} servers updated, ${errorCount} errors`);
+    
+    // Verify deployment on a few key servers
+    await this.verifyScriptDeployment(allServers.slice(0, 5));
+  }
+
+  /**
+   * Verify that remote scripts are properly deployed on sample servers
+   */
+  private async verifyScriptDeployment(serversToCheck: string[]): Promise<void> {
+    const scriptToCheck = '/remote/hk.js'; // Check one representative script
+    let verifiedCount = 0;
+
+    for (const server of serversToCheck) {
+      if (this.ns.fileExists(scriptToCheck, server)) {
+        verifiedCount++;
+        this.logger.debug(`✅ Verified ${scriptToCheck} on ${server}`);
+      } else {
+        this.logger.warn(`⚠️ Missing ${scriptToCheck} on ${server}`);
+      }
+    }
+
+    this.logger.info(`🔍 Deployment verification: ${verifiedCount}/${serversToCheck.length} servers verified`);
+  }
+
+  /**
+   * Get all accessible servers in the network
+   */
+  private getAllAccessibleServers(): string[] {
+    const visited = new Set<string>();
+    const queue = ['home'];
+    const servers: string[] = [];
+
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      if (visited.has(current)) continue;
+      
+      visited.add(current);
+      servers.push(current);
+
+      // Add connected servers to queue
+      const connections = this.ns.scan(current);
+      for (const connection of connections) {
+        if (!visited.has(connection)) {
+          queue.push(connection);
+        }
+      }
+    }
+
+    return servers;
   }
 
   async run(): Promise<void> {
     this.logger.info('Botnet Performance Edition initializing...');
     this.logger.info('=== BOTNET PERFORMANCE EDITION ===');
+
+    // Deploy remote scripts to all servers FIRST
+    await this.deployRemoteScripts();
 
     // Initialize target if not set
     if (!this.config.targetServer) {

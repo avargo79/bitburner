@@ -20,7 +20,9 @@ export async function main(ns: NS): Promise<void> {
   const threads = ns.getRunningScript()?.threads || 1;
   
   // Extract target server from batch ID (format: server-timestamp)
-  const target = batchId.split('-')[0];
+  // Split by '-' and take all parts except the last one (timestamp)
+  const parts = batchId.split('-');
+  const target = parts.slice(0, -1).join('-');
   
   // Handle timing delay like existing scripts
   const delayFor = Math.max(0, delayUntil - Date.now());

@@ -17,6 +17,13 @@ This is a sophisticated Bitburner game automation framework built with TypeScrip
 - **Remote Scripts**: `src/remote/` - Lightweight scripts for distributed execution
 - **Navigator**: `src/navigator.ts` - Browser automation and game interface interaction
 
+## **⚠️ CRITICAL DEVELOPMENT RULE: Git Commit Policy**
+**AI agents MUST NEVER commit changes automatically.** Only commit when explicitly requested by the user.
+
+**Rationale**: Automatic commits can interrupt user workflows, create unwanted commit history, and prevent users from reviewing changes before they're committed. This rule ensures user control over git history and prevents unintended commits during development sessions.
+
+**Implementation**: After making code changes, stage files but wait for explicit user approval before running `git commit`.
+
 ## Feature Development Workflow
 This project follows **Spec-Driven Development** for structured, high-quality feature development.
 
