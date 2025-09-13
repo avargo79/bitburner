@@ -10,11 +10,13 @@ import { Logger, LogLevel } from '/lib/logger';
 
 // Configuration & Options Interfaces
 interface BotnetConfiguration {
-  // Core timing
+  // Core timing - Professional Wave System
   mainLoopDelay: number;
-  batchDelay: number;
-  minimumBatchSpacing: number;
-  baseTimeDelay: number;
+  cycleTimingDelay: number; // 4000ms - interval between batch starts (Alain's approach)
+  queueDelay: number; // 1000ms - delay before first script begins
+  maxBatches: number; // 40 - maximum overlapping batches
+  recoveryThreadPadding: number; // 1.0 - multiply grow/weaken threads for recovery
+  baseTimeDelay: number; // Legacy - keeping for compatibility
 
   // HWGW parameters  
   hackPercentage: number;
@@ -163,11 +165,13 @@ interface DynamicTarget {
 // ===== CONFIGURATION =====
 
 const DEFAULT_BOTNET_CONFIG: BotnetConfiguration = {
-  // Core timing (optimized for performance)
+  // Core timing - Professional Wave System (Alain's approach)
   mainLoopDelay: 1000,
-  batchDelay: 10000,
-  minimumBatchSpacing: 5000,
-  baseTimeDelay: 100,
+  cycleTimingDelay: 4000, // 4 seconds between batch starts
+  queueDelay: 1000, // 1 second delay before first script
+  maxBatches: 40, // Maximum overlapping batches
+  recoveryThreadPadding: 1.0, // Thread multiplier for recovery
+  baseTimeDelay: 250, // Fine-tuning delay for operation spacing
 
   // HWGW parameters
   hackPercentage: 0.05,
@@ -506,9 +510,10 @@ class BotnetUtilities {
   }
 
   /**
-   * Time Calculation Utilities
+   * Professional HWGW Timing Calculation (Alain's backward scheduling approach)
+   * Works backwards from desired completion times to ensure perfect coordination
    */
-  static calculateOptimalTiming(ns: NS, target: string, config: BotnetConfiguration): {
+  static calculateProfessionalTiming(ns: NS, target: string, config: BotnetConfiguration, startTime: number): {
     hackTime: number,
     growTime: number,
     weakenTime: number,
@@ -516,32 +521,339 @@ class BotnetUtilities {
     hackStartDelay: number,
     growStartDelay: number,
     weakenHackStartDelay: number,
-    weakenGrowStartDelay: number
+    weakenGrowStartDelay: number,
+    hackEnd: number,
+    growEnd: number,
+    weakenHackEnd: number,
+    weakenGrowEnd: number
   } {
     const hackTime = ns.getHackTime(target);
     const growTime = ns.getGrowTime(target);
     const weakenTime = ns.getWeakenTime(target);
-
-    const batchDuration = Math.max(hackTime, growTime, weakenTime);
-    const baseDelay = config.baseTimeDelay;
-
-    // Calculate delays to ensure proper execution order: weaken-hack -> hack -> weaken-grow -> grow
-    const weakenHackStartDelay = 0;
-    const hackStartDelay = weakenTime - hackTime + baseDelay;
-    const weakenGrowStartDelay = weakenTime - weakenTime + baseDelay * 2;
-    const growStartDelay = weakenTime - growTime + baseDelay * 3;
-
+    
+    const slowestTool = Math.max(hackTime, growTime, weakenTime);
+    const delayInterval = config.baseTimeDelay; // 250ms spacing between operations
+    
+    // BACKWARD SCHEDULING: Calculate completion times first, then work backwards to start times
+    // Operations should complete in this order: Hack → WeakenHack → Grow → WeakenGrow
+    const baseCompletionTime = startTime + slowestTool;
+    
+    const weakenGrowEnd = baseCompletionTime + delayInterval * 3; // Final operation
+    const growEnd = weakenGrowEnd - delayInterval; // Grow completes before final weaken
+    const weakenHackEnd = growEnd - delayInterval; // First weaken completes before grow
+    const hackEnd = weakenHackEnd - delayInterval; // Hack completes first
+    
+    // Calculate START times by subtracting execution duration from END times
+    const weakenGrowStartDelay = Math.max(0, (weakenGrowEnd - startTime) - weakenTime);
+    const growStartDelay = Math.max(0, (growEnd - startTime) - growTime);
+    const weakenHackStartDelay = Math.max(0, (weakenHackEnd - startTime) - weakenTime);
+    const hackStartDelay = Math.max(0, (hackEnd - startTime) - hackTime);
+    
     return {
       hackTime,
       growTime,
       weakenTime,
-      batchDuration,
-      hackStartDelay: Math.max(0, hackStartDelay),
-      growStartDelay: Math.max(0, growStartDelay),
+      batchDuration: weakenGrowEnd - startTime,
+      hackStartDelay,
+      growStartDelay,
       weakenHackStartDelay,
-      weakenGrowStartDelay
+      weakenGrowStartDelay,
+      hackEnd,
+      growEnd,
+      weakenHackEnd,
+      weakenGrowEnd
     };
   }
+}
+
+class UtilizationTracker {
+  private utilizationHistory: number[] = [];
+  private lowUtilizationIterations = 0;
+  private highUtilizationIterations = 0;
+  private maxTargets = 2;
+  private recoveryThreadPadding = 1.0;
+
+  private readonly MAX_UTILIZATION = 0.95;
+  private readonly LOW_UTILIZATION_THRESHOLD = 0.80;
+
+  constructor(private logger: Logger) {}
+
+  updateUtilization(currentUtilization: number): void {
+    this.utilizationHistory.push(currentUtilization);
+    
+    // Keep only recent history
+    if (this.utilizationHistory.length > 100) {
+      this.utilizationHistory = this.utilizationHistory.slice(-50);
+    }
+    
+    if (currentUtilization >= this.MAX_UTILIZATION) {
+      this.highUtilizationIterations++;
+      this.lowUtilizationIterations = 0;
+    } else if (currentUtilization <= this.LOW_UTILIZATION_THRESHOLD) {
+      this.lowUtilizationIterations++;
+      this.highUtilizationIterations = 0;
+    } else {
+      this.lowUtilizationIterations = 0;
+      this.highUtilizationIterations = 0;
+    }
+    
+    this.adjustParameters();
+  }
+  
+  private adjustParameters(): void {
+    // Scale up when consistently underutilized (like Alain's approach)
+    if (this.lowUtilizationIterations > 5) {
+      if (this.maxTargets < 20) { // Reasonable upper limit
+        this.maxTargets++;
+        this.logger.info(`📈 Increased max targets to ${this.maxTargets} due to low utilization`);
+      } else if (this.recoveryThreadPadding < 10) {
+        this.recoveryThreadPadding *= 1.5;
+        this.logger.info(`📈 Increased recovery thread padding to ${this.recoveryThreadPadding.toFixed(1)}`);
+      }
+      this.lowUtilizationIterations = 0;
+    }
+    
+    // Scale down when consistently over-utilized
+    if (this.highUtilizationIterations > 60) {
+      if (this.maxTargets > 1) {
+        this.maxTargets--;
+        this.logger.warn(`📉 Decreased max targets to ${this.maxTargets} due to high utilization`);
+      }
+      this.highUtilizationIterations = 0;
+    }
+  }
+  
+  getMaxTargets(): number { return this.maxTargets; }
+  getRecoveryThreadPadding(): number { return this.recoveryThreadPadding; }
+  getCurrentUtilization(): number {
+    return this.utilizationHistory.length > 0 ? this.utilizationHistory[this.utilizationHistory.length - 1] : 0;
+  }
+}
+
+class ProfessionalWaveScheduler {
+  private ns: NS;
+  private logger: Logger;
+  private config: BotnetConfiguration;
+  private activeBatches: Map<string, BatchTracker>;
+  private serverPerformance: Map<string, ServerPerformance>;
+  private stats: BatchStats;
+  private scheduledBatches: ScheduledBatch[];
+
+  constructor(
+    ns: NS,
+    logger: Logger,
+    config: BotnetConfiguration,
+    activeBatches: Map<string, BatchTracker>,
+    serverPerformance: Map<string, ServerPerformance>,
+    stats: BatchStats
+  ) {
+    this.ns = ns;
+    this.logger = logger;
+    this.config = config;
+    this.activeBatches = activeBatches;
+    this.serverPerformance = serverPerformance;
+    this.stats = stats;
+    this.scheduledBatches = [];
+  }
+
+  /**
+   * Schedule overlapping HWGW batches using Alain's professional approach
+   * Returns number of batches successfully scheduled
+   */
+  async scheduleWaveSequence(target: string): Promise<number> {
+    const now = Date.now();
+    const maxConcurrent = Math.min(this.config.maxBatches, this.calculateMaxConcurrentBatches(target));
+    
+    let cyclesScheduled = 0;
+    let lastBatchStart: number | null = null;
+    let firstBatchEnd: number | null = null;
+    
+    // Clear old scheduled batches
+    this.scheduledBatches = [];
+    
+    while (cyclesScheduled < maxConcurrent) {
+      const batchStartTime: number = (cyclesScheduled === 0) ? 
+        now + this.config.queueDelay : 
+        lastBatchStart! + this.config.cycleTimingDelay;
+      
+      const timing = BotnetUtilities.calculateProfessionalTiming(this.ns, target, this.config, batchStartTime);
+      
+      // Prevent timing conflicts - stop if batches would interfere
+      if (firstBatchEnd === null) {
+        firstBatchEnd = timing.hackEnd;
+      }
+      
+      const lastOperationStart = Math.max(
+        batchStartTime + timing.hackStartDelay,
+        batchStartTime + timing.growStartDelay,
+        batchStartTime + timing.weakenHackStartDelay,
+        batchStartTime + timing.weakenGrowStartDelay
+      );
+      
+      if (cyclesScheduled > 0 && lastOperationStart >= firstBatchEnd) {
+        this.logger.debug(`Stopped scheduling at ${cyclesScheduled} batches to prevent timing conflicts`);
+        break;
+      }
+      
+      // Create and validate batch
+      const batch = await this.createWaveBatch(target, timing, cyclesScheduled, batchStartTime);
+      if (!batch) {
+        this.logger.debug(`Failed to create batch ${cyclesScheduled} - insufficient resources`);
+        break;
+      }
+      
+      // Launch the batch
+      if (await this.launchWaveBatch(batch)) {
+        this.scheduledBatches.push(batch);
+        cyclesScheduled++;
+        lastBatchStart = batchStartTime;
+        
+        this.logger.debug(`Scheduled wave batch ${cyclesScheduled}: ${target} at +${batchStartTime - now}ms`);
+      } else {
+        this.logger.debug(`Failed to launch batch ${cyclesScheduled}`);
+        break;
+      }
+    }
+    
+    this.logger.info(`Scheduled ${cyclesScheduled} overlapping batches for ${target}`);
+    return cyclesScheduled;
+  }
+
+  private calculateMaxConcurrentBatches(target: string): number {
+    const hackTime = this.ns.getHackTime(target);
+    const batchDuration = this.ns.getWeakenTime(target) + (this.config.baseTimeDelay * 3);
+    
+    // More concurrent batches for faster servers
+    const maxByTiming = Math.floor(batchDuration / this.config.cycleTimingDelay);
+    
+    // Constrain by RAM availability (rough estimate)
+    const ramPerBatch = this.estimateBatchRAMCost(target);
+    const totalAvailableRAM = this.calculateAvailableRAM();
+    const maxByRAM = Math.floor(totalAvailableRAM / ramPerBatch);
+    
+    return Math.min(maxByTiming, maxByRAM, this.config.maxBatches);
+  }
+
+  private async createWaveBatch(target: string, timing: any, batchNumber: number, startTime: number): Promise<ScheduledBatch | null> {
+    const threads = BotnetUtilities.calculateHWGWThreads(this.ns, target, this.config.batchSize, this.config);
+    const ramNeeded = this.estimateBatchRAMCost(target);
+    
+    if (!this.canAllocateRAM(ramNeeded)) {
+      return null;
+    }
+    
+    return {
+      batchNumber,
+      target,
+      startTime,
+      timing,
+      threadCounts: {
+        hack: threads.hackThreads,
+        weakenHack: threads.weakenHackThreads,
+        grow: threads.growThreads,
+        weakenGrow: threads.weakenGrowThreads
+      },
+      ramAllocated: ramNeeded,
+      expectedIncome: this.ns.getServerMaxMoney(target) * this.config.hackPercentage
+    };
+  }
+
+  private async launchWaveBatch(batch: ScheduledBatch): Promise<boolean> {
+    // Use original batch ID format that works with event processing: target-timestamp
+    const batchId = `${batch.target}-${batch.startTime}`;
+    
+    // Create BatchTracker record for event processing
+    const batchTracker: BatchTracker = {
+      id: batchId,
+      target: batch.target,
+      server: BotnetUtilities.findBestExecutionServer(this.ns),
+      startTime: batch.startTime,
+      expectedCompletionTime: batch.startTime + batch.timing.batchDuration + 10000, // 10s buffer
+      batchSize: this.config.batchSize,
+      hackCompleted: false,
+      growCompleted: false,
+      weakenCompleted: false,
+      hackTime: batch.timing.hackTime,
+      growTime: batch.timing.growTime,
+      weakenTime: batch.timing.weakenTime,
+      moneyGained: 0,
+      securityReduced: 0,
+      efficiency: 0
+    };
+    
+    try {
+      // Launch scripts with precise timing - all use same batch ID
+      const success = await Promise.all([
+        this.launchScript('hk', batch.target, batch.startTime + batch.timing.hackStartDelay, batch.threadCounts.hack, batchId),
+        this.launchScript('wk', batch.target, batch.startTime + batch.timing.weakenHackStartDelay, batch.threadCounts.weakenHack, batchId),
+        this.launchScript('gr', batch.target, batch.startTime + batch.timing.growStartDelay, batch.threadCounts.grow, batchId),
+        this.launchScript('wk', batch.target, batch.startTime + batch.timing.weakenGrowStartDelay, batch.threadCounts.weakenGrow, batchId)
+      ]);
+      
+      if (success.every(s => s)) {
+        // Add batch tracker only if all scripts launched successfully
+        this.activeBatches.set(batchId, batchTracker);
+        this.stats.batchesSent++;
+        return true;
+      }
+      
+      return false;
+    } catch (error) {
+      this.logger.error(`Failed to launch wave batch: ${error}`);
+      return false;
+    }
+  }
+
+  private async launchScript(scriptType: string, target: string, startTime: number, threads: number, batchId: string): Promise<boolean> {
+    if (threads <= 0) return true;
+    
+    const server = BotnetUtilities.findBestExecutionServer(this.ns);
+    if (!server) return false;
+    
+    const scriptName = `remote/${scriptType}.js`;
+    // Remote scripts expect: batchId, delayUntil, unused, unused
+    const args = [batchId, startTime, 0, 0];
+    
+    try {
+      const pid = this.ns.exec(scriptName, server, threads, ...args);
+      return pid !== 0;
+    } catch (error) {
+      this.logger.error(`Failed to launch ${scriptType} script: ${error}`);
+      return false;
+    }
+  }
+
+  private estimateBatchRAMCost(target: string): number {
+    // Rough estimate: each script type costs ~1.75 GB per thread
+    const threads = BotnetUtilities.calculateHWGWThreads(this.ns, target, this.config.batchSize, this.config);
+    return (threads.hackThreads + threads.weakenHackThreads + threads.growThreads + threads.weakenGrowThreads) * 1.75;
+  }
+
+  private calculateAvailableRAM(): number {
+    const allServers = BotnetUtilities.getAllServers(this.ns);
+    return allServers
+      .filter(server => this.ns.hasRootAccess(server))
+      .reduce((total, server) => total + (this.ns.getServerMaxRam(server) - this.ns.getServerUsedRam(server)), 0);
+  }
+
+  private canAllocateRAM(ramNeeded: number): boolean {
+    return this.calculateAvailableRAM() >= ramNeeded;
+  }
+}
+
+interface ScheduledBatch {
+  batchNumber: number;
+  target: string;
+  startTime: number;
+  timing: any;
+  threadCounts: {
+    hack: number;
+    weakenHack: number;
+    grow: number;
+    weakenGrow: number;
+  };
+  ramAllocated: number;
+  expectedIncome: number;
 }
 
 class BotnetBatchExecutor {
@@ -581,7 +893,7 @@ class BotnetBatchExecutor {
         return false;
       }
 
-      const timing = BotnetUtilities.calculateOptimalTiming(this.ns, target, this.config);
+      const timing = BotnetUtilities.calculateProfessionalTiming(this.ns, target, this.config, Date.now());
       const threads = BotnetUtilities.calculateHWGWThreads(this.ns, target, batchSize, this.config);
 
       const batchId = `${target}-${Date.now()}`;
@@ -930,7 +1242,7 @@ class BotnetEventProcessor {
       const result = parseFloat(resultStr);
       const threads = parseInt(threadsStr);
 
-      // Extract target from batchId (format: server-timestamp)
+      // Extract target from batchId (format: target-timestamp)
       const target = batchId.split('-')[0];
 
       // Determine event type and success based on event type string
@@ -966,7 +1278,10 @@ class BotnetEventProcessor {
   private async handleEvent(event: BatchEvent): Promise<void> {
     const batch = this.activeBatches.get(event.batchId);
     if (!batch) {
-      // Batch might have been cleaned up already
+      // Debug batch tracking issue - show what batches we have
+      const activeBatchIds = Array.from(this.activeBatches.keys());
+      this.logger.debug(`No batch found for event: ${event.batchId}`);
+      this.logger.debug(`Active batches (${activeBatchIds.length}): ${activeBatchIds.slice(0, 3).join(', ')}${activeBatchIds.length > 3 ? '...' : ''}`);
       return;
     }
 
@@ -1009,6 +1324,8 @@ class BotnetController {
   private targetManager: BotnetTargetManager;
   private batchExecutor: BotnetBatchExecutor;
   private eventProcessor: BotnetEventProcessor;
+  private waveScheduler: ProfessionalWaveScheduler;
+  private utilizationTracker: UtilizationTracker;
 
   // Shared state
   private activeBatches: Map<string, BatchTracker>;
@@ -1089,6 +1406,12 @@ class BotnetController {
       ns, this.logger, this.config, this.activeBatches, this.stats
     );
 
+    this.waveScheduler = new ProfessionalWaveScheduler(
+      ns, this.logger, this.config, this.activeBatches, this.serverPerformance, this.stats
+    );
+
+    this.utilizationTracker = new UtilizationTracker(this.logger);
+
     // Log debug mode status
     if (debugMode) {
       this.logger.debug('🔍 DEBUG MODE ENABLED - Enhanced logging active');
@@ -1105,7 +1428,8 @@ class BotnetController {
     }
 
     const target = this.targetManager.getCurrentTarget();
-    this.logger.info(`Target: ${target}, Max Batches: ${this.config.maxActiveBatches}`);
+    this.logger.info(`🚀 Professional Wave System Initialized`);
+    this.logger.info(`Target: ${target}, Max Batches: ${this.config.maxBatches}, Cycle Delay: ${this.config.cycleTimingDelay}ms`);
 
     // Main operation loop
     while (true) {
@@ -1119,23 +1443,31 @@ class BotnetController {
         // Evaluate and potentially switch targets
         await this.targetManager.evaluateAndSelectTarget();
 
-        // Launch new batches if capacity allows
+        // Launch new batches using professional wave scheduling
         const now = Date.now();
-        const canLaunchBatch = this.activeBatches.size < this.config.maxActiveBatches &&
-          (now - this.lastBatchTime) >= this.config.batchDelay;
+        const canLaunchWave = this.activeBatches.size < this.config.maxBatches &&
+          (now - this.lastBatchTime) >= this.config.cycleTimingDelay;
 
-        if (canLaunchBatch) {
+        if (canLaunchWave) {
           const currentTarget = this.targetManager.getCurrentTarget();
-          const batchSize = this.targetManager.getDynamicBatchSize();
-          const success = await this.batchExecutor.executeBatch(currentTarget, batchSize);
-
-          if (success) {
+          const batchesScheduled = await this.waveScheduler.scheduleWaveSequence(currentTarget);
+          
+          if (batchesScheduled > 0) {
             this.lastBatchTime = now;
+            this.logger.info(`🌊 Launched ${batchesScheduled} overlapping batches for ${currentTarget}`);
           }
         }
 
-        // Update performance metrics
+        // Update performance metrics and utilization tracking
         await this.performanceTracker.updatePerformanceMetrics();
+        
+        // Update utilization tracking (like Alain's approach)
+        const utilization = this.calculateNetworkUtilization();
+        this.utilizationTracker.updateUtilization(utilization);
+        
+        // Update max batches based on utilization
+        const maxTargetsFromUtilization = this.utilizationTracker.getMaxTargets();
+        this.config.maxBatches = Math.min(40, maxTargetsFromUtilization * 5); // Allow ~5 batches per target
 
         // Show dashboard
         await this.performanceTracker.showDashboard(this.targetManager);
@@ -1148,6 +1480,26 @@ class BotnetController {
         await this.ns.sleep(this.config.mainLoopDelay * 2); // Longer delay on error
       }
     }
+  }
+
+  /**
+   * Calculate current network RAM utilization (like Alain's approach)
+   */
+  private calculateNetworkUtilization(): number {
+    const allServers = BotnetUtilities.getAllServers(this.ns);
+    let totalMaxRam = 0;
+    let totalUsedRam = 0;
+    
+    for (const server of allServers) {
+      if (this.ns.hasRootAccess(server)) {
+        const maxRam = this.ns.getServerMaxRam(server);
+        const usedRam = this.ns.getServerUsedRam(server);
+        totalMaxRam += maxRam;
+        totalUsedRam += usedRam;
+      }
+    }
+    
+    return totalMaxRam > 0 ? totalUsedRam / totalMaxRam : 0;
   }
 }
 
