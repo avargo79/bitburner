@@ -23,10 +23,18 @@ interface CasinoStats {
   startTime: number;
 }
 
-export default class CasinoBot {
+// Cached DOM elements to avoid repeated searches
+interface CachedElements {
+  saveButton: HTMLButtonElement | null;
+  betInput: HTMLInputElement | null;
+  startButton: HTMLButtonElement | null;
+}
+
+export default class CasinoBotV2 {
   private ns: NS;
   private config: CasinoConfig;
   private stats: CasinoStats;
+  private cached: CachedElements;
 
   constructor(ns: NS, config: CasinoConfig = {}) {
     this.ns = ns;
@@ -43,6 +51,11 @@ export default class CasinoBot {
       totalReloads: 0,
       startTime: Date.now()
     };
+    this.cached = {
+      saveButton: null,
+      betInput: null,
+      startButton: null
+    };
   }
 
   async run(): Promise<void> {
@@ -58,13 +71,22 @@ export default class CasinoBot {
     }
 
     try {
+      // Step 0: Preemptive check for kicked out (like Alain does)
+      if (await this.checkKickedOutFast()) {
+        this.ns.tprint("🎉 We've already been kicked out of the casino!");
+        return;
+      }
+
       // Step 1: Navigate to casino (skip if already there)
       await this.navigateToCasino();
 
-      // Step 2: Save game
+      // Step 2: Cache all DOM elements once for speed
+      await this.cacheElements();
+
+      // Step 3: Save game
       await this.saveGame();
 
-      // Step 3: Fast casino loop
+      // Step 4: Ultra-fast casino loop
       await this.casinoLoop();
 
     } catch (error) {
@@ -86,12 +108,12 @@ export default class CasinoBot {
   }
 
   private log(message: string): void {
-    this.ns.print(`[CasinoBot] ${message}`);
+    this.ns.print(`[CasinoV2] ${message}`);
   }
 
   private debug(message: string): void {
     if (this.config.debugMode) {
-      this.ns.tprint(`[CasinoBot DEBUG] ${message}`);
+      this.ns.tprint(`[CasinoV2 DEBUG] ${message}`);
     }
   }
 
@@ -100,55 +122,27 @@ export default class CasinoBot {
 
     const doc = getDocumentAPI();
 
-    // Quick popup check - only do full search if we suspect there's a popup
-    let offlinePopup = doc.evaluate(
-      "//div[contains(text(), 'Offline for')]",
-      doc,
-      null,
-      XPathResult.FIRST_ORDERED_NODE_TYPE,
-      null
-    ).singleNodeValue;
-
-    // Only do expensive DOM search if we need to
-    if (!offlinePopup) {
-      const elements = doc.querySelectorAll("div, p");
-      for (const element of elements) {
-        const text = element.textContent || "";
-        if (text.includes("Offline for")) {
-          offlinePopup = element;
-          break;
-        }
-      }
-    }
-
+    // Ultra-fast popup check using simple XPath
+    const offlinePopup = this.findElementFast("//div[contains(text(), 'Offline for')]");
     if (offlinePopup) {
-      // Fast backdrop click
       const backdrop = doc.querySelector(".MuiBackdrop-root.MuiModal-backdrop");
       if (backdrop) {
-        await this.clickElement(backdrop as HTMLElement);
-        await this.ns.sleep(100); // Ultra-fast delay
+        await this.clickElementFast(backdrop as HTMLElement);
+        await this.sleep(2); // Hardcoded 2ms - ultra fast clicks
       }
     }
 
-    // Quick focus check
-    const unfocusButton = doc.evaluate(
-      "//button[text()='Do something else simultaneously']",
-      doc,
-      null,
-      XPathResult.FIRST_ORDERED_NODE_TYPE,
-      null
-    ).singleNodeValue as HTMLButtonElement;
-
+    // Ultra-fast focus check
+    const unfocusButton = this.findElementFast("//button[text()='Do something else simultaneously']") as HTMLButtonElement;
     if (unfocusButton) {
-      await this.clickElement(unfocusButton);
-      await this.ns.sleep(100); // Ultra-fast delay
+      await this.clickElementFast(unfocusButton);
+      await this.sleep(2); // Hardcoded 2ms - ultra fast clicks
     }
   }
 
   private async navigateToCasino(): Promise<void> {
     this.log("🚗 Navigating to casino...");
 
-    const win = getWindowAPI();
     const doc = getDocumentAPI();
 
     // Check if already in Aevum
@@ -160,178 +154,114 @@ export default class CasinoBot {
 
     this.log("✅ Already in Aevum, navigating to casino...");
 
-    // Click City button
-    const cityButton = doc.evaluate(
-      "//div[(@role = 'button') and (contains(., 'City'))]",
-      doc,
-      null,
-      XPathResult.FIRST_ORDERED_NODE_TYPE,
-      null
-    ).singleNodeValue as HTMLElement;
+    // Ultra-fast navigation with minimal delays
+    const cityButton = this.findElementFast("//div[(@role = 'button') and (contains(., 'City'))]") as HTMLElement;
+    if (!cityButton) throw new Error("Could not find City button");
 
-    if (!cityButton) {
-      throw new Error("Could not find City button");
-    }
+    await this.clickElementFast(cityButton);
+    await this.sleep(2); // Hardcoded 2ms - ultra fast clicks
 
-    this.log("🏙️ Clicking City button...");
-    await this.clickElement(cityButton);
-    await this.ns.sleep(100); // Ultra-fast delay
+    const casinoButton = this.findElementFast("//span[@aria-label = 'Iker Molina Casino']") as HTMLElement;
+    if (!casinoButton) throw new Error("Could not find Casino button");
 
-    // Click Casino button
-    const casinoButton = doc.evaluate(
-      "//span[@aria-label = 'Iker Molina Casino']",
-      doc,
-      null,
-      XPathResult.FIRST_ORDERED_NODE_TYPE,
-      null
-    ).singleNodeValue as HTMLElement;
+    await this.clickElementFast(casinoButton);
+    await this.sleep(2); // Hardcoded 2ms - ultra fast clicks
 
-    if (!casinoButton) {
-      throw new Error("Could not find Casino button");
-    }
+    const blackjackButton = this.findElementFast("//button[contains(text(), 'blackjack')]") as HTMLElement;
+    if (!blackjackButton) throw new Error("Could not find Blackjack button");
 
-    this.log("🎰 Clicking Casino button...");
-    await this.clickElement(casinoButton);
-    await this.ns.sleep(100); // Ultra-fast delay
-
-    // Click Blackjack button
-    const blackjackButton = doc.evaluate(
-      "//button[contains(text(), 'blackjack')]",
-      doc,
-      null,
-      XPathResult.FIRST_ORDERED_NODE_TYPE,
-      null
-    ).singleNodeValue as HTMLElement;
-
-    if (!blackjackButton) {
-      throw new Error("Could not find Blackjack button");
-    }
-
-    this.log("🃏 Clicking Blackjack button...");
-    await this.clickElement(blackjackButton);
-    await this.ns.sleep(200); // Ultra-fast delay
+    await this.clickElementFast(blackjackButton);
+    await this.sleep(2); // Hardcoded 2ms - ultra fast clicks
 
     this.log("✅ Successfully navigated to casino blackjack");
   }
 
-  private async clickElement(element: HTMLElement): Promise<void> {
-    // Try multiple methods to find and trigger React click handler
+  // Cache all frequently used elements once for speed
+  private async cacheElements(): Promise<void> {
+    this.log("🔧 Caching DOM elements for speed...");
+    
+    const doc = getDocumentAPI();
 
-    // Method 1: Search through all element keys for React props
-    const elementKeys = Object.keys(element);
-    let onClick = null;
+    // Cache save button
+    this.cached.saveButton = this.findElementFast("//button[@aria-label = 'save game']") as HTMLButtonElement;
+    if (!this.cached.saveButton) throw new Error("Could not find save button");
 
-    for (const key of elementKeys) {
-      const props = (element as any)[key];
-      if (props && typeof props === 'object' && props.onClick) {
-        onClick = props.onClick;
-        this.debug(`Found click handler via key: ${key}`);
-        break;
+    // Cache bet input
+    this.cached.betInput = this.findElementFast("//input[@type='number']") as HTMLInputElement;
+    if (!this.cached.betInput) throw new Error("Could not find bet input");
+
+    // Cache start button
+    this.cached.startButton = this.findElementFast("//button[text() = 'Start']") as HTMLButtonElement;
+    if (!this.cached.startButton) throw new Error("Could not find start button");
+
+    this.log("✅ All elements cached successfully");
+  }
+
+  // Ultra-fast element finder with minimal retries (based on Alain's approach)
+  private findElementFast(xpath: string, maxRetries: number = 5): Element | null {
+    const doc = getDocumentAPI();
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      const element = doc.evaluate(xpath, doc, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue as Element;
+      if (element) return element;
+      
+      // Only retry with minimal delay if not found
+      if (attempt < maxRetries) {
+        // Synchronous micro-delay (much faster than async sleep)
+        const start = Date.now();
+        while (Date.now() - start < (attempt * 2)) { /* busy wait */ }
       }
     }
+    return null;
+  }
 
-    // Method 2: Try common React fiber property names
-    if (!onClick) {
-      const reactProps = (element as any)._reactInternalFiber?.memoizedProps ||
-        (element as any)._reactInternalInstance?.memoizedProps ||
-        (element as any).__reactInternalInstance?.memoizedProps ||
-        (element as any).__reactEventHandlers;
-
-      if (reactProps?.onClick) {
-        onClick = reactProps.onClick;
-        this.debug("Found click handler via React fiber");
-      }
-    }
-
-    // Method 3: Fallback to native click (may not work with React components)
-    if (!onClick) {
-      this.debug("No React handler found, trying native click...");
-      try {
-        element.click();
-        return;
-      } catch (error) {
-        this.debug(`Native click failed: ${error}`);
-      }
-    }
-
-    if (onClick) {
-      try {
-        await onClick({ isTrusted: true, target: element, currentTarget: element });
-        this.debug("✅ Successfully clicked element");
-      } catch (error) {
-        this.debug(`Click handler error: ${error}`);
-        // Fallback to native click
-        element.click();
-      }
+  // Ultra-fast click using Alain's method
+  private async clickElementFast(element: HTMLElement): Promise<void> {
+    await this.sleep(2); // Hardcoded 2ms - before click
+    
+    // Find React click handler using Alain's voodoo method
+    const fnOnClick = (element as any)[Object.keys(element)[1]]?.onClick;
+    if (fnOnClick) {
+      await fnOnClick({ isTrusted: true });
     } else {
-      throw new Error("Could not find any click handler for element");
+      // Fallback to native click
+      element.click();
     }
+    
+    await this.sleep(2); // Hardcoded 2ms - after click
   }
 
   private async saveGame(): Promise<void> {
     this.log("💾 Saving game...");
-
-    const doc = getDocumentAPI();
-
-    // Find save button using XPath
-    const saveButton = doc.evaluate(
-      "//button[@aria-label = 'save game']",
-      doc,
-      null,
-      XPathResult.FIRST_ORDERED_NODE_TYPE,
-      null
-    ).singleNodeValue as HTMLButtonElement;
-
-    if (!saveButton) {
-      throw new Error("Could not find save button");
-    }
-
-    // Click the save button
-    const onClick = (saveButton as any)[Object.keys(saveButton)[1]]?.onClick;
-    if (onClick) {
-      await onClick({ isTrusted: true });
-      await this.ns.sleep(100); // Ultra-fast delay
-    } else {
-      throw new Error("Could not find save button click handler");
-    }
+    
+    if (!this.cached.saveButton) throw new Error("Save button not cached");
+    
+    await this.sleep(5); // Hardcoded 5ms - before save
+    await this.clickElementFast(this.cached.saveButton);
+    await this.sleep(5); // Hardcoded 5ms - after save
   }
 
   private async casinoLoop(): Promise<void> {
-    this.log("🎰 Starting real casino automation loop...");
+    this.log("🎰 Starting ultra-fast casino loop...");
 
-    const doc = getDocumentAPI();
     let handsPlayed = 0;
     let netWinnings = 0;
     let peakWinnings = 0;
 
-    // Find the bet input and start button once
-    const betInput = doc.evaluate(
-      "//input[@type='number']",
-      doc,
-      null,
-      XPathResult.FIRST_ORDERED_NODE_TYPE,
-      null
-    ).singleNodeValue as HTMLInputElement;
-
-    const startButton = doc.evaluate(
-      "//button[text() = 'Start']",
-      doc,
-      null,
-      XPathResult.FIRST_ORDERED_NODE_TYPE,
-      null
-    ).singleNodeValue as HTMLButtonElement;
-
-    if (!betInput || !startButton) {
-      throw new Error("Could not find bet input or start button");
-    }
-
-    while (handsPlayed < 1000) { // High limit - will stop when kicked out
+    while (handsPlayed < 1000) {
       try {
+        // Quick check at start of each hand for kicked out
+        if (await this.checkKickedOutFast()) {
+          this.log("🎉 Kicked out detected at start of hand!");
+          this.ns.tprint("🎉 SUCCESS: Made enough money and got kicked out!");
+          return;
+        }
+
         this.log(`🃏 Playing hand ${handsPlayed + 1}...`);
 
-        // Calculate bet amount like original: 90% of money, max $100M
+        // Calculate bet amount like Alain: 90% of money, max $100M
         const currentMoney = this.getCurrentMoney();
-        const bet = Math.min(100000000, Math.floor(currentMoney * 0.9)); // 90% of money, max 100M
+        const bet = Math.min(100000000, Math.floor(currentMoney * 0.9));
 
         if (bet < 1000) {
           this.log("❌ Not enough money to continue betting");
@@ -340,20 +270,14 @@ export default class CasinoBot {
 
         this.log(`💰 Betting $${bet.toLocaleString()}`);
 
-        // Set bet amount - ultra-fast mode (no delay)
-        await this.setInputValue(betInput, bet.toString());
+        // Ultra-fast bet setting using cached input
+        await this.setInputValueFast(this.cached.betInput!, bet.toString());
 
-        // Set up observer for game start
-        const gameStarted = this.waitForGameStart();
+        // Start the game using cached button
+        await this.clickElementFast(this.cached.startButton!);
 
-        // Start the game
-        await this.clickElement(startButton);
-
-        // Wait for game to actually start (DOM change)
-        await gameStarted;
-
-        // Play the hand
-        const result = await this.playBlackjackHand();
+        // Play the hand with optimized detection
+        const result = await this.playBlackjackHandFast();
 
         if (result === "win") {
           netWinnings += bet;
@@ -362,11 +286,23 @@ export default class CasinoBot {
             await this.saveGame();
           }
           this.stats.wins++;
+          
+          // Quick check after each win to see if we've been kicked out (like Alain)
+          if (await this.checkKickedOutFast()) {
+            this.log("🎉 Detected kicked out after win!");
+            this.ns.tprint("🎉 SUCCESS: Made enough money and got kicked out!");
+            return;
+          }
         } else if (result === "lose") {
+          netWinnings -= bet;
           this.stats.losses++;
           this.stats.totalReloads++;
-          await this.reloadPage();
-          return;
+          
+          // Reload if losing badly (like Alain's logic)
+          if (currentMoney < 1E8 || netWinnings <= peakWinnings - 10 * 1E8) {
+            await this.reloadPageFast();
+            return;
+          }
         } else if (result === "tie") {
           this.stats.pushes++;
         } else if (result === "kicked_out") {
@@ -377,13 +313,13 @@ export default class CasinoBot {
         handsPlayed++;
         this.stats.handsPlayed++;
 
-        // Ultra-fast mode: no delay between hands
+        // NO DELAY between hands for maximum speed
 
       } catch (error) {
         this.log(`❌ Error in hand ${handsPlayed + 1}: ${error}`);
 
         // Check if we got kicked out
-        if (await this.checkKickedOut()) {
+        if (await this.checkKickedOutFast()) {
           this.log("🚪 Detected kicked out message!");
           this.ns.tprint("🎉 SUCCESS: Made enough money and got kicked out!");
           return;
@@ -391,7 +327,7 @@ export default class CasinoBot {
 
         // Otherwise, reload and try again
         this.log("🔄 Reloading due to error...");
-        await this.reloadPage();
+        await this.reloadPageFast();
         return;
       }
     }
@@ -400,7 +336,7 @@ export default class CasinoBot {
     this.log(`💰 Net winnings: $${netWinnings.toLocaleString()}`);
   }
 
-  private async setInputValue(input: HTMLInputElement, value: string): Promise<void> {
+  private async setInputValueFast(input: HTMLInputElement, value: string): Promise<void> {
     const onChange = (input as any)[Object.keys(input)[1]]?.onChange;
     if (onChange) {
       await onChange({ isTrusted: true, target: { value: value } });
@@ -409,175 +345,85 @@ export default class CasinoBot {
     }
   }
 
-  private waitForGameStart(): Promise<void> {
-    return new Promise((resolve) => {
-      const doc = getDocumentAPI();
-
-      const observer = new MutationObserver((mutations) => {
-        for (const mutation of mutations) {
-          // Look for Hit/Stay buttons appearing or count display (only in casino area)
-          if (mutation.type === 'childList') {
-            const hitButton = doc.evaluate("//button[text() = 'Hit']", doc, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
-            const countElement = doc.evaluate("//p[contains(text(), 'Count:')]", doc, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
-
-            if (hitButton || countElement) {
-              observer.disconnect();
-              resolve();
-              return;
-            }
-          }
-        }
-      });
-
-      // Focus only on the casino content area, not the entire page
-      const casinoContainer = doc.querySelector("main") || doc.querySelector("[role='main']") || doc.body;
-      observer.observe(casinoContainer, {
-        childList: true,
-        subtree: true
-      });
-
-      // Fallback timeout
-      setTimeout(() => {
-        observer.disconnect();
-        resolve();
-      }, 3000);
-    });
-  }
-
-  private async playBlackjackHand(): Promise<"win" | "lose" | "tie" | "kicked_out"> {
-    const doc = getDocumentAPI();
-
-    // Fast initial check
-    await this.ns.sleep(200);
+  // Ultra-fast blackjack hand using Alain's optimized approach
+  private async playBlackjackHandFast(): Promise<"win" | "lose" | "tie" | "kicked_out"> {
+    // Brief initial wait
+    await this.sleep(50); // Much faster than our original 200ms
 
     // Check if game ended immediately (blackjack)
-    let result = await this.checkGameResult();
+    let result = await this.getWinLoseOrTieFast();
     if (result !== null) return result;
 
-    // Event-driven gameplay using MutationObserver
+    // Game loop with minimal delays
     while (true) {
-      const hitButton = doc.evaluate("//button[text() = 'Hit']", doc, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue as HTMLButtonElement;
-      const stayButton = doc.evaluate("//button[text() = 'Stay']", doc, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue as HTMLButtonElement;
+      const hitButton = this.findElementFast("//button[text() = 'Hit']") as HTMLButtonElement;
+      const stayButton = this.findElementFast("//button[text() = 'Stay']") as HTMLButtonElement;
 
       if (!hitButton || !stayButton) {
-        result = await this.checkGameResult();
+        result = await this.getWinLoseOrTieFast();
         if (result !== null) return result;
         throw new Error("No buttons and no result");
       }
 
-      // Make decision
-      const shouldHit = await this.shouldHitBasicStrategy();
-
-      // Set up observer BEFORE clicking to catch the change
-      const gameStateChanged = this.waitForGameBoardChange();
+      // Make decision using basic strategy
+      const shouldHit = await this.shouldHitBasicStrategyFast();
 
       // Make the move
       if (shouldHit) {
-        await this.clickElement(hitButton);
+        await this.clickElementFast(hitButton);
       } else {
-        await this.clickElement(stayButton);
+        await this.clickElementFast(stayButton);
       }
 
-      // Wait for DOM to change (much faster than arbitrary delay)
-      await gameStateChanged;
+      // Brief yield for game to update
+      await this.sleep(1); // Minimal 1ms delay
 
-      // Check result immediately after change
-      result = await this.checkGameResult();
+      // Check result immediately
+      result = await this.getWinLoseOrTieFast();
       if (result !== null) return result;
     }
   }
 
-  private waitForGameBoardChange(): Promise<void> {
-    return new Promise((resolve) => {
-      const doc = getDocumentAPI();
+  // Alain's optimized game result detection with cycling retries
+  private async getWinLoseOrTieFast(): Promise<"win" | "lose" | "tie" | "kicked_out" | null> {
+    // Check for kicked out first
+    if (await this.checkKickedOutFast()) {
+      return "kicked_out";
+    }
 
-      // Find the specific blackjack game container (not overview/job panels)
-      let gameContainer = doc.querySelector("div[class*='css-fq5ump']") || // Blackjack specific container
-        doc.querySelector("main") ||                    // Main content area
-        doc.querySelector("[role='main']");             // Fallback to main role
-
-      if (!gameContainer) {
-        // Ultra fallback - but exclude overview areas
-        const allDivs = doc.querySelectorAll("div");
-        for (const div of allDivs) {
-          const text = div.textContent || "";
-          if (text.includes("blackjack") || text.includes("Count:") || text.includes("Hit")) {
-            gameContainer = div.closest("div[class*='MuiBox']") || div.parentElement || div;
-            break;
-          }
-        }
+    // Cycle through each check with increasing retries (Alain's method)
+    let retries = 0;
+    while (retries++ < 5) {
+      // Check if game is still in progress
+      if (this.findElementFast("//button[text() = 'Hit']", retries)) {
+        return null; // Game not over yet
       }
-
-      if (!gameContainer) gameContainer = doc.body;
-
-      const observer = new MutationObserver((mutations) => {
-        // Look for changes specifically related to blackjack game state
-        for (const mutation of mutations) {
-          if (mutation.type === 'childList') {
-            // Check if the change is related to game content
-            const target = mutation.target as Element;
-            const text = target.textContent || "";
-
-            // Only trigger on casino/blackjack related changes
-            if (text.includes('Count:') ||
-              text.includes('Hit') ||
-              text.includes('Stay') ||
-              text.includes('won') ||
-              text.includes('lost') ||
-              text.includes('Tie')) {
-              observer.disconnect();
-              resolve();
-              return;
-            }
-          }
-
-          // Watch for count text changes
-          if (mutation.type === 'characterData') {
-            const text = mutation.target.textContent || "";
-            if (text.includes('Count:')) {
-              observer.disconnect();
-              resolve();
-              return;
-            }
-          }
-        }
-      });
-
-      observer.observe(gameContainer, {
-        childList: true,
-        subtree: true,
-        characterData: true
-      });
-
-      // Fallback timeout
-      setTimeout(() => {
-        observer.disconnect();
-        resolve();
-      }, 2000);
-    });
+      
+      // Check for lose
+      if (this.findElementFast("//p[contains(text(), 'lost')]", retries)) {
+        return "lose";
+      }
+      
+      // Check for win (both "won" and "Won" like Alain)
+      if (this.findElementFast("//p/text()[contains(.,'won') or contains(.,'Won')]", retries)) {
+        return "win";
+      }
+      
+      // Check for tie
+      if (this.findElementFast("//p[contains(text(), 'Tie')]", retries)) {
+        return "tie";
+      }
+    }
+    return null;
   }
 
-  private async shouldHitBasicStrategy(): Promise<boolean> {
-    const doc = getDocumentAPI();
-
-    // Find player count
-    const countElement = doc.evaluate(
-      "//p[contains(text(), 'Count:')]",
-      doc,
-      null,
-      XPathResult.FIRST_ORDERED_NODE_TYPE,
-      null
-    ).singleNodeValue as HTMLElement;
-
-    if (!countElement) {
-      throw new Error("Could not find player count");
-    }
+  private async shouldHitBasicStrategyFast(): Promise<boolean> {
+    const countElement = this.findElementFast("//p[contains(text(), 'Count:')]") as HTMLElement;
+    if (!countElement) throw new Error("Could not find player count");
 
     const countText = countElement.textContent || "";
     const counts = countText.match(/\d+/g);
-    if (!counts) {
-      throw new Error("Could not parse player count");
-    }
+    if (!counts) throw new Error("Could not parse player count");
 
     // Use the highest count (in case of ace)
     const playerCount = Math.max(...counts.map(Number));
@@ -589,86 +435,81 @@ export default class CasinoBot {
     return shouldHit;
   }
 
-  private async checkGameResult(): Promise<"win" | "lose" | "tie" | "kicked_out" | null> {
-    const doc = getDocumentAPI();
+  private async checkKickedOutFast(): Promise<boolean> {
+    // Based on Alain's robust cheater detection with modal handling
+    let retries = 0;
+    while (retries++ < 5) { // Check up to 5 times
+      
+      // Primary check: Look for the cheater message (exact text from Alain)
+      const kickedOutElement = this.findElementFast("//span[contains(text(), 'Alright cheater get out of here')]", 3);
+      if (kickedOutElement) {
+        this.log("🚪 Found cheater message - we've been kicked out!");
+        return true;
+      }
 
-    // Check for kicked out message first
-    if (await this.checkKickedOut()) {
-      return "kicked_out";
+      // Alternative check: Look for any dialog or text mentioning being kicked out
+      const altKickedOut = this.findElementFast("//*[contains(text(), 'kicked out') or contains(text(), 'cheater')]", 2);
+      if (altKickedOut) {
+        this.log("🚪 Found alternative kick out message!");
+        return true;
+      }
+
+      // Check for modals that might be blocking the cheater message
+      const closeModal = this.findElementFast("//button[contains(@class,'closeButton')]", 2);
+      if (closeModal) {
+        this.log("🔧 Found modal that needs to be closed");
+        await this.clickElementFast(closeModal as HTMLElement);
+        await this.sleep(10); // Small delay after closing modal
+        continue; // Try again after closing the modal
+      }
+      
+      break; // No more modals to close
     }
-
-    // Check for win
-    if (doc.evaluate("//p/text()[contains(.,'won') or contains(.,'Won')]", doc, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue) {
-      return "win";
-    }
-
-    // Check for loss
-    if (doc.evaluate("//p[contains(text(), 'lost')]", doc, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue) {
-      return "lose";
-    }
-
-    // Check for tie
-    if (doc.evaluate("//p[contains(text(), 'Tie')]", doc, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue) {
-      return "tie";
-    }
-
-    return null; // Game still in progress
+    
+    return false;
   }
 
-  private async checkKickedOut(): Promise<boolean> {
-    const doc = getDocumentAPI();
-
-    const kickedOutElement = doc.evaluate(
-      "//span[contains(text(), 'Alright cheater get out of here')]",
-      doc,
-      null,
-      XPathResult.FIRST_ORDERED_NODE_TYPE,
-      null
-    ).singleNodeValue;
-
-    return kickedOutElement !== null;
-  }
-
-  private async reloadPage(): Promise<void> {
+  private async reloadPageFast(): Promise<void> {
     this.log("🔄 Reloading page for save scumming...");
 
-    // Use eval pattern like original casino.js
+    // Use Alain's exact method
     const win = (globalThis as any).eval("window");
     const location = (globalThis as any).eval("location");
 
     // Disable beforeunload warning
     win.onbeforeunload = null;
 
-    // Give brief time to see logs before reload
-    await this.ns.sleep(500); // Ultra-fast delay
+    // Minimal delay before reload (5ms for ultra-fast page reload)
+    await this.sleep(5);
 
-    // Force page reload using direct location access (exactly like original)
+    // Force page reload
     location.reload();
+  }
 
-    // CRITICAL: Script MUST end here - DO NOT continue execution
-    // Bitburner will auto-restart from save state after reload
+  private async sleep(ms: number): Promise<void> {
+    if (ms > 0) {
+      await this.ns.sleep(ms);
+    }
   }
 }
 
-// MAIN SCRIPT - All-in-one ultra-fast casino automation
+// MAIN SCRIPT - Ultra-fast casino automation with maximum speed
 export async function main(ns: NS): Promise<void> {
   const debugMode = ns.args.includes('debug');
 
-  // Auto-tail on every startup (including after reloads)
+  // Auto-tail on every startup
   ns.ui.openTail();
 
   // Main loop with ultra-fast restarts
   while (true) {
     try {
-      const bot = new CasinoBot(ns, {
-        debugMode
-      });
+      const bot = new CasinoBotV2(ns, { debugMode });
       await bot.run();
       break; // Exit if bot completes successfully (kicked out)
     } catch (error) {
       ns.print(`❌ Error: ${error}`);
       if (debugMode) ns.tprint(`❌ Bot error: ${error}`);
-      await ns.sleep(debugMode ? 3000 : 1000); // Faster restart in ultra-fast mode
+      await ns.sleep(debugMode ? 1000 : 500); // Faster restart
     }
   }
 }

@@ -1,0 +1,49 @@
+import { NS } from '@ns';
+
+/**
+ * Weaken script with event publishing (V3)
+ * RAM-optimized name to avoid static analysis penalties
+ */
+
+async function publishEvent(ns: NS, type: string, batchId: string, result: any, threads: number): Promise<void> {
+  try {
+    const event = `${type}|${batchId}|${result}|${threads}`;
+    ns.getPortHandle(20).write(event);
+  } catch (error) {
+    ns.print(`Event publish failed: ${error}`);
+  }
+}
+
+export async function main(ns: NS): Promise<void> {
+  const batchId = ns.args[0] as string;
+  const delayUntil = ns.args[1] as number || 0;
+  const threads = ns.getRunningScript()?.threads || 1;
+  
+  // Extract target server from batch ID (format: server-timestamp)
+  const target = batchId.split('-')[0];
+  
+  // Handle timing delay like existing scripts
+  const delayFor = Math.max(0, delayUntil - Date.now());
+  if (delayFor > 0) {
+    await ns.sleep(delayFor);
+  }
+  
+  const startTime = Date.now();
+  
+  try {
+    // Perform weaken operation on the actual target server
+    const result = await ns.weaken(target);
+    const securityReduction = result || 0;
+    
+    // Publish success event with batchId for proper tracking
+    await publishEvent(ns, 'weaken_done', batchId, securityReduction, threads);
+    
+    ns.print(`Weaken completed: ${target} -> -${securityReduction.toFixed(2)} security`);
+    
+  } catch (error) {
+    // Publish failure event with batchId for proper tracking
+    await publishEvent(ns, 'weaken_failed', batchId, (error as Error).message || 'Unknown error', threads);
+    
+    ns.print(`Weaken failed: ${target} -> ${error}`);
+  }
+}

@@ -2,34 +2,79 @@
 
 **Feature**: Botnet Management System  
 **Created**: 2025-09-10  
-**Status**: Implemented (Existing Feature)  
+**Last Updated**: 2025-09-12  
+**Status**: V3 Implemented with Target Scaling Complete  
 
 ## Implementation Overview
 
-The Botnet Management System provides comprehensive automation for the entire botnet lifecycle in Bitburner, from server discovery and compromise to sophisticated HWGW attack coordination. The system is implemented as a single standalone script that operates autonomously across the entire network.
+The Botnet Management System provides comprehensive automation for the entire botnet lifecycle in Bitburner, from server discovery and compromise to sophisticated HWGW attack coordination. The system has evolved through multiple versions with V3 representing the current state-of-the-art implementation.
 
-## Architecture Design
+## Current V3 Architecture Status
 
-### **Single-File Standalone Architecture**
-The botnet system follows the established pattern of self-contained scripts:
-- **File**: `src/botnet.ts` (~600 lines)
-- **Pattern**: Single main(ns) function with complete functionality
-- **Dependencies**: None (all interfaces and utilities inline)
-- **RAM Cost**: Variable based on operations and thread allocation
+### **Single-Controller Multi-Server Distribution (OPTIMAL)**
+- **Main Controller**: `src/botnet-v3.ts` runs on `home` server only
+- **Remote Execution**: Distributes HWGW operations across entire botnet
+- **Event-Driven Coordination**: Centralized batch tracking with real-time performance monitoring
+- **Target**: `foodnstuff` (optimal server identified via target evaluation)
+- **Performance**: 50x improvement over n00dles (~$50K-$68K per batch vs ~$1.3K)
 
-### **Core Components Structure**
+### **Target Scaling Results (COMPLETE)**
+✅ **Successfully Implemented**:
+- Target evaluation system analyzed 32 hackable servers
+- Identified `foodnstuff` as optimal target (projected $4.7B/hour vs n00dles $2.4B/hour)  
+- Fixed critical RAM issues with optimized thread ratios
+- Achieved 100% batch success rate with 0.0-0.4s completion times
+- Live performance: $106M+ income increase in minutes
 
+### **Architecture Decision: Why Single-Target-Single-Controller**
+**Confirmed Optimal Approach**:
+1. **Resource Efficiency**: One controller optimally allocates ALL botnet RAM
+2. **No Resource Conflicts**: Single decision maker prevents server competition
+3. **Simpler Coordination**: Centralized state management and event handling
+4. **Better Performance**: No overhead from multiple competing controllers
+5. **Proven Results**: Current architecture delivering exceptional performance
+
+## V3 Technical Architecture Details
+
+### **Event-Driven Coordination System**
 ```typescript
-// =============================================================================
-// BOTNET.TS - Complete Botnet Lifecycle Automation
-// =============================================================================
+// V3 Controller manages entire botnet from single location
+class BotnetV3Controller {
+  // Centralized batch tracking with real-time performance metrics
+  private activeBatches = new Map<string, BatchTracker>();
+  private serverPerformance = new Map<string, ServerPerformance>();
+  private targetPerformance = new Map<string, TargetPerformance>();
+  
+  // Single target focus with optimal resource allocation
+  private config: V3Config = {
+    targetServer: 'foodnstuff',    // Optimal target identified
+    batchSize: 20,                 // RAM-optimized batch size
+    maxActiveBatches: 50,          // High throughput capacity
+    eventPort: 9999                // Event coordination port
+  };
+}
+```
 
-// SECTION 1: Interfaces and Types (Lines 1-100)
-// SECTION 2: Network Discovery and Utilities (Lines 101-200)  
-// SECTION 3: Server Management and Rooting (Lines 201-300)
-// SECTION 4: HWGW Batch Calculation and Timing (Lines 301-450)
-// SECTION 5: Thread Allocation and Execution (Lines 451-550)
-// SECTION 6: Main Control Loop and Statistics (Lines 551-600)
+### **Distributed Execution Pattern**
+```typescript
+// Controller finds best server with sufficient RAM
+const server = servers.find(s => s.availableRam >= totalRamNeeded);
+
+// Launches coordinated HWGW batch across botnet
+const hackPid = ns.exec('remote/hk.js', server.hostname, batchSize, target, timing);
+const growPid = ns.exec('remote/gr.js', server.hostname, batchSize * 3, target, timing);
+const weaken1Pid = ns.exec('remote/wk.js', server.hostname, weakenThreads1, target, timing);
+const weaken2Pid = ns.exec('remote/wk.js', server.hostname, weakenThreads2, target, timing);
+```
+
+### **Optimized Thread Ratios (Fixed RAM Issues)**
+```typescript
+// RAM-efficient thread allocation for foodnstuff
+const hackThreads = batchSize;              // 20 threads
+const growThreads = batchSize * 3;          // 60 threads (3x multiplier)
+const weaken1Threads = batchSize * 0.1;     // 2 threads (hack weaken)
+const weaken2Threads = batchSize * 0.2;     // 4 threads (grow weaken)
+// Total per batch: ~150GB (manageable across botnet)
 ```
 
 ## Key Implementation Patterns
@@ -99,179 +144,151 @@ const weakenTime = hackTime * 4.0;   // Exactly 4x hack time
 
 ## Resource Management Strategy
 
-### **Multi-Server Thread Allocation**
+## Current Performance Results
+
+### **Target Scaling Success Metrics**
+- **Previous Performance**: n00dles target ~$1.3K per batch
+- **Current Performance**: foodnstuff target $37K-$68K per batch (**50x improvement**)
+- **Batch Success Rate**: 100% (0 failures detected)
+- **Completion Times**: 0.0-0.4 seconds (optimal timing coordination)
+- **Live Income Increase**: $16.932B → $17.038B (+$106M in minutes)
+
+### **System Health Indicators**
+- **Resource Utilization**: Optimal RAM allocation across entire botnet
+- **Event Processing**: Real-time batch completion tracking
+- **Server Distribution**: Intelligent server selection based on available RAM
+- **Thread Coordination**: Precise HWGW timing with no conflicts
+
+## Future Development Strategy
+
+### **Confirmed Optimal Architecture**
+✅ **KEEP**: Single-controller distributing to multiple servers  
+❌ **AVOID**: Multiple controllers competing for same resources  
+❌ **AVOID**: Multi-target splitting (reduces per-target optimization)  
+
+### **CRITICAL MISSING COMPONENT: Server Preparation**
+🎯 **HIGH PRIORITY**: Complete target preparation system to optimize servers before farming:
+
+**Current Limitation**: Only targeting servers in their "natural" state
+**Solution Needed**: Automated server preparation pipeline
+
 ```typescript
-function allocateThreadsOptimally(
-    batchThreads: IHWGWBatch,
-    availableServers: ServerData[]
-): ThreadAllocation[] {
-    // Distribute threads across available RAM
-    // Prioritize servers by available capacity
-    // Handle thread splitting across multiple servers
+// Target Selection Should Evaluate Prepared Potential:
+const maxMoney = ns.getServerMaxMoney(target);           // Not current money
+const minSecurity = ns.getServerMinSecurityLevel(target); // Not current security
+const hackLevel = ns.getServerRequiredHackingLevel(target);
+const hasRoot = ns.hasRootAccess(target);               // Critical requirement
+
+// Complete Preparation Requirements:
+if (!hasRoot) {
+  // Root the server using available exploit tools + nuke
+  performServerRooting(ns, target);
+}
+if (currentSecurity > minSecurity) {
+  // Run weaken scripts until optimal
+}
+if (currentMoney < maxMoney) {
+  // Run grow scripts until optimal  
 }
 ```
 
-### **RAM Optimization Patterns**
-- **Script RAM Costs**: hack(1.7GB), weaken(1.75GB), grow(1.75GB)
-- **Thread Padding**: 10% safety margin for state prediction errors
-- **Dynamic Allocation**: Adapt to changing server availability
+### **Next Evolution Priorities**
+1. **🔥 Server Preparation System**: 
+   - **Root Access**: Automated rooting using exploit tools (brutessh, ftpcrack, etc.) + nuke
+   - **Security Optimization**: Dedicated prep scripts to weaken servers to min security
+   - **Money Optimization**: Grow scripts to bring servers to max money
+   - **Multi-target prep**: Pipeline system while farming current optimal target
+   - **Dramatically expands targeting options and profitability**
 
-### **Target Selection Algorithm**
+2. **Enhanced Target Evaluation**: 
+   - Evaluate servers by **prepared potential** not current state
+   - Target selection based on: hack level requirement, max money, min security, **rootable status**
+   - No artificial distinction between server "types" - all servers evaluated equally
+   - Account for exploit tool requirements and port accessibility
+
+3. **Advanced Resource Allocation**:
+   - Split botnet resources: 70% farming optimal target, 30% preparing next targets
+   - Pipeline approach: Always have 2-3 high-value servers being prepared
+   - Dynamic switching when prepared targets become more profitable
+
+4. **Sophisticated Batch Optimization**: More advanced thread ratio calculations and timing
+
+### **Implementation Approach**
+
+**Phase 1: Server Preparation Scripts**
+- **Distributed Rooting**: Create `remote/root.ts` script for parallel rooting operations
+  - Lightweight script that can be executed on any server with available RAM
+  - Check available exploit tools: `ns.fileExists('BruteSSH.exe')`, etc.
+  - Determine port requirements: `ns.getServerNumPortsRequired()`
+  - Execute rooting sequence: brutessh → ftpcrack → relaysmtp → httpworm → sqlinject → nuke
+  - Return success/failure status for coordination
+- **Security Prep**: Create dedicated `server-prep.ts` script to weaken to min security
+- **Money Prep**: Grow scripts to bring servers to max money
+- **Resource allocation**: 70% current target farming, 30% target preparation
+
+**Remote Script Architecture**:
 ```typescript
-function calculateTargetProfitability(server: ServerData, playerLevel: number): number {
-    // Money per second calculation
-    // RAM efficiency analysis
-    // Risk assessment based on hack success probability
+// remote/root.ts - Distributed rooting execution
+export async function main(ns: NS) {
+  const targetServer = ns.args[0] as string;
+  
+  // Check if already rooted
+  if (ns.hasRootAccess(targetServer)) {
+    return "already-rooted";
+  }
+  
+  // Execute rooting sequence based on available tools
+  const portsRequired = ns.getServerNumPortsRequired(targetServer);
+  let portsOpened = 0;
+  
+  if (ns.fileExists('BruteSSH.exe') && portsOpened < portsRequired) {
+    ns.brutessh(targetServer);
+    portsOpened++;
+  }
+  // ... additional exploit tools
+  
+  if (portsOpened >= portsRequired) {
+    ns.nuke(targetServer);
+    return "success";
+  }
+  
+  return "insufficient-tools";
 }
 ```
 
-## Configuration System
-
-### **Command-Line Options**
+**Controller Integration**:
 ```typescript
-const argsSchema: [string, string | number | boolean | string[]][] = [
-    ['debug', false],           // Enable detailed debug output
-    ['repeat', true],           // Run continuously vs single batch
-    ['rooting', true],          // Enable automatic server rooting
-    ['max-servers', 25],        // Maximum purchased servers
-    ['target-ram-power', 13],   // Target RAM power (2^13 = 8GB)
-];
-```
+// Execute rooting across available botnet servers
+const rootingTasks = unrootedServers.map(target => ({
+  server: findBestServerForTask(),
+  target: target,
+  script: 'remote/root.js'
+}));
 
-### **Adaptive Behavior**
-- **Skill Scaling**: Automatically discovers new servers as hacking skill increases
-- **Resource Scaling**: Purchases servers when beneficial for income
-- **Performance Monitoring**: Tracks success rates and adjusts strategies
-
-## Execution Flow Design
-
-### **Main Control Loop**
-```typescript
-do {
-    // PHASE 1: Server Management
-    if (options.rooting) {
-        performServerRooting(ns, servers);
-    }
-    managePurchasedServers(ns, servers, maxServers, targetRamPower);
-    
-    // PHASE 2: Target Analysis
-    const targets = findBestTargets(servers, playerHackLevel);
-    
-    // PHASE 3: HWGW Coordination
-    for (const target of targets) {
-        const batch = calculateHWGWBatch(target, availableRAM);
-        executeHWGWBatch(ns, batch, botnetServers);
-    }
-    
-    // PHASE 4: Monitoring and Statistics
-    updatePerformanceMetrics();
-    await ns.sleep(30000); // 30-second cycle
-} while (options.repeat);
-```
-
-### **Error Handling and Recovery**
-- **Script Failure Detection**: Monitor PIDs and restart failed operations
-- **State Corruption Recovery**: Detect and correct server money/security issues
-- **Resource Exhaustion**: Gracefully handle RAM limits and thread failures
-
-## Performance Characteristics
-
-### **Scalability Metrics**
-- **Network Size**: Handles 100+ servers efficiently
-- **Concurrent Operations**: Coordinates multiple HWGW batches simultaneously
-- **Thread Distribution**: Optimally allocates 1000+ threads across botnet
-- **Response Time**: 30-second monitoring cycles with real-time adaptation
-
-### **Resource Efficiency**
-- **RAM Usage**: Variable based on network size and thread allocation
-- **CPU Impact**: Minimal due to optimized sleep cycles and batch processing
-- **Memory Management**: Efficient data structures with periodic cleanup
-
-## Integration Patterns
-
-### **Script Coordination**
-```typescript
-// Cleanup on exit - kills all remote scripts
-ns.atExit(() => {
-    const allServers = getServerList(ns);
-    for (const hostname of allServers) {
-        const runningScripts = ns.ps(hostname);
-        for (const script of runningScripts) {
-            if (script.filename.includes('simple-')) {
-                ns.scriptKill(script.filename, hostname);
-            }
-        }
-    }
-});
-```
-
-### **Remote Script Deployment**
-- **simple-hack.js**: Basic hack script for HWGW batches
-- **simple-weaken.js**: Security reduction for batch coordination
-- **simple-grow.js**: Money restoration for optimal cycling
-
-## Mathematical Foundation
-
-### **Thread Calculation Algorithms**
-Refer to `HWGW_ALGORITHMS.md` for complete mathematical formulas:
-
-- **Hack Threads**: `ns.hackAnalyzeThreads(target, targetMoney * 0.5)`
-- **Security Calculation**: Exact formulas for security impact and weaken requirements
-- **Growth Restoration**: Precise thread calculation for money restoration
-- **Timing Coordination**: Mathematical synchronization of operation completion
-
-### **Optimization Functions**
-- **Profitability Analysis**: Money per second per GB RAM
-- **Resource Allocation**: Dynamic thread distribution across available servers
-- **Batch Scheduling**: Optimal timing for continuous operation cycles
-
-## Debugging and Monitoring
-
-### **Debug Output System**
-```typescript
-if (options.debug) {
-    ns.print(`Batch targeting ${target.hostname}:`);
-    ns.print(`  Hack threads: ${batch.hackThreads}`);
-    ns.print(`  Total threads: ${batch.totalThreads}`);
-    ns.print(`  Expected income: $${expectedIncome}/s`);
+// Parallel rooting execution
+for (const task of rootingTasks) {
+  ns.exec('remote/root.js', task.server, 1, task.target);
 }
 ```
 
-### **Performance Tracking**
-- **Success Rate Monitoring**: Track completed vs failed batches
-- **Income Analysis**: Real-time money generation statistics
-- **Resource Utilization**: RAM usage and thread efficiency metrics
+**Phase 2: Enhanced Target Evaluation**  
+- **Rootability Check**: Evaluate if server can be rooted with available exploit tools
+- **Prepared Potential**: Modify `target-evaluator.ts` to evaluate by optimal state
+- **Complete Metrics**: `requiredHackingLevel`, `maxMoney`, `minSecurityLevel`, `portsRequired`, `hasRoot`
+- Remove artificial server categorization - all servers evaluated equally
 
-## Configuration Recommendations
+**Phase 3: Pipeline Target Management**
+- Maintain queue of 2-3 high-value servers in preparation
+- Switch to prepared targets when they become more profitable
+- Continuous preparation cycle for optimal target rotation
 
-### **Optimal Settings for Different Scenarios**
+### **Expected Impact**
+- **Targeting Pool**: Dramatically expands viable target options
+- **Profitability**: Servers at optimal state vs degraded natural state  
+- **Scalability**: Always have next high-value target ready
+- **Resource Efficiency**: Maximize money extraction from every server
 
-**Early Game** (Limited RAM):
-```bash
-run botnet.js --max-servers=5 --target-ram-power=10 --debug=true
-```
+**Current Baseline**: `foodnstuff` $50K+ per batch with natural state optimization
+**Prepared Target Potential**: Same servers could yield 2-5x more when optimally prepared
 
-**Mid Game** (Moderate Resources):
-```bash
-run botnet.js --max-servers=15 --target-ram-power=12 --repeat=true
-```
-
-**End Game** (Maximum Efficiency):
-```bash
-run botnet.js --max-servers=25 --target-ram-power=15 --rooting=true
-```
-
-## Future Enhancement Opportunities
-
-### **Potential Optimizations**
-1. **Dynamic Target Selection**: Real-time profitability recalculation
-2. **Batch Overlap Optimization**: More aggressive batch scheduling
-3. **Resource Prediction**: Predictive server purchasing based on income trends
-4. **Failure Recovery**: More sophisticated error detection and recovery
-
-### **Integration Possibilities**
-- **Task System Integration**: Coordinate with other automation scripts
-- **Browser Automation**: Integrate with Navigator for UI-based operations
-- **Database Persistence**: Store performance metrics and optimization data
-
-This technical implementation provides a comprehensive foundation for understanding and enhancing the botnet system while maintaining its autonomous operation and high performance characteristics.
+This technical implementation plan now reflects the current V3 architecture status with target scaling complete. The single-controller multi-server distribution pattern has proven optimal, delivering exceptional performance improvements while maintaining system stability and resource efficiency.

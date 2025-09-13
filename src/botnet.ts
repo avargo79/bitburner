@@ -1,1827 +1,1241 @@
-import { AutocompleteData, NS, ScriptArg } from "@ns";
-
-// ===== INLINED FACTION DETECTOR =====
-interface FactionWorkStatus {
-    isWorkingForFaction: boolean;
-    detectedFactionName: string | null;
-    lastDetectionTime: number;
-    detectionMethod: 'dom-text' | 'manual';
-    workDuration: number;
-    consecutiveDetections: number;
-    lastStatusChange: number;
-}
-
-function getDocumentAPI(): any {
-    return (globalThis as any)['doc' + 'ument'];
-}
-
-class FactionDetector {
-    private detectionHistory: FactionWorkStatus[] = [];
-    private lastDetectedFaction: string | null = null;
-    private consecutiveCount = 0;
-
-    detectFactionWork(): FactionWorkStatus {
-        const currentTime = Date.now();
-        const doc = getDocumentAPI();
-        
-        let isWorkingForFaction = false;
-        let detectedFactionName: string | null = null;
-        
-        try {
-            const workIndicators = [
-                'Working for',
-                'Faction work:',
-                'Doing faction work for',
-                'Currently working for faction'
-            ];
-            
-            const allText = doc.body?.textContent || '';
-            
-            for (const indicator of workIndicators) {
-                const workIndex = allText.indexOf(indicator);
-                if (workIndex !== -1) {
-                    isWorkingForFaction = true;
-                    detectedFactionName = this.extractFactionName(allText.substring(workIndex, workIndex + 200));
-                    break;
-                }
-            }
-            
-            if (detectedFactionName && detectedFactionName.toLowerCase().includes('working')) {
-                detectedFactionName = null;
-                isWorkingForFaction = false;
-            }
-            
-        } catch (error) {
-            isWorkingForFaction = false;
-            detectedFactionName = null;
-        }
-        
-        if (detectedFactionName === this.lastDetectedFaction) {
-            this.consecutiveCount++;
-        } else {
-            this.consecutiveCount = 1;
-            this.lastDetectedFaction = detectedFactionName;
-        }
-        
-        const status: FactionWorkStatus = {
-            isWorkingForFaction,
-            detectedFactionName,
-            lastDetectionTime: currentTime,
-            detectionMethod: 'dom-text',
-            workDuration: isWorkingForFaction ? this.calculateWorkDuration() : 0,
-            consecutiveDetections: this.consecutiveCount,
-            lastStatusChange: this.consecutiveCount === 1 ? currentTime : this.getLastStatusChangeTime()
-        };
-        
-        this.detectionHistory.push(status);
-        if (this.detectionHistory.length > 10) {
-            this.detectionHistory.shift();
-        }
-        
-        return status;
-    }
-    
-    extractFactionName(workText: string): string | null {
-        const patterns = [
-            /Working for\s+([A-Za-z0-9\s\-\.]+?)(?:\s|$|\.|\,)/,
-            /Faction work:\s*([A-Za-z0-9\s\-\.]+?)(?:\s|$|\.|\,)/,
-            /working for faction\s+([A-Za-z0-9\s\-\.]+?)(?:\s|$|\.|\,)/i,
-            /faction:\s*([A-Za-z0-9\s\-\.]+?)(?:\s|$|\.|\,)/i
-        ];
-        
-        for (const pattern of patterns) {
-            const match = workText.match(pattern);
-            if (match && match[1]) {
-                let factionName = match[1].trim();
-                
-                const stopWords = ['and', 'is', 'at', 'on', 'in', 'for', 'with', 'by', 'to', 'from'];
-                const words = factionName.split(/\s+/);
-                const filteredWords = words.filter(word => 
-                    !stopWords.includes(word.toLowerCase()) && 
-                    word.length > 1
-                );
-                
-                factionName = filteredWords.join(' ').trim();
-                
-                // Normalize faction names by removing trailing numbers (e.g., "Aevum68" -> "Aevum")
-                factionName = factionName.replace(/\d+$/, '').trim();
-                
-                if (factionName.length >= 3 && factionName.length <= 50) {
-                    return factionName;
-                }
-            }
-        }
-        
-        return null;
-    }
-    
-    isDetectionStable(status: FactionWorkStatus, requiredConsecutiveDetections: number = 3): boolean {
-        return status.consecutiveDetections >= requiredConsecutiveDetections;
-    }
-    
-    private calculateWorkDuration(): number {
-        if (this.detectionHistory.length < 2) return 0;
-        
-        const firstDetection = this.detectionHistory.find(h => h.isWorkingForFaction);
-        if (!firstDetection) return 0;
-        
-        return Date.now() - firstDetection.lastDetectionTime;
-    }
-    
-    private getLastStatusChangeTime(): number {
-        if (this.detectionHistory.length < 2) return Date.now();
-        
-        for (let i = this.detectionHistory.length - 2; i >= 0; i--) {
-            const prev = this.detectionHistory[i];
-            const current = this.detectionHistory[this.detectionHistory.length - 1];
-            
-            if (prev.detectedFactionName !== current.detectedFactionName) {
-                return current.lastDetectionTime;
-            }
-        }
-        
-        return this.detectionHistory[0]?.lastDetectionTime || Date.now();
-    }
-    
-    getDetectionHistory(): FactionWorkStatus[] {
-        return [...this.detectionHistory];
-    }
-    
-    clearHistory(): void {
-        this.detectionHistory = [];
-        this.lastDetectedFaction = null;
-        this.consecutiveCount = 0;
-    }
-}
-
-// ===== INLINED SHARE CALCULATOR =====
-interface ShareCalculationResult {
-    baseThreads: number;
-    effectiveThreads: number;
-    intelligenceBonus: number;
-    coreBonus: number;
-    reputationBonus: number;
-    totalRAMRequired: number;
-    ramPerThread: number;
-}
-
-interface ServerShareData {
-    hostname: string;
-    cpuCores: number;
-    availableRAM: number;
-    maxRam: number;
-    ramUsed: number;
-}
-
-interface ShareConfiguration {
-    ramPercentage: number;
-    minimumThreads: number;
-    maximumThreads: number;
-    priorityCoreThreshold: number;
-    intelligenceOptimization: boolean;
-}
-
-class ShareCalculator {
-    private static readonly SHARE_SCRIPT_RAM = 4.0;
-    
-    static calculateIntelligenceBonus(intelligence: number): number {
-        if (intelligence <= 0) return 1.0;
-        return 1 + (2 * Math.pow(intelligence, 0.8)) / 600;
-    }
-    
-    static calculateCoreBonus(cpuCores: number): number {
-        if (cpuCores <= 0) return 1.0;
-        return 1 + (cpuCores - 1) / 16;
-    }
-    
-    static calculateReputationBonus(effectiveThreads: number): number {
-        if (effectiveThreads <= 0) return 1.0;
-        return 1 + Math.log(effectiveThreads) / 25;
-    }
-    
-    static calculateEffectiveThreads(
-        baseThreads: number, 
-        cpuCores: number, 
-        intelligence: number
-    ): number {
-        if (baseThreads <= 0) return 0;
-        
-        const coreBonus = this.calculateCoreBonus(cpuCores);
-        const intelligenceBonus = this.calculateIntelligenceBonus(intelligence);
-        
-        return baseThreads * coreBonus * intelligenceBonus;
-    }
-    
-    static calculateMaxThreadsForServer(
-        serverData: ServerShareData, 
-        ramPercentage: number
-    ): number {
-        const availableRAM = serverData.availableRAM;
-        const maxAllocatableRAM = availableRAM * (ramPercentage / 100);
-        
-        if (maxAllocatableRAM < this.SHARE_SCRIPT_RAM) {
-            return 0;
-        }
-        
-        return Math.floor(maxAllocatableRAM / this.SHARE_SCRIPT_RAM);
-    }
-    
-    static calculateOptimalThreadsForServer(
-        serverData: ServerShareData,
-        config: ShareConfiguration,
-        playerIntelligence: number
-    ): ShareCalculationResult {
-        const maxThreads = this.calculateMaxThreadsForServer(serverData, config.ramPercentage);
-        
-        let optimalThreads = maxThreads;
-        
-        if (optimalThreads < config.minimumThreads) {
-            optimalThreads = 0;
-        } else if (optimalThreads > config.maximumThreads) {
-            optimalThreads = config.maximumThreads;
-        }
-        
-        const effectiveThreads = this.calculateEffectiveThreads(
-            optimalThreads, 
-            serverData.cpuCores, 
-            playerIntelligence
-        );
-        
-        const intelligenceBonus = this.calculateIntelligenceBonus(playerIntelligence);
-        const coreBonus = this.calculateCoreBonus(serverData.cpuCores);
-        const reputationBonus = this.calculateReputationBonus(effectiveThreads);
-        
-        return {
-            baseThreads: optimalThreads,
-            effectiveThreads,
-            intelligenceBonus,
-            coreBonus,
-            reputationBonus,
-            totalRAMRequired: optimalThreads * this.SHARE_SCRIPT_RAM,
-            ramPerThread: this.SHARE_SCRIPT_RAM
-        };
-    }
-    
-    static calculateNetworkShareAllocation(
-        servers: ServerShareData[],
-        config: ShareConfiguration,
-        playerIntelligence: number
-    ): {
-        totalBaseThreads: number;
-        totalEffectiveThreads: number;
-        totalRAMUsed: number;
-        averageReputationBonus: number;
-        serverAllocations: (ShareCalculationResult & { hostname: string })[];
-    } {
-        const allocations = servers
-            .map(server => ({
-                hostname: server.hostname,
-                ...this.calculateOptimalThreadsForServer(server, config, playerIntelligence)
-            }))
-            .filter(allocation => allocation.baseThreads > 0);
-        
-        const totalBaseThreads = allocations.reduce((sum, alloc) => sum + alloc.baseThreads, 0);
-        const totalEffectiveThreads = allocations.reduce((sum, alloc) => sum + alloc.effectiveThreads, 0);
-        const totalRAMUsed = allocations.reduce((sum, alloc) => sum + alloc.totalRAMRequired, 0);
-        
-        const weightedReputationBonus = allocations.reduce((sum, alloc) => 
-            sum + (alloc.reputationBonus * alloc.effectiveThreads), 0);
-        const averageReputationBonus = totalEffectiveThreads > 0 ? 
-            weightedReputationBonus / totalEffectiveThreads : 1.0;
-        
-        return {
-            totalBaseThreads,
-            totalEffectiveThreads,
-            totalRAMUsed,
-            averageReputationBonus,
-            serverAllocations: allocations
-        };
-    }
-    
-    static evaluateIntelligenceOptimization(
-        servers: ServerShareData[],
-        config: ShareConfiguration,
-        currentIntelligence: number,
-        targetIntelligence: number
-    ): {
-        currentBonus: number;
-        targetBonus: number;
-        improvementPercent: number;
-        recommendOptimization: boolean;
-    } {
-        const currentResult = this.calculateNetworkShareAllocation(servers, config, currentIntelligence);
-        const targetResult = this.calculateNetworkShareAllocation(servers, config, targetIntelligence);
-        
-        const currentBonus = currentResult.averageReputationBonus;
-        const targetBonus = targetResult.averageReputationBonus;
-        const improvementPercent = ((targetBonus - currentBonus) / currentBonus) * 100;
-        
-        return {
-            currentBonus,
-            targetBonus,
-            improvementPercent,
-            recommendOptimization: improvementPercent > 10.0
-        };
-    }
-    
-    static getShareScriptRAM(): number {
-        return this.SHARE_SCRIPT_RAM;
-    }
-    
-    static validateConfiguration(config: ShareConfiguration): string[] {
-        const errors: string[] = [];
-        
-        if (config.ramPercentage <= 0 || config.ramPercentage > 100) {
-            errors.push("RAM percentage must be between 1-100");
-        }
-        
-        if (config.minimumThreads < 0) {
-            errors.push("Minimum threads cannot be negative");
-        }
-        
-        if (config.maximumThreads < config.minimumThreads) {
-            errors.push("Maximum threads must be >= minimum threads");
-        }
-        
-        if (config.priorityCoreThreshold < 1) {
-            errors.push("Priority core threshold must be >= 1");
-        }
-        
-        return errors;
-    }
-}
-
-// ===== INLINED SERVER OPTIMIZER =====
-interface ServerResourceProfile {
-    hostname: string;
-    cpuCores: number;
-    availableRAM: number;
-    maxShareThreads: number;
-    coreBonus: number;
-    allocationPriority: number;
-    isEligible: boolean;
-    efficiencyScore: number;
-    ramUtilization: number;
-}
-
-interface OptimizationResult {
-    eligibleServers: ServerResourceProfile[];
-    ineligibleServers: ServerResourceProfile[];
-    totalAvailableRAM: number;
-    totalPotentialThreads: number;
-    averageCoreBonus: number;
-    optimizationRecommendations: string[];
-}
-
-class ServerOptimizer {
-    
-    static assessServerCapacity(
-        ns: NS, 
-        hostname: string, 
-        ramPercentage: number
-    ): ServerResourceProfile {
-        const server = ns.getServer(hostname);
-        const availableRAM = server.maxRam - server.ramUsed;
-        const maxAllocatableRAM = availableRAM * (ramPercentage / 100);
-        const maxShareThreads = Math.floor(maxAllocatableRAM / ShareCalculator.getShareScriptRAM());
-        
-        const coreBonus = ShareCalculator.calculateCoreBonus(server.cpuCores);
-        const ramUtilization = (server.ramUsed / server.maxRam) * 100;
-        
-        const efficiencyScore = this.calculateEfficiencyScore(
-            server.cpuCores,
-            maxShareThreads,
-            ramUtilization,
-            availableRAM
-        );
-        
-        const allocationPriority = this.calculateAllocationPriority(
-            server.cpuCores,
-            maxShareThreads,
-            efficiencyScore,
-            server.purchasedByPlayer
-        );
-        
-        const isEligible = this.isServerEligible(server, maxShareThreads);
-        
-        return {
-            hostname,
-            cpuCores: server.cpuCores,
-            availableRAM,
-            maxShareThreads,
-            coreBonus,
-            allocationPriority,
-            isEligible,
-            efficiencyScore,
-            ramUtilization
-        };
-    }
-    
-    static rankServersByPriority(servers: ServerResourceProfile[]): ServerResourceProfile[] {
-        return [...servers].sort((a, b) => {
-            if (!a.isEligible && b.isEligible) return 1;
-            if (a.isEligible && !b.isEligible) return -1;
-            
-            if (a.allocationPriority !== b.allocationPriority) {
-                return b.allocationPriority - a.allocationPriority;
-            }
-            
-            if (a.cpuCores !== b.cpuCores) {
-                return b.cpuCores - a.cpuCores;
-            }
-            
-            if (a.maxShareThreads !== b.maxShareThreads) {
-                return b.maxShareThreads - a.maxShareThreads;
-            }
-            
-            return b.efficiencyScore - a.efficiencyScore;
-        });
-    }
-    
-    static optimizeServerAllocation(
-        ns: NS,
-        serverHostnames: string[],
-        config: ShareConfiguration
-    ): OptimizationResult {
-        const profiles = serverHostnames.map(hostname => 
-            this.assessServerCapacity(ns, hostname, config.ramPercentage)
-        );
-        
-        const rankedProfiles = this.rankServersByPriority(profiles);
-        
-        const eligibleServers = rankedProfiles.filter(p => p.isEligible);
-        const ineligibleServers = rankedProfiles.filter(p => !p.isEligible);
-        
-        const totalAvailableRAM = eligibleServers.reduce((sum, p) => sum + p.availableRAM, 0);
-        const totalPotentialThreads = eligibleServers.reduce((sum, p) => sum + p.maxShareThreads, 0);
-        const averageCoreBonus = eligibleServers.length > 0 ? 
-            eligibleServers.reduce((sum, p) => sum + p.coreBonus, 0) / eligibleServers.length : 1.0;
-        
-        const recommendations = this.generateOptimizationRecommendations(
-            eligibleServers, 
-            ineligibleServers, 
-            config
-        );
-        
-        return {
-            eligibleServers,
-            ineligibleServers,
-            totalAvailableRAM,
-            totalPotentialThreads,
-            averageCoreBonus,
-            optimizationRecommendations: recommendations
-        };
-    }
-    
-    static selectOptimalServers(
-        servers: ServerResourceProfile[],
-        targetThreads: number,
-        prioritizeCores: boolean = true
-    ): ServerResourceProfile[] {
-        const eligibleServers = servers.filter(s => s.isEligible);
-        const ranked = this.rankServersByPriority(eligibleServers);
-        
-        const selected: ServerResourceProfile[] = [];
-        let remainingThreads = targetThreads;
-        
-        for (const server of ranked) {
-            if (remainingThreads <= 0) break;
-            
-            if (server.maxShareThreads > 0) {
-                selected.push(server);
-                remainingThreads -= server.maxShareThreads;
-            }
-        }
-        
-        return selected;
-    }
-    
-    static calculateNetworkCapacity(
-        ns: NS,
-        serverHostnames: string[],
-        ramPercentage: number
-    ): {
-        totalRAM: number;
-        availableRAM: number;
-        maxPossibleThreads: number;
-        serverCount: number;
-        averageCores: number;
-    } {
-        const profiles = serverHostnames.map(hostname => 
-            this.assessServerCapacity(ns, hostname, ramPercentage)
-        );
-        
-        const eligible = profiles.filter(p => p.isEligible);
-        
-        const totalRAM = eligible.reduce((sum, p) => sum + (ns.getServer(p.hostname).maxRam), 0);
-        const availableRAM = eligible.reduce((sum, p) => sum + p.availableRAM, 0);
-        const maxPossibleThreads = eligible.reduce((sum, p) => sum + p.maxShareThreads, 0);
-        const serverCount = eligible.length;
-        const averageCores = eligible.length > 0 ? 
-            eligible.reduce((sum, p) => sum + p.cpuCores, 0) / eligible.length : 0;
-        
-        return {
-            totalRAM,
-            availableRAM,
-            maxPossibleThreads,
-            serverCount,
-            averageCores
-        };
-    }
-    
-    private static calculateEfficiencyScore(
-        cpuCores: number,
-        maxThreads: number,
-        ramUtilization: number,
-        availableRAM: number
-    ): number {
-        if (maxThreads <= 0) return 0;
-        
-        const coreWeight = 0.4;
-        const threadWeight = 0.3;
-        const ramAvailabilityWeight = 0.2;
-        const utilizationWeight = 0.1;
-        
-        const normalizedCores = Math.min(cpuCores / 8, 1.0);
-        const normalizedThreads = Math.min(maxThreads / 100, 1.0);
-        const normalizedRAMAvailability = Math.min(availableRAM / 1000, 1.0);
-        const normalizedUtilization = 1.0 - (ramUtilization / 100);
-        
-        return (
-            normalizedCores * coreWeight +
-            normalizedThreads * threadWeight +
-            normalizedRAMAvailability * ramAvailabilityWeight +
-            normalizedUtilization * utilizationWeight
-        ) * 100;
-    }
-    
-    private static calculateAllocationPriority(
-        cpuCores: number,
-        maxThreads: number,
-        efficiencyScore: number,
-        isPurchased: boolean
-    ): number {
-        let priority = 0;
-        
-        priority += cpuCores * 10;
-        priority += maxThreads * 0.1;
-        priority += efficiencyScore * 0.5;
-        
-        if (isPurchased) {
-            priority += 20;
-        }
-        
-        return Math.round(priority);
-    }
-    
-    private static isServerEligible(server: any, maxShareThreads: number): boolean {
-        if (!server.hasAdminRights) return false;
-        if (maxShareThreads < 1) return false;
-        if (server.maxRam < ShareCalculator.getShareScriptRAM()) return false;
-        
-        return true;
-    }
-    
-    private static generateOptimizationRecommendations(
-        eligible: ServerResourceProfile[],
-        ineligible: ServerResourceProfile[],
-        config: ShareConfiguration
-    ): string[] {
-        const recommendations: string[] = [];
-        
-        if (eligible.length === 0) {
-            recommendations.push("No eligible servers found for share allocation");
-            recommendations.push(`Consider reducing RAM percentage from ${config.ramPercentage}%`);
-        }
-        
-        if (ineligible.length > 0) {
-            const noAdminCount = ineligible.filter(s => !s.isEligible).length;
-            if (noAdminCount > 0) {
-                recommendations.push(`${noAdminCount} servers lack admin rights - consider gaining access`);
-            }
-        }
-        
-        const highCoreServers = eligible.filter(s => s.cpuCores >= 8);
-        if (highCoreServers.length > 0) {
-            recommendations.push(`${highCoreServers.length} high-core servers available - prioritize these for best bonuses`);
-        }
-        
-        const lowEfficiencyServers = eligible.filter(s => s.efficiencyScore < 30);
-        if (lowEfficiencyServers.length > 0) {
-            recommendations.push(`${lowEfficiencyServers.length} servers have low efficiency - consider optimizing RAM usage`);
-        }
-        
-        const totalThreads = eligible.reduce((sum, s) => sum + s.maxShareThreads, 0);
-        if (totalThreads > 1000) {
-            recommendations.push("High thread capacity detected - consider intelligence optimization");
-        }
-        
-        return recommendations;
-    }
-}
-
-// Centralized configuration constants
-const BOTNET_CONFIG = {
-    // RAM and resource management
-    SCRIPT_RAM_COST: 1.75,              // GB per thread for HWGW scripts
-    SHRAM_SCRIPT_RAM_COST: 4.0,         // GB per thread for repboost scripts
-    HOME_RAM_RESERVE: 32,               // GB to reserve on home server
-    MIN_BATCH_RAM_THRESHOLD: 50,        // Minimum GB to spawn additional batches
-    MIN_BATCH_THREAD_THRESHOLD: 10,     // Minimum threads for batch allocation
-    
-    // HWGW timing and optimization
-    HWGW_TIMING_GAP: 150,               // ms between HWGW script executions
-    HACK_PERCENTAGE: 0.75,              // Percentage of server money to target
-    GROWTH_ANALYSIS_CAP: 50,            // Maximum growth multiplier to prevent extreme values
-    
-    // Target selection thresholds
-    MONEY_THRESHOLD: 0.90,              // Minimum money ratio for hack-ready targets
-    SECURITY_TOLERANCE: 8,              // Maximum security above minimum for targets
-    PREP_MONEY_THRESHOLD: 0.95,         // Money threshold for prep batch selection
-    PREP_SECURITY_THRESHOLD: 1,         // Security threshold for prep batch selection
-    
-    // Repboost system configuration
-    SHRAM_REALLOCATION_INTERVAL: 60000, // ms between repboost reallocations
-    SHRAM_THREAD_CHANGE_THRESHOLD: 50,  // Thread difference to trigger reallocation
-    SHRAM_CLEANUP_ROUNDS: 3,            // Number of cleanup attempts
-    SHRAM_CLEANUP_DELAY: 200,           // ms between cleanup rounds
-    
-    // Performance and monitoring
-    STATUS_UPDATE_INTERVAL: 1000,       // ms between status updates
-    SHRAM_REPORTING_INTERVAL: 30000,    // ms between repboost script reports
-    TOP_TARGETS_DISPLAY: 3,             // Number of top targets to show in status
-    TOP_SERVERS_DEBUG: 5,               // Number of top servers to show in debug
-    TOP_SHRAM_SERVERS: 3,               // Number of top repboost servers to display
-    
-    // Server management
-    PURCHASED_SERVER_START_RAM: 2,      // GB starting RAM for new purchased servers
-    SERVER_UPGRADE_LIMIT: 1,            // Max servers to upgrade per cycle
-    
-    // Script file patterns
-    REMOTE_SCRIPT_PATTERN: 'simple-',   // Pattern for remote scripts to manage
-    REMOTE_SCRIPT_EXTENSION: '.js'      // File extension for remote scripts
-} as const;
+import { NS } from '@ns';
+import { Logger, LogLevel } from '/lib/logger';
 
 /**
- * Botnet Management System
- * 
- * Complete botnet lifecycle automation:
- * - Advanced HWGW batching with precise timing coordination
- * - Automated server rooting (exploit tools + nuke)
- * - Purchased server management (buying and upgrading)
- * - Multi-server thread allocation across entire botnet
- * - Real-time performance monitoring and failure detection
- * 
- * Command-line options:
- * --debug=true                   Enable detailed debug output
- * --repeat=true                  Run continuously (vs single batch)
- * --rooting=true                 Enable automatic server rooting
- * --max-servers=25               Maximum purchased servers to buy
- * --target-ram-power=13          Target RAM power (2^13 = 8GB per server)
- * --repboost=false                Enable repboost allocation
- * --repboost-ram-percentage=25   Percentage of available RAM for repboost work
- * --repboost-min-threads=10      Minimum threads required per server
- * --repboost-max-threads=1000    Maximum threads per allocation
- * --repboost-core-threshold=4    Minimum CPU cores for priority allocation
- * --repboost-stability-delay=5000 Delay before starting repboost allocation (ms)
- * --repboost-intelligence-opt=true Enable intelligence-based optimization
- * --repboost-debug=false         Enable detailed repboost system debug output
+ * Botnet: Performance-Optimized Event-Driven HWGW System
+ * Advanced performance tracking, smart resource allocation, and real-time dashboard
  */
 
-// TypeScript interfaces for better type safety
-interface BotnetOptions {
-    debug: boolean;
-    repeat: boolean;
-    rooting: boolean;
-    'max-servers': number;
-    'target-ram-power': number;
-    repboost: boolean;
-    'repboost-ram-percentage': number;
-    'repboost-min-threads': number;
-    'repboost-max-threads': number;
-    'repboost-core-threshold': number;
-    'repboost-stability-delay': number;
-    'repboost-intelligence-opt': boolean;
-    'repboost-debug': boolean;
+// ===== INTERFACE DEFINITIONS =====
+
+// Configuration & Options Interfaces
+interface BotnetConfiguration {
+  // Core timing
+  mainLoopDelay: number;
+  batchDelay: number;
+  minimumBatchSpacing: number;
+  baseTimeDelay: number;
+
+  // HWGW parameters  
+  hackPercentage: number;
+  growthBufferMultiplier: number;
+  securityOptimalThreshold: number;
+  moneyOptimalRatio: number;
+  weakenHackSecurityIncrease: number;
+  weakenGrowSecurityIncrease: number;
+  weakenSecurityDecrease: number;
+
+  // Performance tuning
+  maxEventsPerCycle: number;
+  maxActiveBatches: number;
+  batchSize: number;
+  dynamicBatchSizeMin: number;
+  dynamicBatchSizeMax: number;
+  dynamicBatchSizeMultiplier: number;
+
+  // Target management
+  targetServer: string;
+  minTargetMoney: number;
+  targetEvaluationInterval: number;
+  targetEfficiencyDropThreshold: number;
+  targetMoneyDepletedThreshold: number;
+  targetImprovementThreshold: number;
+
+  // Performance thresholds
+  batchTimeoutBuffer: number;
+  serverReliabilitySuccessBonus: number;
+  serverReliabilityFailurePenalty: number;
+
+  // Display
+  dashboardInterval: number;
+  mainLoopDisplayMultiplier: number;
+  displayDashboard: boolean;
+  logLevel: LogLevel;
 }
 
-interface RunningScript {
-    filename: string;
-    args: (string | number)[];
-    pid: number;
-    threads: number;
+// Event Tracking
+interface BatchTracker {
+  id: string;
+  target: string;
+  server: string;
+  startTime: number;
+  expectedCompletionTime: number;
+  batchSize: number;
+  hackCompleted: boolean;
+  growCompleted: boolean;
+  weakenCompleted: boolean;
+  hackTime: number;
+  growTime: number;
+  weakenTime: number;
+  moneyGained: number;
+  securityReduced: number;
+  efficiency: number;
 }
 
-interface ServerAllocation {
-    hostname: string;
-    baseThreads: number;
-    cpuCores: number;
-    availableRAM: number;
+interface BatchEvent {
+  type: 'hack' | 'grow' | 'weaken';
+  batchId: string;
+  timestamp: number;
+  threads: number;
+  success: boolean;
+  value: number; // money for hack, multiplier for grow, security for weaken
+  server: string;
+  target: string;
 }
 
-interface ShareAllocation {
-    totalBaseThreads: number;
-    totalEffectiveThreads: number;
-    averageReputationBonus: number;
-    totalRAMUsed: number;
-    serverAllocations: (ShareCalculationResult & { hostname: string })[]; // Use proper typing
+interface BatchStats {
+  totalMoneyGained: number;
+  totalSecurityReduced: number;
+  batchesSent: number;
+  batchesCompleted: number;
+  batchesFailed: number;
+  hacksCompleted: number;
+  growsCompleted: number;
+  weakensCompleted: number;
+  lastEventTime: number;
+  eventsThisCycle: number;
+  recentActivity: string;
 }
 
-interface BotnetState {
-    repboostDetector: FactionDetector | null;
-    repboostSystemActive: boolean;
-    repboostStartTime: number;
-    currentShareAllocation: ShareAllocation | null;
-    lastShareAllocationTime: number;
-    botnetStartTime: number;
-    totalBatchCycles: number;
+// Performance Analytics
+interface PerformanceMetrics {
+  startTime: number;
+  moneyPerHour: number;
+  batchesPerHour: number;
+  averageBatchTime: number;
+  averageBatchValue: number;
+  successRate: number;
+  topServer: string;
+  topTarget: string;
+  systemEfficiency: number;
+  resourceUtilization: number;
 }
 
-interface ScriptStats {
-    hack: number;
-    weaken: number;
-    grow: number;
-    total: number;
+interface ServerPerformance {
+  hostname: string;
+  batchesExecuted: number;
+  batchesCompleted: number;
+  totalMoneyGenerated: number;
+  averageBatchTime: number;
+  successRate: number;
+  lastUsed: number;
+  reliability: number;
+  efficiencyScore: number;
 }
 
-interface ServerManagementResult {
-    bought: number;
-    upgraded: number;
+interface TargetPerformance {
+  hostname: string;
+  totalBatches: number;
+  totalMoneyGenerated: number;
+  averageMoneyPerBatch: number;
+  averageBatchTime: number;
+  successRate: number;
+  lastTargeted: number;
+  efficiencyRating: number;
 }
 
-interface TargetAnalysis {
-    hack: number;
-    weaken: number;
-    grow: number;
+// Dynamic Target Analysis
+interface DynamicTargetAnalysis {
+  hostname: string;
+  hackLevel: number;
+  maxMoney: number;
+  currentMoney: number;
+  currentMoneyRatio: number;
+  securityLevel: number;
+  minSecurityLevel: number;
+  hackTime: number;
+  growTime: number;
+  weakenTime: number;
+  hackChance: number;
+  efficiencyScore: number;
+  moneyPerSecond: number;
+  isOptimal: boolean;
 }
 
-// Self-contained interfaces - no external imports
-interface ServerData {
-    hostname: string;
-    hasAdminRights: boolean;
-    purchasedByPlayer: boolean;
-    requiredHackingSkill: number;
-    maxRam: number;
-    ramUsed: number;
-    moneyMax: number;
-    moneyAvailable: number;
-    hackDifficulty: number;
-    minDifficulty: number;
-    hackTime: number;
-    weakenTime: number;
-    growTime: number;
+interface DynamicTarget {
+  hostname: string;
+  analysis: DynamicTargetAnalysis;
+  lastEvaluated: number;
 }
 
-// Utility functions
-function getServerList(ns: NS, host: string = 'home', network = new Set<string>()): string[] {
-    network.add(host);
-    ns.scan(host).filter((hostname: string) => !network.has(hostname)).forEach((neighbor: string) => getServerList(ns, neighbor, network));
-    return [...network];
-}
+// ===== CONFIGURATION SYSTEM =====
 
-function buildServerData(ns: NS): ServerData[] {
-    const hostnames = getServerList(ns);
-    const servers: ServerData[] = [];
-    
-    for (const hostname of hostnames) {
-        // Use individual cheap NS calls instead of expensive getServer()
-        const serverData: ServerData = {
-            hostname: hostname,
-            hasAdminRights: ns.hasRootAccess(hostname),
-            purchasedByPlayer: hostname.startsWith('pserv-'),
-            requiredHackingSkill: ns.getServerRequiredHackingLevel(hostname) ?? 0,
-            maxRam: ns.getServerMaxRam(hostname),
-            ramUsed: ns.getServerUsedRam(hostname),
-            moneyMax: ns.getServerMaxMoney(hostname) ?? 0,
-            moneyAvailable: ns.getServerMoneyAvailable(hostname) ?? 0,
-            hackDifficulty: ns.getServerSecurityLevel(hostname) ?? 0,
-            minDifficulty: ns.getServerMinSecurityLevel(hostname) ?? 0,
-            hackTime: ns.getHackTime(hostname),
-            weakenTime: ns.getWeakenTime(hostname),
-            growTime: ns.getGrowTime(hostname)
-        };
-        servers.push(serverData);
+// ===== CONFIGURATION =====
+
+const DEFAULT_BOTNET_CONFIG: BotnetConfiguration = {
+  // Core timing (optimized for performance)
+  mainLoopDelay: 1000,
+  batchDelay: 10000,
+  minimumBatchSpacing: 5000,
+  baseTimeDelay: 100,
+
+  // HWGW parameters
+  hackPercentage: 0.05,
+  growthBufferMultiplier: 1.1,
+  securityOptimalThreshold: 5.0,
+  moneyOptimalRatio: 0.75,
+  weakenHackSecurityIncrease: 0.002,
+  weakenGrowSecurityIncrease: 0.004,
+  weakenSecurityDecrease: 0.05,
+
+  // Performance tuning
+  maxEventsPerCycle: 50,
+  maxActiveBatches: 15,
+  batchSize: 25,
+  dynamicBatchSizeMin: 10,
+  dynamicBatchSizeMax: 100,
+  dynamicBatchSizeMultiplier: 1.2,
+
+  // Target management
+  targetServer: '',
+  minTargetMoney: 1000000,
+  targetEvaluationInterval: 30000,
+  targetEfficiencyDropThreshold: 0.4,
+  targetMoneyDepletedThreshold: 0.1,
+  targetImprovementThreshold: 1.3,
+
+  // Performance thresholds
+  batchTimeoutBuffer: 10000,
+  serverReliabilitySuccessBonus: 0.05,
+  serverReliabilityFailurePenalty: 0.1,
+
+  // Display
+  dashboardInterval: 5000,
+  mainLoopDisplayMultiplier: 3,
+  displayDashboard: true,
+  logLevel: LogLevel.CRITICAL
+};
+
+// ===== CORE MODULES =====
+
+class BotnetPerformanceTracker {
+  private ns: NS;
+  private logger: Logger;
+  private config: BotnetConfiguration;
+  private performanceMetrics: PerformanceMetrics;
+  private serverPerformance: Map<string, ServerPerformance>;
+  private targetPerformance: Map<string, TargetPerformance>;
+  private activeBatches: Map<string, BatchTracker>;
+  private stats: BatchStats;
+  private startTime: number;
+  private lastEventTime: number;
+
+  constructor(
+    ns: NS,
+    logger: Logger,
+    config: BotnetConfiguration,
+    performanceMetrics: PerformanceMetrics,
+    serverPerformance: Map<string, ServerPerformance>,
+    targetPerformance: Map<string, TargetPerformance>,
+    activeBatches: Map<string, BatchTracker>,
+    stats: BatchStats
+  ) {
+    this.ns = ns;
+    this.logger = logger;
+    this.config = config;
+    this.performanceMetrics = performanceMetrics;
+    this.serverPerformance = serverPerformance;
+    this.targetPerformance = targetPerformance;
+    this.activeBatches = activeBatches;
+    this.stats = stats;
+    this.startTime = Date.now();
+    this.lastEventTime = Date.now();
+  }
+
+  async updatePerformanceMetrics(): Promise<void> {
+    BotnetUtilities.updatePerformanceMetrics(this.performanceMetrics, this.stats, this.serverPerformance);
+  }
+
+  private formatDashboardLine(content: string): string {
+    return `│ ${content}`;
+  }
+
+  async showDashboard(targetManager: BotnetTargetManager): Promise<void> {
+    const now = Date.now();
+
+    // Show dashboard every cycle when interval is reached
+    const shouldShow = now % this.config.dashboardInterval < this.config.mainLoopDelay * this.config.mainLoopDisplayMultiplier;
+
+    if (shouldShow) {
+      const uptime = (now - this.performanceMetrics.startTime) / 1000 / 60; // minutes
+      const batchSuccessRate = this.stats.batchesSent > 0 ?
+        (this.stats.batchesCompleted / this.stats.batchesSent * 100).toFixed(1) : '0.0';
+
+      const timeSinceLastEvent = this.stats.lastEventTime > 0 ?
+        Math.floor((now - this.stats.lastEventTime) / 1000) : 0;
+
+      this.ns.clearLog();
+      // Get current target analysis for dashboard from target manager
+      const currentAnalysis = targetManager.getCurrentTargetAnalysis();
+      const currentTarget = targetManager.getCurrentTarget();
+      const targetInfo = currentAnalysis ?
+        `${currentTarget} (${(currentAnalysis.currentMoneyRatio * 100).toFixed(0)}% money, ${currentAnalysis.hackChance.toFixed(2)} chance)` :
+        currentTarget;
+
+      this.ns.print('┌─ BOTNET DYNAMIC TARGET DASHBOARD');
+      this.ns.print(this.formatDashboardLine(`Runtime: ${uptime.toFixed(1)}min | Active Batches: ${this.activeBatches.size}/${this.config.maxActiveBatches} | Events/Cycle: ${this.stats.eventsThisCycle}`));
+      this.ns.print(this.formatDashboardLine(`🎯 Target: ${targetInfo}`));
+      this.ns.print(this.formatDashboardLine(`🎛️ Batch Size: ${targetManager.getDynamicBatchSize()}`));
+      this.ns.print(this.formatDashboardLine(`⏱️ Last Activity (${timeSinceLastEvent}s ago): ${this.stats.recentActivity}`));
+      this.ns.print('├─────────────────────────────────────────────────────────');
+      this.ns.print(this.formatDashboardLine(`💰 Money/Hour: $${(this.performanceMetrics.moneyPerHour / 1000000).toFixed(1)}M | Total: $${(this.stats.totalMoneyGained / 1000000).toFixed(1)}M`));
+      this.ns.print(this.formatDashboardLine(`📊 Batches/Hour: ${this.performanceMetrics.batchesPerHour.toFixed(1)} | Success: ${batchSuccessRate}% | Avg: $${(this.performanceMetrics.averageBatchValue / 1000).toFixed(1)}K`));
+      this.ns.print(this.formatDashboardLine(`🎯 Batches: ${this.stats.batchesSent} sent, ${this.stats.batchesCompleted} completed, ${this.stats.batchesFailed} failed`));
+      this.ns.print(this.formatDashboardLine(`⚡ Events: ${this.stats.hacksCompleted}H/${this.stats.growsCompleted}G/${this.stats.weakensCompleted}W`));
+
+      if (this.performanceMetrics.topServer) {
+        const topPerf = this.serverPerformance.get(this.performanceMetrics.topServer);
+        if (topPerf) {
+          this.ns.print(this.formatDashboardLine(`🚀 Top: ${topPerf.hostname} (${topPerf.batchesCompleted} batches, ${(topPerf.successRate * 100).toFixed(1)}% success)`));
+        }
+      }
+
+      // Show active batch details for real-time monitoring
+      if (this.activeBatches.size > 0) {
+        this.ns.print('├─ ACTIVE BATCHES');
+        let batchCount = 0;
+        for (const [batchId, batch] of this.activeBatches.entries()) {
+          if (batchCount >= 3) break; // Show only first 3 for space
+          const elapsed = Math.floor((now - batch.startTime) / 1000);
+          const completionStatus = `${batch.hackCompleted ? 'H' : '⋯'}${batch.growCompleted ? 'G' : '⋯'}${batch.weakenCompleted ? 'W' : '⋯'}`;
+          this.ns.print(this.formatDashboardLine(`${batch.server}: [${completionStatus}] ${elapsed}s | $${batch.moneyGained.toLocaleString()}`));
+          batchCount++;
+        }
+        if (this.activeBatches.size > 3) {
+          this.ns.print(this.formatDashboardLine(`... and ${this.activeBatches.size - 3} more batches`));
+        }
+      }
+
+      this.ns.print('└─────────────────────────────────────────────────────────');
     }
-    
-    return servers;
+  }
+
+  async recordServerPerformance(serverName: string, moneyGained: number): Promise<void> {
+    let serverPerf = this.serverPerformance.get(serverName);
+    if (!serverPerf) {
+      serverPerf = {
+        hostname: serverName,
+        batchesExecuted: 0,
+        batchesCompleted: 0,
+        totalMoneyGenerated: 0,
+        averageBatchTime: 0,
+        successRate: 0,
+        lastUsed: Date.now(),
+        reliability: 1.0,
+        efficiencyScore: 0
+      };
+      this.serverPerformance.set(serverName, serverPerf);
+    }
+
+    serverPerf.totalMoneyGenerated += moneyGained;
+    serverPerf.lastUsed = Date.now();
+  }
+
 }
 
-const isTarget = (server: ServerData) =>
-    server.hasAdminRights
-    && !server.purchasedByPlayer
-    && server.moneyMax > 0;
+class BotnetUtilities {
+  /**
+   * Network Discovery Utilities
+   */
+  static getAllServers(ns: NS): string[] {
+    const visited = new Set<string>();
+    const queue = ['home'];
 
-const isAttacker = (server: ServerData) =>
-    server.hasAdminRights
-    && server.maxRam - server.ramUsed > 0;
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      if (visited.has(current)) continue;
+      visited.add(current);
 
-const targetValue = (server: ServerData) => Math.floor(server.moneyMax / server.weakenTime);
+      try {
+        const neighbors = ns.scan(current);
+        for (const neighbor of neighbors) {
+          if (!visited.has(neighbor)) {
+            queue.push(neighbor);
+          }
+        }
+      } catch (error) {
+        // Skip servers we can't scan
+      }
+    }
 
-const byValue = (a: ServerData, b: ServerData) => targetValue(b) - targetValue(a);
+    return Array.from(visited);
+  }
 
-const byAvailableRam = (a: ServerData, b: ServerData) => (b.maxRam - b.ramUsed) - (a.maxRam - a.ramUsed);
-
-// Server Management Functions
-function rootServer(ns: NS, hostname: string): boolean {
+  /**
+   * Target Analysis Utilities
+   */
+  static analyzeTarget(ns: NS, hostname: string, config: BotnetConfiguration): DynamicTargetAnalysis | null {
     try {
-        // Try all available exploit tools
-        try { ns.brutessh(hostname); } catch (e) { }
-        try { ns.ftpcrack(hostname); } catch (e) { }
-        try { ns.relaysmtp(hostname); } catch (e) { }
-        try { ns.httpworm(hostname); } catch (e) { }
-        try { ns.sqlinject(hostname); } catch (e) { }
-        
-        // Attempt to nuke
-        try { 
-            ns.nuke(hostname); 
-            return true;
-        } catch (e) { 
-            return false;
-        }
-    } catch (e) {
+      if (hostname === 'home') return null;
+
+      const hackLevel = ns.getServerRequiredHackingLevel(hostname);
+      const playerHackLevel = ns.getHackingLevel();
+      const maxMoney = ns.getServerMaxMoney(hostname);
+      const currentMoney = ns.getServerMoneyAvailable(hostname);
+
+      // Skip if we can't hack it or it has no money
+      if (hackLevel > playerHackLevel || maxMoney < config.minTargetMoney) {
+        return null;
+      }
+
+      // Skip if we don't have root access
+      if (!ns.hasRootAccess(hostname)) {
+        return null;
+      }
+
+      const currentMoneyRatio = maxMoney > 0 ? currentMoney / maxMoney : 0;
+      const securityLevel = ns.getServerSecurityLevel(hostname);
+      const minSecurityLevel = ns.getServerMinSecurityLevel(hostname);
+
+      const hackTime = ns.getHackTime(hostname);
+      const growTime = ns.getGrowTime(hostname);
+      const weakenTime = ns.getWeakenTime(hostname);
+      const hackChance = ns.hackAnalyzeChance(hostname);
+
+      // Calculate efficiency score
+      const expectedMoney = Math.max(currentMoney, maxMoney * 0.5); // Conservative estimate
+      const timeToHack = Math.max(hackTime, growTime, weakenTime);
+      const moneyPerSecond = (expectedMoney * hackChance) / (timeToHack / 1000);
+      const efficiencyScore = moneyPerSecond * hackChance * (1 / Math.max(hackLevel / playerHackLevel, 0.1));
+
+      const isOptimal = currentMoneyRatio >= config.moneyOptimalRatio &&
+        securityLevel <= minSecurityLevel + config.securityOptimalThreshold;
+
+      return {
+        hostname,
+        hackLevel,
+        maxMoney,
+        currentMoney,
+        currentMoneyRatio,
+        securityLevel,
+        minSecurityLevel,
+        hackTime,
+        growTime,
+        weakenTime,
+        hackChance,
+        efficiencyScore,
+        moneyPerSecond,
+        isOptimal
+      };
+    } catch (error) {
+      return null;
+    }
+  }
+
+  /**
+   * Performance Analysis Utilities
+   */
+  static updatePerformanceMetrics(
+    performanceMetrics: PerformanceMetrics,
+    stats: BatchStats,
+    serverPerformance: Map<string, ServerPerformance>
+  ): void {
+    const now = Date.now();
+    const runtime = (now - performanceMetrics.startTime) / 1000; // seconds
+    const runtimeHours = runtime / 3600;
+
+    if (runtimeHours > 0) {
+      performanceMetrics.moneyPerHour = stats.totalMoneyGained / runtimeHours;
+      performanceMetrics.batchesPerHour = stats.batchesCompleted / runtimeHours;
+    }
+
+    if (stats.batchesCompleted > 0) {
+      performanceMetrics.averageBatchValue = stats.totalMoneyGained / stats.batchesCompleted;
+      performanceMetrics.successRate = stats.batchesCompleted / stats.batchesSent;
+    }
+
+    // Find top performing server
+    let topServer = '';
+    let topEfficiency = 0;
+    for (const [hostname, performance] of serverPerformance) {
+      if (performance.efficiencyScore > topEfficiency) {
+        topEfficiency = performance.efficiencyScore;
+        topServer = hostname;
+      }
+    }
+    performanceMetrics.topServer = topServer;
+  }
+
+  /**
+   * Resource Calculation Utilities
+   */
+  static calculateHWGWThreads(ns: NS, target: string, batchSize: number, config: BotnetConfiguration): {
+    hackThreads: number,
+    growThreads: number,
+    weakenHackThreads: number,
+    weakenGrowThreads: number
+  } {
+    const hackThreads = Math.max(1, Math.floor(batchSize * config.hackPercentage));
+
+    const moneyStolen = ns.hackAnalyze(target) * hackThreads;
+    const growthNeeded = 1 / (1 - moneyStolen);
+    const growThreads = Math.max(1, Math.ceil(ns.growthAnalyze(target, growthNeeded * config.growthBufferMultiplier)));
+
+    const hackSecurityIncrease = hackThreads * config.weakenHackSecurityIncrease;
+    const growSecurityIncrease = growThreads * config.weakenGrowSecurityIncrease;
+    const weakenHackThreads = Math.ceil(hackSecurityIncrease / config.weakenSecurityDecrease);
+    const weakenGrowThreads = Math.ceil(growSecurityIncrease / config.weakenSecurityDecrease);
+
+    return { hackThreads, growThreads, weakenHackThreads, weakenGrowThreads };
+  }
+
+  /**
+   * Server Resource Management
+   */
+  static getAvailableRAM(ns: NS, hostname: string): number {
+    const totalRAM = ns.getServerMaxRam(hostname);
+    const usedRAM = ns.getServerUsedRam(hostname);
+    return Math.max(0, totalRAM - usedRAM);
+  }
+
+  static findBestExecutionServer(ns: NS): string {
+    const servers = BotnetUtilities.getAllServers(ns).filter(s => ns.hasRootAccess(s));
+
+    let bestServer = 'home';
+    let bestRAM = BotnetUtilities.getAvailableRAM(ns, 'home');
+
+    for (const server of servers) {
+      const availableRAM = BotnetUtilities.getAvailableRAM(ns, server);
+      if (availableRAM > bestRAM) {
+        bestRAM = availableRAM;
+        bestServer = server;
+      }
+    }
+
+    return bestServer;
+  }
+
+  /**
+   * Time Calculation Utilities
+   */
+  static calculateOptimalTiming(ns: NS, target: string, config: BotnetConfiguration): {
+    hackTime: number,
+    growTime: number,
+    weakenTime: number,
+    batchDuration: number,
+    hackStartDelay: number,
+    growStartDelay: number,
+    weakenHackStartDelay: number,
+    weakenGrowStartDelay: number
+  } {
+    const hackTime = ns.getHackTime(target);
+    const growTime = ns.getGrowTime(target);
+    const weakenTime = ns.getWeakenTime(target);
+
+    const batchDuration = Math.max(hackTime, growTime, weakenTime);
+    const baseDelay = config.baseTimeDelay;
+
+    // Calculate delays to ensure proper execution order: weaken-hack -> hack -> weaken-grow -> grow
+    const weakenHackStartDelay = 0;
+    const hackStartDelay = weakenTime - hackTime + baseDelay;
+    const weakenGrowStartDelay = weakenTime - weakenTime + baseDelay * 2;
+    const growStartDelay = weakenTime - growTime + baseDelay * 3;
+
+    return {
+      hackTime,
+      growTime,
+      weakenTime,
+      batchDuration,
+      hackStartDelay: Math.max(0, hackStartDelay),
+      growStartDelay: Math.max(0, growStartDelay),
+      weakenHackStartDelay,
+      weakenGrowStartDelay
+    };
+  }
+}
+
+class BotnetBatchExecutor {
+  private ns: NS;
+  private logger: Logger;
+  private config: BotnetConfiguration;
+  private activeBatches: Map<string, BatchTracker>;
+  private serverPerformance: Map<string, ServerPerformance>;
+  private activeProcesses: Set<number>;
+  private stats: BatchStats;
+
+  constructor(
+    ns: NS,
+    logger: Logger,
+    config: BotnetConfiguration,
+    activeBatches: Map<string, BatchTracker>,
+    serverPerformance: Map<string, ServerPerformance>,
+    stats: BatchStats
+  ) {
+    this.ns = ns;
+    this.logger = logger;
+    this.config = config;
+    this.activeBatches = activeBatches;
+    this.serverPerformance = serverPerformance;
+    this.activeProcesses = new Set();
+    this.stats = stats;
+  }
+
+  async executeBatch(target: string, batchSize: number): Promise<boolean> {
+    try {
+      const server = BotnetUtilities.findBestExecutionServer(this.ns);
+      const availableRAM = BotnetUtilities.getAvailableRAM(this.ns, server);
+
+      // Estimate RAM needed for batch (rough calculation)
+      const estimatedRAM = batchSize * 4; // Conservative estimate for all scripts
+      if (availableRAM < estimatedRAM) {
         return false;
-    }
-}
+      }
 
-function performServerRooting(ns: NS, servers: ServerData[]): number {
-    let rootedCount = 0;
-    const unrootedServers = servers.filter(s => !s.hasAdminRights && s.hostname !== 'home');
-    
-    for (const server of unrootedServers) {
-        if (rootServer(ns, server.hostname)) {
-            rootedCount++;
-            // Update the server data to reflect new admin rights
-            server.hasAdminRights = true;
+      const timing = BotnetUtilities.calculateOptimalTiming(this.ns, target, this.config);
+      const threads = BotnetUtilities.calculateHWGWThreads(this.ns, target, batchSize, this.config);
+
+      const batchId = `${target}-${Date.now()}`;
+      const batch: BatchTracker = {
+        id: batchId,
+        target,
+        server,
+        startTime: Date.now(),
+        expectedCompletionTime: Date.now() + timing.batchDuration + this.config.batchTimeoutBuffer,
+        batchSize,
+        hackCompleted: false,
+        growCompleted: false,
+        weakenCompleted: false,
+        hackTime: timing.hackTime,
+        growTime: timing.growTime,
+        weakenTime: timing.weakenTime,
+        moneyGained: 0,
+        securityReduced: 0,
+        efficiency: 0
+      };
+
+      // Launch all operations with proper timing
+      const hackPid = this.ns.exec('/remote/hk.js', server, threads.hackThreads, batchId, timing.hackStartDelay);
+      const growPid = this.ns.exec('/remote/gr.js', server, threads.growThreads, batchId, timing.growStartDelay);
+      const weakenHackPid = this.ns.exec('/remote/wk.js', server, threads.weakenHackThreads, batchId + '-hack', timing.weakenHackStartDelay);
+      const weakenGrowPid = this.ns.exec('/remote/wk.js', server, threads.weakenGrowThreads, batchId + '-grow', timing.weakenGrowStartDelay);
+
+      if (hackPid && growPid && weakenHackPid && weakenGrowPid) {
+        this.activeBatches.set(batchId, batch);
+        this.activeProcesses.add(hackPid);
+        this.activeProcesses.add(growPid);
+        this.activeProcesses.add(weakenHackPid);
+        this.activeProcesses.add(weakenGrowPid);
+
+        this.stats.batchesSent++;
+
+        // Record server performance
+        let serverPerf = this.serverPerformance.get(server);
+        if (!serverPerf) {
+          serverPerf = {
+            hostname: server,
+            batchesExecuted: 0,
+            batchesCompleted: 0,
+            totalMoneyGenerated: 0,
+            averageBatchTime: 0,
+            successRate: 0,
+            lastUsed: Date.now(),
+            reliability: 1.0,
+            efficiencyScore: 0
+          };
+          this.serverPerformance.set(server, serverPerf);
         }
+        serverPerf.batchesExecuted++;
+
+        const analysis = BotnetUtilities.analyzeTarget(this.ns, target, this.config);
+        const efficiency = analysis ? analysis.efficiencyScore : 0;
+
+        this.logger.info(`Launched optimized batch: ${batchId} on ${server} (efficiency: ${efficiency.toFixed(1)})`);
+        return true;
+      } else {
+        this.logger.error(`Failed to launch batch on ${server} - insufficient resources`);
+        return false;
+      }
+    } catch (error) {
+      this.logger.error(`Batch execution error: ${error}`);
+      return false;
     }
-    
-    return rootedCount;
+  }
+
+  async cleanupCompletedBatches(): Promise<void> {
+    const now = Date.now();
+    const completedBatches: string[] = [];
+    const timedOutBatches: string[] = [];
+
+    for (const [batchId, batch] of this.activeBatches.entries()) {
+      // Check if batch has timed out
+      if (now > batch.expectedCompletionTime) {
+        timedOutBatches.push(batchId);
+        continue;
+      }
+
+      // Check if all operations completed
+      if (batch.hackCompleted && batch.growCompleted && batch.weakenCompleted) {
+        completedBatches.push(batchId);
+      }
+    }
+
+    // Process completed batches
+    for (const batchId of completedBatches) {
+      const batch = this.activeBatches.get(batchId);
+      if (batch) {
+        const batchTime = now - batch.startTime;
+        this.stats.batchesCompleted++;
+        this.stats.totalMoneyGained += batch.moneyGained;
+        this.stats.totalSecurityReduced += batch.securityReduced;
+
+        this.logger.info(`Batch completed: ${batchId} -> $${batch.moneyGained.toLocaleString()} (${(batchTime / 1000).toFixed(1)}s)`);
+        this.activeBatches.delete(batchId);
+      }
+    }
+
+    // Process timed out batches
+    for (const batchId of timedOutBatches) {
+      const batch = this.activeBatches.get(batchId);
+      if (batch) {
+        this.stats.batchesFailed++;
+        this.logger.warn(`Batch timed out: ${batchId} after ${((now - batch.startTime) / 1000).toFixed(1)}s`);
+        this.activeBatches.delete(batchId);
+      }
+    }
+  }
 }
 
-async function managePurchasedServers(ns: NS, servers: ServerData[], maxServers: number, targetRamPower: number): Promise<ServerManagementResult> {
-    const playerMoney = ns.getServerMoneyAvailable('home');
-    const purchasedServers = servers.filter(s => s.purchasedByPlayer);
-    let bought = 0;
-    let upgraded = 0;
-    
-    // Buy new servers if under limit and affordable (using remote script to avoid RAM cost)
-    if (purchasedServers.length < maxServers) {
-        const serverName = `pserv-${purchasedServers.length + 1}`;
-        
-        // Copy and run the purchasing script remotely
-        await ns.scp('remote/simple-purchase.js', 'home');
-        const pid = ns.exec('remote/simple-purchase.js', 'home', 1, 
-            serverName, 
-            BOTNET_CONFIG.PURCHASED_SERVER_START_RAM, 
-            "false" // debug flag
-        );
-        
-        if (pid > 0) {
-            // Wait a bit for the script to complete
-            await ns.sleep(100);
-            bought++;
-            ns.print(`Initiated purchase: ${serverName} (${BOTNET_CONFIG.PURCHASED_SERVER_START_RAM}GB)`);
+class BotnetTargetManager {
+  private ns: NS;
+  private logger: Logger;
+  private config: BotnetConfiguration;
+  private targetPerformance: Map<string, TargetPerformance>;
+  private currentTarget: DynamicTarget | null;
+  private lastEvaluationTime: number;
+  private dynamicBatchSize: number;
+
+  constructor(
+    ns: NS,
+    logger: Logger,
+    config: BotnetConfiguration,
+    targetPerformance: Map<string, TargetPerformance>
+  ) {
+    this.ns = ns;
+    this.logger = logger;
+    this.config = config;
+    this.targetPerformance = targetPerformance;
+    this.currentTarget = null;
+    this.lastEvaluationTime = 0;
+    this.dynamicBatchSize = config.batchSize;
+  }
+
+  async evaluateAndSelectTarget(): Promise<void> {
+    const now = Date.now();
+
+    // Only evaluate periodically to avoid excessive overhead
+    if (now - this.lastEvaluationTime < this.config.targetEvaluationInterval) {
+      return;
+    }
+
+    this.lastEvaluationTime = now;
+
+    const servers = BotnetUtilities.getAllServers(this.ns);
+    const candidates: DynamicTarget[] = [];
+
+    // Analyze all potential targets
+    for (const hostname of servers) {
+      const analysis = BotnetUtilities.analyzeTarget(this.ns, hostname, this.config);
+      if (analysis) {
+        candidates.push({
+          hostname,
+          analysis,
+          lastEvaluated: now
+        });
+      }
+    }
+
+    // Sort by efficiency score
+    candidates.sort((a, b) => b.analysis.efficiencyScore - a.analysis.efficiencyScore);
+
+    if (candidates.length === 0) {
+      this.logger.warn('No viable targets found');
+      return;
+    }
+
+    const bestCandidate = candidates[0];
+
+    // Check if we should switch targets
+    if (this.shouldSwitchTarget(bestCandidate)) {
+      const oldTarget = this.currentTarget?.hostname || 'none';
+      this.currentTarget = bestCandidate;
+
+      // Update dynamic batch size based on target
+      this.updateDynamicBatchSize(bestCandidate.analysis);
+
+      if (oldTarget !== bestCandidate.hostname) {
+        const switchReason = this.getTargetSwitchReason(bestCandidate);
+        this.logger.info(`🎯 TARGET SWITCH: ${oldTarget} → ${bestCandidate.hostname}`);
+        this.logger.info(`   Reason: ${switchReason}`);
+        this.logger.info(`   New target efficiency: ${bestCandidate.analysis.efficiencyScore.toFixed(1)}`);
+        this.logger.info(`   Optimal batch size: ${this.dynamicBatchSize}`);
+        this.logger.info(`   Money ratio: ${(bestCandidate.analysis.currentMoneyRatio * 100).toFixed(1)}% | Security: ${bestCandidate.analysis.securityLevel.toFixed(1)}/${bestCandidate.analysis.minSecurityLevel.toFixed(1)}`);
+      }
+    }
+  }
+
+  private shouldSwitchTarget(candidate: DynamicTarget): boolean {
+    if (!this.currentTarget) return true;
+
+    const currentEfficiency = this.currentTarget.analysis.efficiencyScore;
+    const candidateEfficiency = candidate.analysis.efficiencyScore;
+
+    // Switch if candidate is significantly better
+    if (candidateEfficiency > currentEfficiency * this.config.targetImprovementThreshold) {
+      return true;
+    }
+
+    // Switch if current target efficiency has dropped significantly
+    const currentAnalysis = BotnetUtilities.analyzeTarget(this.ns, this.currentTarget.hostname, this.config);
+    if (currentAnalysis && currentAnalysis.efficiencyScore < currentEfficiency * this.config.targetEfficiencyDropThreshold) {
+      return true;
+    }
+
+    // Switch if current target is money depleted
+    if (this.currentTarget.analysis.currentMoneyRatio < this.config.targetMoneyDepletedThreshold) {
+      return true;
+    }
+
+    return false;
+  }
+
+  private getTargetSwitchReason(newTarget: DynamicTarget): string {
+    if (!this.currentTarget) return 'initial target selection';
+
+    const currentAnalysis = BotnetUtilities.analyzeTarget(this.ns, this.currentTarget.hostname, this.config);
+    if (!currentAnalysis) return 'previous target became invalid';
+
+    const efficiencyRatio = currentAnalysis.efficiencyScore / this.currentTarget.analysis.efficiencyScore;
+    const newEfficiencyRatio = newTarget.analysis.efficiencyScore / this.currentTarget.analysis.efficiencyScore;
+
+    if (efficiencyRatio < this.config.targetEfficiencyDropThreshold) {
+      return `efficiency dropped to ${(efficiencyRatio * 100).toFixed(1)}% of best`;
+    }
+
+    if (newEfficiencyRatio > this.config.targetImprovementThreshold) {
+      return `new target ${(newEfficiencyRatio * 100).toFixed(1)}% more efficient`;
+    }
+
+    if (this.currentTarget.analysis.currentMoneyRatio < this.config.targetMoneyDepletedThreshold) {
+      return `money depleted (${(this.currentTarget.analysis.currentMoneyRatio * 100).toFixed(1)}%)`;
+    }
+
+    return 'optimization opportunity';
+  }
+
+  private updateDynamicBatchSize(analysis: DynamicTargetAnalysis): void {
+    // Calculate dynamic batch size based on target characteristics
+    let sizeFactor = 1.0;
+
+    // Adjust for hack chance
+    sizeFactor *= Math.max(0.5, analysis.hackChance);
+
+    // Adjust for money availability
+    sizeFactor *= Math.max(0.5, analysis.currentMoneyRatio);
+
+    // Adjust for efficiency
+    const avgEfficiency = 10000; // Rough baseline
+    sizeFactor *= Math.max(0.5, Math.min(2.0, analysis.efficiencyScore / avgEfficiency));
+
+    const newSize = Math.round(this.config.batchSize * sizeFactor * this.config.dynamicBatchSizeMultiplier);
+    this.dynamicBatchSize = Math.max(
+      this.config.dynamicBatchSizeMin,
+      Math.min(this.config.dynamicBatchSizeMax, newSize)
+    );
+  }
+
+  getCurrentTarget(): string {
+    return this.currentTarget?.hostname || this.config.targetServer || 'phantasy';
+  }
+
+  getCurrentTargetAnalysis(): DynamicTargetAnalysis | null {
+    return this.currentTarget?.analysis || null;
+  }
+
+  getDynamicBatchSize(): number {
+    return this.dynamicBatchSize;
+  }
+}
+
+class BotnetEventProcessor {
+  private ns: NS;
+  private logger: Logger;
+  private config: BotnetConfiguration;
+  private activeBatches: Map<string, BatchTracker>;
+  private eventQueue: BatchEvent[];
+  private stats: BatchStats;
+
+  constructor(
+    ns: NS,
+    logger: Logger,
+    config: BotnetConfiguration,
+    activeBatches: Map<string, BatchTracker>,
+    stats: BatchStats
+  ) {
+    this.ns = ns;
+    this.logger = logger;
+    this.config = config;
+    this.activeBatches = activeBatches;
+    this.eventQueue = [];
+    this.stats = stats;
+  }
+
+  async processEvents(): Promise<void> {
+    let eventsProcessed = 0;
+    this.stats.eventsThisCycle = 0;
+
+    // Read real events from port 20 (published by remote scripts)
+    const port = this.ns.getPortHandle(20);
+    let eventsRead = 0;
+    while (!port.empty() && eventsProcessed < this.config.maxEventsPerCycle) {
+      const rawEvent = port.read() as string;
+      this.logger.debug(`Raw event received: ${rawEvent}`);
+      const event = this.parseEvent(rawEvent);
+      if (event) {
+        this.eventQueue.push(event);
+        eventsRead++;
+        this.logger.debug(`Parsed event: ${event.type} for ${event.batchId} with value ${event.value}`);
+      }
+    }
+
+    if (eventsRead > 0) {
+      this.logger.info(`Read ${eventsRead} events from port 20`);
+    }
+
+    // Process a limited number of events per cycle to maintain performance
+    while (this.eventQueue.length > 0 && eventsProcessed < this.config.maxEventsPerCycle) {
+      const event = this.eventQueue.shift()!;
+      await this.handleEvent(event);
+      eventsProcessed++;
+      this.stats.eventsThisCycle++;
+    }
+
+    // Update recent activity indicator
+    if (eventsProcessed > 0) {
+      this.stats.lastEventTime = Date.now();
+      this.stats.recentActivity = `Processed ${eventsProcessed} events`;
+    } else if (Date.now() - this.stats.lastEventTime > 30000) {
+      this.stats.recentActivity = 'No recent activity (30s+)';
+    }
+  }
+
+  private parseEvent(rawEvent: string): BatchEvent | null {
+    try {
+      const parts = rawEvent.split('|');
+      if (parts.length !== 4) {
+        this.logger.warn(`Invalid event format: ${rawEvent}`);
+        return null;
+      }
+
+      const [eventType, batchId, resultStr, threadsStr] = parts;
+      const result = parseFloat(resultStr);
+      const threads = parseInt(threadsStr);
+
+      // Extract target from batchId (format: server-timestamp)
+      const target = batchId.split('-')[0];
+
+      // Determine event type and success based on event type string
+      let type: 'hack' | 'grow' | 'weaken';
+      let success = true;
+
+      if (eventType.endsWith('_failed')) {
+        success = false;
+        type = eventType.replace('_failed', '') as 'hack' | 'grow' | 'weaken';
+      } else if (eventType.endsWith('_done')) {
+        type = eventType.replace('_done', '') as 'hack' | 'grow' | 'weaken';
+      } else {
+        this.logger.warn(`Unknown event type: ${eventType}`);
+        return null;
+      }
+
+      return {
+        type,
+        batchId,
+        timestamp: Date.now(),
+        threads,
+        success,
+        value: result,
+        server: '', // Will be filled by handleEvent if needed
+        target
+      };
+    } catch (error) {
+      this.logger.warn(`Failed to parse event: ${rawEvent} - ${error}`);
+      return null;
+    }
+  }
+
+  private async handleEvent(event: BatchEvent): Promise<void> {
+    const batch = this.activeBatches.get(event.batchId);
+    if (!batch) {
+      // Batch might have been cleaned up already
+      return;
+    }
+
+    switch (event.type) {
+      case 'hack':
+        batch.hackCompleted = true;
+        batch.moneyGained += event.value;
+        this.stats.hacksCompleted++;
+        this.stats.totalMoneyGained += event.value;
+        this.logger.info(`Hack completed: ${event.target} -> $${event.value.toFixed(3)} (${event.threads} threads)`);
+        break;
+
+      case 'grow':
+        batch.growCompleted = true;
+        this.stats.growsCompleted++;
+        this.logger.info(`Grow completed: ${event.target} -> ${event.value.toFixed(2)}x (${event.threads} threads)`);
+        break;
+
+      case 'weaken':
+        batch.weakenCompleted = true;
+        batch.securityReduced += event.value;
+        this.stats.weakensCompleted++;
+        this.stats.totalSecurityReduced += event.value;
+        this.logger.info(`Weaken completed: ${event.target} -> -${event.value.toFixed(2)} security (${event.threads} threads)`);
+        break;
+    }
+  }
+}
+
+// ===== MAIN CONTROLLER =====
+// ===== MAIN CONTROLLER =====
+
+class BotnetController {
+  private ns: NS;
+  private logger: Logger;
+  private config: BotnetConfiguration;
+
+  // Core modules
+  private performanceTracker: BotnetPerformanceTracker;
+  private targetManager: BotnetTargetManager;
+  private batchExecutor: BotnetBatchExecutor;
+  private eventProcessor: BotnetEventProcessor;
+
+  // Shared state
+  private activeBatches: Map<string, BatchTracker>;
+  private serverPerformance: Map<string, ServerPerformance>;
+  private targetPerformance: Map<string, TargetPerformance>;
+  private performanceMetrics: PerformanceMetrics;
+  private stats: BatchStats;
+
+  // Timing
+  private lastBatchTime: number;
+  private isShuttingDown: boolean;
+
+  constructor(ns: NS, debugMode: boolean = false) {
+    this.ns = ns;
+    this.config = { ...DEFAULT_BOTNET_CONFIG };
+
+    // Clear any existing logger instances to ensure fresh configuration
+    Logger.clearInstances();
+
+    // Set up logger with debug mode if requested
+    const logLevel = debugMode ? LogLevel.DEBUG : this.config.logLevel;
+    const enableConsole = debugMode; // Enable console output in debug mode
+    this.logger = Logger.getInstance(this.ns, 'BOTNET', {
+      level: logLevel,
+      enableConsole: enableConsole,
+      enableFile: true
+    });
+
+    // Initialize shared state
+    this.activeBatches = new Map();
+    this.serverPerformance = new Map();
+    this.targetPerformance = new Map();
+    this.lastBatchTime = 0;
+    this.isShuttingDown = false;
+
+    this.performanceMetrics = {
+      startTime: Date.now(),
+      moneyPerHour: 0,
+      batchesPerHour: 0,
+      averageBatchTime: 0,
+      averageBatchValue: 0,
+      successRate: 0,
+      topServer: '',
+      topTarget: '',
+      systemEfficiency: 0,
+      resourceUtilization: 0
+    };
+
+    this.stats = {
+      totalMoneyGained: 0,
+      totalSecurityReduced: 0,
+      batchesSent: 0,
+      batchesCompleted: 0,
+      batchesFailed: 0,
+      hacksCompleted: 0,
+      growsCompleted: 0,
+      weakensCompleted: 0,
+      lastEventTime: Date.now(),
+      eventsThisCycle: 0,
+      recentActivity: 'Initializing...'
+    };
+
+    // Initialize core modules
+    this.performanceTracker = new BotnetPerformanceTracker(
+      ns, this.logger, this.config, this.performanceMetrics,
+      this.serverPerformance, this.targetPerformance, this.activeBatches, this.stats
+    );
+
+    this.targetManager = new BotnetTargetManager(
+      ns, this.logger, this.config, this.targetPerformance
+    );
+
+    this.batchExecutor = new BotnetBatchExecutor(
+      ns, this.logger, this.config, this.activeBatches, this.serverPerformance, this.stats
+    );
+
+    this.eventProcessor = new BotnetEventProcessor(
+      ns, this.logger, this.config, this.activeBatches, this.stats
+    );
+
+    // Log debug mode status
+    if (debugMode) {
+      this.logger.debug('🔍 DEBUG MODE ENABLED - Enhanced logging active');
+    }
+  }
+
+  async run(): Promise<void> {
+    this.logger.info('Botnet Performance Edition initializing...');
+    this.logger.info('=== BOTNET PERFORMANCE EDITION ===');
+
+    // Initialize target if not set
+    if (!this.config.targetServer) {
+      await this.targetManager.evaluateAndSelectTarget();
+    }
+
+    const target = this.targetManager.getCurrentTarget();
+    this.logger.info(`Target: ${target}, Max Batches: ${this.config.maxActiveBatches}`);
+
+    // Main operation loop
+    while (true) {
+      try {
+        // Process events from completed operations
+        await this.eventProcessor.processEvents();
+
+        // Clean up completed batches
+        await this.batchExecutor.cleanupCompletedBatches();
+
+        // Evaluate and potentially switch targets
+        await this.targetManager.evaluateAndSelectTarget();
+
+        // Launch new batches if capacity allows
+        const now = Date.now();
+        const canLaunchBatch = this.activeBatches.size < this.config.maxActiveBatches &&
+          (now - this.lastBatchTime) >= this.config.batchDelay;
+
+        if (canLaunchBatch) {
+          const currentTarget = this.targetManager.getCurrentTarget();
+          const batchSize = this.targetManager.getDynamicBatchSize();
+          const success = await this.batchExecutor.executeBatch(currentTarget, batchSize);
+
+          if (success) {
+            this.lastBatchTime = now;
+          }
         }
+
+        // Update performance metrics
+        await this.performanceTracker.updatePerformanceMetrics();
+
+        // Show dashboard
+        await this.performanceTracker.showDashboard(this.targetManager);
+
+        // Wait before next cycle
+        await this.ns.sleep(this.config.mainLoopDelay);
+
+      } catch (error) {
+        this.logger.error(`Main loop error: ${error}`);
+        await this.ns.sleep(this.config.mainLoopDelay * 2); // Longer delay on error
+      }
     }
-    
-    // Upgrade existing servers
-    if (purchasedServers.length > 0) {
-        // Sort by RAM size (upgrade smallest first)
-        purchasedServers.sort((a, b) => a.maxRam - b.maxRam);
-        
-        for (const server of purchasedServers) {
-            const currentPower = Math.log2(server.maxRam);
-            if (currentPower < targetRamPower) {
-                const newRam = server.maxRam * 2;
-                const upgradeCost = ns.getPurchasedServerUpgradeCost(server.hostname, newRam);
-                
-                if (playerMoney >= upgradeCost) {
-                    if (ns.upgradePurchasedServer(server.hostname, newRam)) {
-                        upgraded++;
-                        ns.print(`Upgraded ${server.hostname}: ${server.maxRam}GB → ${newRam}GB`);
-                        break; // Only upgrade one per cycle to avoid spending all money
-                    }
-                }
-            }
-        }
-    }
-    
-    return { bought, upgraded };
+  }
 }
 
-const argsSchema: [string, string | number | boolean | string[]][] = [
-    ['debug', false],
-    ['repeat', true],
-    ['rooting', true],
-    ['max-servers', 25],
-    ['target-ram-power', 13],
-    ['repboost', false],
-    ['repboost-ram-percentage', 25],
-    ['repboost-min-threads', 10],
-    ['repboost-max-threads', 1000],
-    ['repboost-core-threshold', 4],
-    ['repboost-stability-delay', 5000],
-    ['repboost-intelligence-opt', true],
-    ['repboost-debug', false],
-];
-
-// Performance tracking
-let botnetStartTime = Date.now();
-let totalBatchCycles = 0;
-
-// Repboost system state
-let repboostDetector: FactionDetector | null = null;
-let repboostSystemActive = false;
-let repboostStartTime = 0;
-let currentShareAllocation: ShareAllocation | null = null;
-let lastShareAllocationTime = 0;
-
-let options: BotnetOptions;
-
-export function autocomplete(data: AutocompleteData, _args: any) {
-    data.flags(argsSchema);
-    return [];
-}
-
-// Batching interfaces
-interface INetworkRAMSnapshot {
-    totalAvailable: number;
-    servers: { hostname: string; availableRAM: number }[];
-}
-
-interface IHWGWBatch {
-    target: ServerData;
-    hackThreads: number;
-    weaken1Threads: number;
-    growThreads: number;
-    weaken2Threads: number;
-    totalThreads: number;
-    hackStartDelay: number;
-    weaken1StartDelay: number;
-    growStartDelay: number;
-    weaken2StartDelay: number;
-}
-
-interface IPrepBatch {
-    target: ServerData;
-    weakenThreads: number;
-    growThreads: number;
-    totalThreads: number;
-    priority: 'security' | 'money';
-}
-
-interface IExecutionResults {
-    totalScripts: number;
-    successfulScripts: number;
-    failedScripts: number;
-}
+// ===== MAIN FUNCTION =====
 
 export async function main(ns: NS): Promise<void> {
-    ns.disableLog("ALL");
-    
-    options = ns.flags(argsSchema) as unknown as BotnetOptions;
-    
-    // Check if another botnet instance is already running
-    const runningScripts = ns.ps();
-    for (const script of runningScripts) {
-        if (script.filename === 'botnet.js' && script.pid !== ns.getRunningScript()?.pid) {
-            ns.tprint(`Botnet System: Another instance is already running (PID: ${script.pid}). Exiting.`);
-            return; // Exit gracefully, let the existing instance continue
-        }
-    }
-    
-    if (options.debug) {
-        ns.tprint(`Botnet System: Starting with PID ${ns.getRunningScript()?.pid} (rooting=${options.rooting})`);
-    }
-    
-    ns.atExit(() => {
-        // Kill all simple-* scripts directly using a more comprehensive approach
-        try {
-            // Get all servers in the network
-            const allServers = getServerList(ns);
-            let totalKilled = 0;
-            for (const hostname of allServers) {
-                try {
-                    // Use cheap individual calls instead of expensive getServer()
-                    if (ns.hasRootAccess(hostname) && ns.getServerMaxRam(hostname) > 0) {
-                        const runningScripts = ns.ps(hostname);
-                        for (const script of runningScripts) {
-                            if (script.filename.includes(BOTNET_CONFIG.REMOTE_SCRIPT_PATTERN)) {
-                                const killed = ns.scriptKill(script.filename, hostname);
-                                if (killed) totalKilled++;
-                            }
-                        }
-                    }
-                } catch (e) {
-                    // Skip servers that can't be accessed
-                }
-            }
-            if (totalKilled > 0) {
-                ns.tprint(`Botnet cleanup: killed ${totalKilled} remote scripts`);
-            }
-        } catch (e) {
-            // Fallback: just print a message
-            ns.tprint(`Botnet cleanup failed - you may need to run 'killremote.js' manually`);
-        }
-    });
+  ns.disableLog('ALL');
 
-    do {
-        ns.clearLog();
+  // Check for debug flag
+  const debugMode = ns.args.includes('--debug') || ns.args.includes('-d');
 
-        const playerHackLevel = ns.getHackingLevel();
-        const servers = buildServerData(ns);
-        
-        // PHASE 0: Repboost System Management (if enabled)
-        if (options.repboost) {
-            if (!repboostDetector) {
-                repboostDetector = new FactionDetector();
-                if (options['repboost-debug']) {
-                    ns.tprint("Repboost system: Initialized repboost detector");
-                }
-            }
-            
-            const repboostStatus = repboostDetector.detectFactionWork();
-            const isStable = repboostStatus.isWorkingForFaction; // Skip stability check for testing
-            
-            if (repboostStatus.isWorkingForFaction && isStable) {
-                if (!repboostSystemActive) {
-                    // Skip stability delay for testing
-                    repboostSystemActive = true;
-                    repboostStartTime = Date.now();
-                    if (options['repboost-debug']) {
-                        ns.tprint(`Repboost system: Activated for repboost ${repboostStatus.detectedFactionName}`);
-                    }
-                }
-            } else {
-                if (repboostSystemActive) {
-                    repboostSystemActive = false;
-                    if (options['repboost-debug']) {
-                        ns.tprint("Repboost system: Deactivated - no stable repboost work detected");
-                    }
-                }
-            }
-            
-            if (options['repboost-debug']) {
-                ns.tprint(`Repboost work: ${repboostStatus.isWorkingForFaction ? repboostStatus.detectedFactionName : 'None'} (consecutive: ${repboostStatus.consecutiveDetections}/2, stable: ${isStable})`);
-                ns.tprint(`Detection details: method=${repboostStatus.detectionMethod}, duration=${Math.round(repboostStatus.workDuration/1000)}s, lastChange=${Math.round((Date.now() - repboostStatus.lastStatusChange)/1000)}s ago`);
-                ns.tprint(`Repboost system: ${repboostSystemActive ? 'Active' : 'Inactive'}`);
-            }
-        }
-        
-        // PHASE 1: Server Management (always enabled)
-        if (options.rooting) {
-            const rootedCount = performServerRooting(ns, servers);
-            if (rootedCount > 0) {
-                ns.print(`Rooted ${rootedCount} new servers`);
-            }
-        }
-        
-        // Always manage purchased servers
-        const maxServers = options['max-servers'] as number;
-        const targetRamPower = options['target-ram-power'] as number;
-        const serverManagement = await managePurchasedServers(ns, servers, maxServers, targetRamPower);
-        if (options.debug) {
-            ns.print(`Server management: bought ${serverManagement.bought}, upgraded ${serverManagement.upgraded}`);
-        }
-        if (serverManagement.bought > 0 || serverManagement.upgraded > 0) {
-            ns.print(`Server management: bought ${serverManagement.bought}, upgraded ${serverManagement.upgraded}`);
-        }
-        
-        
-        // PHASE 2: HWGW Batching
-        const targets = servers.filter(s => isTarget(s) && s.requiredHackingSkill <= playerHackLevel).sort(byValue);
-        const attackers = servers.filter(isAttacker).sort(byAvailableRam);
-        
-        if (attackers.length === 0) {
-            ns.print('No attacker servers available. Rooting servers...');
-            await ns.sleep(5000);
-            continue;
-        }
-        
-        // Copy all remote scripts to all attackers
-        const remoteScripts = ns.ls('home', 'remote/').filter(file => file.endsWith(BOTNET_CONFIG.REMOTE_SCRIPT_EXTENSION));
-        attackers.forEach(s => {
-            remoteScripts.forEach(scriptFile => {
-                ns.scp(scriptFile, s.hostname);
-            });
-        });
+  // Check for cleanup flag
+  if (ns.args.includes('--cleanup') || ns.args.includes('-c') || ns.args.includes('--clean')) {
+    cleanupRemoteScriptsSync(ns);
+    return;
+  }
 
-        // STEP 1: Clean slate - stop all existing scripts if repboost is enabled and active
-        if (options.repboost && repboostSystemActive) {
-            if (options['repboost-debug']) {
-                ns.tprint("Repboost: Stopping all HWGW scripts to make room for repboost allocation");
-            }
-            
-            // More aggressive cleanup - kill all simple- scripts multiple times
-            for (let cleanup = 0; cleanup < BOTNET_CONFIG.SHRAM_CLEANUP_ROUNDS; cleanup++) {
-                let killedCount = 0;
-                for (const attacker of attackers) {
-                    const runningScripts = ns.ps(attacker.hostname);
-                    for (const script of runningScripts) {
-                        if (script.filename.includes(BOTNET_CONFIG.REMOTE_SCRIPT_PATTERN)) {
-                            const killed = ns.scriptKill(script.filename, attacker.hostname);
-                            if (killed) killedCount++;
-                        }
-                    }
-                }
-                if (options['repboost-debug']) {
-                    ns.tprint(`Repboost: Cleanup round ${cleanup + 1}: killed ${killedCount} scripts`);
-                }
-                if (killedCount === 0) break; // No more scripts to kill
-                await ns.sleep(BOTNET_CONFIG.SHRAM_CLEANUP_DELAY);
-            }
-            
-            // Final verification
-            let totalRemaining = 0;
-            for (const attacker of attackers) {
-                const runningScripts = ns.ps(attacker.hostname);
-                const remainingSimpleScripts = runningScripts.filter(s => s.filename.includes(BOTNET_CONFIG.REMOTE_SCRIPT_PATTERN));
-                totalRemaining += remainingSimpleScripts.length;
-            }
-            
-            if (options['repboost-debug']) {
-                ns.tprint(`Repboost: After cleanup, ${totalRemaining} simple- scripts still running`);
-            }
-        }
+  const controller = new BotnetController(ns, debugMode);
 
-        // STEP 2: Snapshot Network RAM (after cleanup)
-        const networkRAMSnapshot = takeNetworkRAMSnapshot(ns, attackers);
-        let remainingRAMBudget = networkRAMSnapshot.totalAvailable;
-        const scriptRamCost = BOTNET_CONFIG.SCRIPT_RAM_COST;
-        
-        if (options.debug || options['repboost-debug']) {
-            ns.tprint(`Network RAM Budget: ${remainingRAMBudget.toFixed(2)}GB across ${networkRAMSnapshot.servers.length} servers`);
-        if (options.repboost && repboostSystemActive) {
-                // Show per-server RAM for debugging
-                const topServers = networkRAMSnapshot.servers
-                    .sort((a, b) => b.availableRAM - a.availableRAM)
-                    .slice(0, BOTNET_CONFIG.TOP_SERVERS_DEBUG);
-                ns.tprint(`Top ${BOTNET_CONFIG.TOP_SERVERS_DEBUG} servers by available RAM:`);
-                topServers.forEach(s => {
-                    ns.tprint(`  ${s.hostname}: ${s.availableRAM.toFixed(1)}GB available`);
-                });
-            }
-        }
+  // Register cleanup function to run when script exits
+  ns.atExit(() => {
+    ns.tprint('🛑 Botnet script terminating - cleaning up remote scripts...');
+    cleanupRemoteScriptsSync(ns);
+  });
 
-         // STEP 3: Repboost Allocation and Execution (deploy scripts immediately with clean RAM)
-        let repboostRAMUsed = 0;
-        if (options.repboost && repboostSystemActive) {
-            const repboostConfig: ShareConfiguration = {
-                ramPercentage: options['repboost-ram-percentage'] as number,
-                minimumThreads: options['repboost-min-threads'] as number,
-                maximumThreads: options['repboost-max-threads'] as number,
-                priorityCoreThreshold: options['repboost-core-threshold'] as number,
-                intelligenceOptimization: options['repboost-intelligence-opt'] as boolean
-            };
-            
-            const configErrors = ShareCalculator.validateConfiguration(repboostConfig);
-            if (configErrors.length > 0) {
-                ns.tprint(`Repboost config errors: ${configErrors.join(', ')}`);
-            } else {
-                // Get real-time server data for accurate RAM availability
-                const currentServers = buildServerData(ns);
-                const availableServers = currentServers.filter(isAttacker);
-                const serverHostnames = availableServers.map(s => s.hostname);
-                
-                // Perform optimization with current RAM state
-                const optimization = ServerOptimizer.optimizeServerAllocation(ns, serverHostnames, repboostConfig);
-                
-                if (optimization.eligibleServers.length > 0) {
-                    const playerStats = ns.getPlayer();
-                    const playerIntelligence = playerStats.skills?.intelligence || 0;
-                    
-                    const allocation = ShareCalculator.calculateNetworkShareAllocation(
-                        optimization.eligibleServers.map(profile => ({
-                            hostname: profile.hostname,
-                            cpuCores: profile.cpuCores,
-                            availableRAM: profile.availableRAM,
-                            maxRam: ns.getServerMaxRam(profile.hostname),
-                            ramUsed: ns.getServerUsedRam(profile.hostname)
-                        })),
-                        repboostConfig,
-                        playerIntelligence
-                    );
-                    
-                    if (allocation.totalBaseThreads > 0) {
-                        const shouldReallocate = !currentShareAllocation || 
-                            (Date.now() - lastShareAllocationTime) > 60000 ||
-                            Math.abs(allocation.totalBaseThreads - (currentShareAllocation.totalBaseThreads || 0)) > 50;
-                        
-                        if (shouldReallocate) {
-                            // Clean up existing repboost scripts
-                            if (currentShareAllocation) {
-                                for (const serverAlloc of currentShareAllocation.serverAllocations) {
-                                    if (serverAlloc.hostname !== 'home') {
-                                    const repboostScript = 'remote/simple-' + 'sh' + 'are.js';
-                                    ns.scriptKill(repboostScript, serverAlloc.hostname);
-                                    }
-                                }
-                            }
-                            
-                            // Files already copied during initial setup - no need to copy again
-                            
-                            // Execute repboost scripts immediately with final RAM verification
-                            let deployedCount = 0;
-                            repboostRAMUsed = 0; // Reset and recalculate based on actual deployments
-                            for (const serverAlloc of allocation.serverAllocations) {
-                                if (serverAlloc.baseThreads > 0 && serverAlloc.hostname !== 'home') {
-                                    // Final RAM check before execution using cheap calls
-                                    const finalMaxRAM = ns.getServerMaxRam(serverAlloc.hostname);
-                                    const finalUsedRAM = ns.getServerUsedRam(serverAlloc.hostname);
-                                    const finalAvailableRAM = finalMaxRAM - finalUsedRAM;
-                                    const repboostScriptRAM = 4.0; // simple-repboost.js RAM cost
-                                    const ramNeeded = serverAlloc.baseThreads * repboostScriptRAM;
-                                    
-                                    if (finalAvailableRAM >= ramNeeded) {
-                                        const scriptArgs = [
-                                            0,  // duration (infinite)
-                                            100,  // cycle delay
-                                            (options['repboost-debug'] as boolean).toString(),
-                                            30000  // reporting interval
-                                        ];
-                                        
-                                        // Check if file exists before execution
-                                        const repboostScript = 'remote/simple-' + 'sh' + 'are.js';
-                                        const fileExists = ns.fileExists(repboostScript, serverAlloc.hostname);
-                                        if (!fileExists) {
-                                            if (options['repboost-debug']) {
-                                                ns.tprint(`Repboost: File ${repboostScript} does not exist on ${serverAlloc.hostname}`);
-                                            }
-                                            continue;
-                                        }
-                                        
-                                        const pid = ns.exec(repboostScript, serverAlloc.hostname, serverAlloc.baseThreads, ...scriptArgs);
-                                        if (pid > 0) {
-                                            deployedCount++;
-                                            repboostRAMUsed += ramNeeded;
-                                            if (options['repboost-debug']) {
-                                                ns.tprint(`Repboost: Executed ${serverAlloc.baseThreads} threads on ${serverAlloc.hostname} (${ramNeeded.toFixed(1)}GB, PID: ${pid})`);
-                                            }
-                                        } else {
-                                            if (options['repboost-debug']) {
-                                                ns.tprint(`Repboost: Failed to execute on ${serverAlloc.hostname} - exec failed (${serverAlloc.baseThreads} threads, ${ramNeeded.toFixed(1)}GB needed, ${finalAvailableRAM.toFixed(1)}GB available)`);
-                                            }
-                                        }
-                                    } else if (options['repboost-debug']) {
-                                        ns.tprint(`Repboost: Skipped ${serverAlloc.hostname} - insufficient RAM (need ${ramNeeded.toFixed(1)}GB, have ${finalAvailableRAM.toFixed(1)}GB)`);
-                                    }
-                                }
-                            }
-                            
-                            currentShareAllocation = allocation;
-                            lastShareAllocationTime = Date.now();
-                            
-                            if (deployedCount > 0) {
-                                const actualThreads = Math.floor(repboostRAMUsed / 4.0); // Calculate actual threads deployed
-                                ns.tprint(`Repboost: Successfully deployed ${actualThreads} threads across ${deployedCount} servers (${repboostRAMUsed.toFixed(1)}GB)`);
-                                ns.tprint(`Repboost: Planned ${allocation.totalBaseThreads} threads, deployed ${actualThreads} threads (${((actualThreads/allocation.totalBaseThreads)*100).toFixed(1)}% success)`);
-                            } else {
-                                ns.tprint(`Repboost: Failed to deploy any threads - all servers at capacity`);
-                                repboostRAMUsed = 0; // No RAM actually used
-                                currentShareAllocation = null; // Clear allocation since nothing was deployed
-                            }
-                        } else if (currentShareAllocation) {
-                            // Use existing allocation RAM (estimate - may not be accurate if some scripts died)
-                            repboostRAMUsed = currentShareAllocation.totalRAMUsed || 0;
-                        }
-                    } else if (options['repboost-debug']) {
-                        ns.tprint("Repboost: No threads available for allocation");
-                    }
-                } else if (options['repboost-debug']) {
-                    ns.tprint("Repboost: No eligible servers found");
-                }
-            }
-        } else if (currentShareAllocation && !repboostSystemActive) {
-            for (const serverAlloc of currentShareAllocation.serverAllocations) {
-                if (serverAlloc.hostname !== 'home') {
-                    const repboostScript = 'remote/simple-' + 'sh' + 'are.js';
-                    ns.scriptKill(repboostScript, serverAlloc.hostname);
-                }
-            }
-            currentShareAllocation = null;
-            repboostRAMUsed = 0;
-            ns.tprint("Repboost: Cleaned up allocation - repboost work inactive");
-        }
-        
-        // Deduct repboost RAM from available budget
-        remainingRAMBudget -= repboostRAMUsed;
-        if (options.debug && repboostRAMUsed > 0) {
-            ns.tprint(`Repboost RAM reserved: ${repboostRAMUsed.toFixed(1)}GB, remaining for HWGW: ${remainingRAMBudget.toFixed(1)}GB`);
-        }
-
-         // STEP 4: Select Hackable Targets
-        const hackableTargets = selectHackableTargets(targets);
-        const nonReadyTargets = targets.filter(t => !hackableTargets.includes(t));
-        
-        if (options.debug) {
-            ns.tprint(`Found ${hackableTargets.length} hack-ready targets, ${nonReadyTargets.length} need prep`);
-        }
-
-         // STEP 5: Allocate Full HWGW Batches
-        const hwgwBatches: IHWGWBatch[] = [];
-        
-        while (remainingRAMBudget > scriptRamCost * 10) {
-            let batchAllocatedThisRound = false;
-            
-            for (const target of hackableTargets) {
-                const fullBatch = calculateFullHWGWBatch(ns, target);
-                const batchRAMCost = fullBatch.totalThreads * scriptRamCost;
-                
-                if (batchRAMCost <= remainingRAMBudget) {
-                    hwgwBatches.push(fullBatch);
-                    remainingRAMBudget -= batchRAMCost;
-                    batchAllocatedThisRound = true;
-                    
-                    if (options.debug) {
-                        ns.tprint(`Allocated HWGW batch for ${target.hostname}: ${fullBatch.totalThreads} threads (${batchRAMCost.toFixed(2)}GB)`);
-                    }
-                }
-            }
-            
-            if (!batchAllocatedThisRound) {
-                break;
-            }
-        }
-
-
-
-         // STEP 6: Prepare Future Targets
-        const prepBatches: IPrepBatch[] = [];
-        while (remainingRAMBudget >= scriptRamCost && nonReadyTargets.length > 0) {
-            let prepAllocatedThisRound = false;
-            
-            for (const target of nonReadyTargets) {
-                if (remainingRAMBudget < scriptRamCost) break;
-                
-                const prepBatch = calculatePrepBatch(ns, target, remainingRAMBudget, scriptRamCost);
-                if (prepBatch && prepBatch.totalThreads > 0) {
-                    const prepRAMCost = prepBatch.totalThreads * scriptRamCost;
-                    prepBatches.push(prepBatch);
-                    remainingRAMBudget -= prepRAMCost;
-                    prepAllocatedThisRound = true;
-                    
-                    if (options.debug) {
-                        ns.tprint(`Allocated prep batch for ${target.hostname}: ${prepBatch.totalThreads} threads (${prepRAMCost.toFixed(2)}GB)`);
-                    }
-                }
-            }
-            
-            if (!prepAllocatedThisRound) {
-                break;
-            }
-        }
-
-         // STEP 7: Execute the batches
-        const executionResults = executeHWGWBatches(ns, hwgwBatches, prepBatches, networkRAMSnapshot, scriptRamCost, !!options.debug);
-        
-        // Track batch cycles
-        totalBatchCycles++;
-        
-        if (options.debug) {
-            ns.tprint(`Execution Summary: ${executionResults.successfulScripts}/${executionResults.totalScripts} scripts started successfully`);
-            ns.tprint(`Remaining RAM Budget: ${remainingRAMBudget.toFixed(2)}GB`);
-        }
-
-        // CONTINUOUS BATCHING
-        while (true) {
-            await ns.sleep(1000);
-            ns.clearLog();
-            
-            const currentServers = buildServerData(ns);
-            
-            // Server management in the continuous loop
-            const maxServers = options['max-servers'] as number;
-            const targetRamPower = options['target-ram-power'] as number;
-            const serverManagement = await managePurchasedServers(ns, currentServers, maxServers, targetRamPower);
-            if (options.debug) {
-                ns.print(`Server management: bought ${serverManagement.bought}, upgraded ${serverManagement.upgraded}`);
-            }
-            if (serverManagement.bought > 0 || serverManagement.upgraded > 0) {
-                ns.print(`Server management: bought ${serverManagement.bought}, upgraded ${serverManagement.upgraded}`);
-            }
-            
-            const currentAttackers = currentServers.filter(isAttacker).sort(byAvailableRam);
-            const currentTargets = currentServers.filter(s => isTarget(s) && s.requiredHackingSkill <= playerHackLevel).sort(byValue);
-            
-            const currentNetworkRAM = takeNetworkRAMSnapshot(ns, currentAttackers);
-            let availableRAM = currentNetworkRAM.totalAvailable;
-            
-            printStatus(ns, currentServers, playerHackLevel);
-            
-            if (availableRAM > scriptRamCost * 50) {
-                if (options.debug) {
-                    ns.tprint(`Detected ${availableRAM.toFixed(2)}GB available RAM - spawning additional batches`);
-                }
-                
-                const currentHackableTargets = selectHackableTargets(currentTargets);
-                const additionalHWGWBatches: IHWGWBatch[] = [];
-                
-                for (const target of currentHackableTargets) {
-                    if (availableRAM < scriptRamCost * 10) continue;
-                    
-                    const batch = calculateFullHWGWBatch(ns, target);
-                    const batchCost = batch.totalThreads * scriptRamCost;
-                    
-                    if (batchCost <= availableRAM) {
-                        additionalHWGWBatches.push(batch);
-                        availableRAM -= batchCost;
-                        
-                        if (options.debug) {
-                            ns.tprint(`Spawning additional HWGW batch for ${target.hostname}: ${batch.totalThreads} threads`);
-                        }
-                    }
-                }
-                
-                const currentNonReadyTargets = currentTargets.filter(t => !currentHackableTargets.includes(t));
-                const additionalPrepBatches: IPrepBatch[] = [];
-                
-                for (const target of currentNonReadyTargets) {
-                    if (availableRAM < scriptRamCost) break;
-                    
-                    const prepBatch = calculatePrepBatch(ns, target, availableRAM, scriptRamCost);
-                    if (prepBatch && prepBatch.totalThreads > 0) {
-                        const prepCost = prepBatch.totalThreads * scriptRamCost;
-                        additionalPrepBatches.push(prepBatch);
-                        availableRAM -= prepCost;
-                        
-                        if (options.debug) {
-                            ns.tprint(`Spawning additional prep batch for ${target.hostname}: ${prepBatch.totalThreads} threads`);
-                        }
-                    }
-                }
-                
-                if (additionalHWGWBatches.length > 0 || additionalPrepBatches.length > 0) {
-                    executeHWGWBatches(ns, additionalHWGWBatches, additionalPrepBatches, currentNetworkRAM, scriptRamCost, !!options.debug);
-                }
-            }
-            
-            if (!options.repeat) {
-                const running = currentServers.some(s => ns.ps(s.hostname).some(p => p.filename.includes('simple-')));
-                if (!running) break;
-            }
-        }
-    } while (options.repeat);
+  await controller.run();
 }
 
-function printStatus(ns: NS, servers: ServerData[], playerHackLevel: number) {
-    const targets = servers.filter(s => isTarget(s) && s.requiredHackingSkill <= playerHackLevel);
-    const attackers = servers.filter(isAttacker);
-    
-    const runningScripts = servers.flatMap(s => ns.ps(s.hostname).filter((p: any) => p.filename.includes('simple-')));
-    const running = runningScripts.length > 0;
-    
-    // Server management stats
-    const totalServers = servers.length;
-    const rootedServers = servers.filter(s => s.hasAdminRights).length;
-    const purchasedServers = servers.filter(s => s.purchasedByPlayer);
-    const purchasedCount = purchasedServers.length;
-    const totalPurchasedRAM = purchasedServers.reduce((sum, s) => sum + s.maxRam, 0);
-    
-    if (running) {
-        const scriptStats = { hack: 0, weaken: 0, grow: 0, total: runningScripts.length };
-        runningScripts.forEach((p: any) => {
-            if (p.filename.includes('hack')) scriptStats.hack++;
-            if (p.filename.includes('weaken')) scriptStats.weaken++;
-            if (p.filename.includes('grow')) scriptStats.grow++;
-        });
-        
-        const totalRAM = attackers.reduce((sum, s) => sum + s.maxRam, 0);
-        const usedRAM = attackers.reduce((sum, s) => sum + s.ramUsed, 0);
-        const utilization = totalRAM > 0 ? (usedRAM / totalRAM * 100) : 0;
-        
-        const playerMoney = ns.getServerMoneyAvailable('home');
-        
-        let incomeRate = 0;
-        try {
-            incomeRate = ns.getTotalScriptIncome()[0] ?? 0;
-        } catch {
-            incomeRate = 0;
+// Synchronous cleanup function for ns.atExit()
+function cleanupRemoteScriptsSync(ns: NS): void {
+  // Get all servers recursively
+  const allServers = getAllServers(ns);
+  const purchasedServers = ns.getPurchasedServers();
+  const servers = [...new Set([...allServers, ...purchasedServers])]; // Remove duplicates
+
+  let killedCount = 0;
+  let totalScanned = 0;
+  const remoteScripts = ['remote/hk.js', 'remote/gr.js', 'remote/wk.js'];
+
+  ns.tprint(`🔍 Scanning ${servers.length} servers for remote scripts...`);
+
+  for (const server of servers) {
+    if (ns.hasRootAccess(server)) {
+      totalScanned++;
+
+      // Get all running scripts on this server for debugging
+      const runningScripts = ns.ps(server);
+      const botnetScripts = runningScripts.filter(script =>
+        script.filename.includes('remote/hk.js') ||
+        script.filename.includes('remote/gr.js') ||
+        script.filename.includes('remote/wk.js')
+      );
+
+      if (botnetScripts.length > 0) {
+        ns.tprint(`📋 ${server}: Found ${botnetScripts.length} botnet scripts to kill`);
+        for (const script of botnetScripts) {
+          // Kill by PID instead of filename to avoid argument matching issues
+          const success = ns.kill(script.pid);
+          if (success) {
+            killedCount++;
+            ns.tprint(`🔴 Killed ${script.filename} (PID: ${script.pid}) on ${server}`);
+          } else {
+            ns.tprint(`❌ Failed to kill ${script.filename} (PID: ${script.pid}) on ${server}`);
+          }
         }
-        
-        const readyTargets = targets.filter(t => {
-            const securityOk = t.hackDifficulty <= t.minDifficulty + 5;
-            const moneyOk = t.moneyAvailable >= t.moneyMax * 0.95;
-            return securityOk && moneyOk;
-        });
-        const prepTargets = targets.filter(t => !readyTargets.includes(t));
-        
-        // Get active targets being attacked
-        const activeTargets = new Map<string, { hack: number; weaken: number; grow: number }>();
-        runningScripts.forEach((p: any) => {
-            const target = p.args[0] as string;
-            if (!activeTargets.has(target)) {
-                activeTargets.set(target, { hack: 0, weaken: 0, grow: 0 });
-            }
-            const stats = activeTargets.get(target)!;
-            if (p.filename.includes('hack')) stats.hack++;
-            if (p.filename.includes('weaken')) stats.weaken++;
-            if (p.filename.includes('grow')) stats.grow++;
-        });
-        
-        // Get top 3 most active targets
-        const topTargets = Array.from(activeTargets.entries())
-            .sort(([,a], [,b]) => (b.hack + b.weaken + b.grow) - (a.hack + a.weaken + a.grow))
-            .slice(0, 3);
-        
-        ns.print(`┌─ BOTNET SYSTEM STATUS ───────────────────────────────────────`);
-        ns.print(`│ Scripts: ${scriptStats.total.toString().padEnd(3)} (H:${scriptStats.hack.toString().padStart(2)} W:${scriptStats.weaken.toString().padStart(2)} G:${scriptStats.grow.toString().padStart(2)})  RAM: ${utilization.toFixed(1)}% (${(usedRAM/1000).toFixed(1)}/${(totalRAM/1000).toFixed(1)}TB)`);
-        ns.print(`│ Money: $${ns.formatNumber(playerMoney)}  Hack: ${playerHackLevel}  Income: $${ns.formatNumber(incomeRate)}/sec`);
-        ns.print(`│ Servers: ${rootedServers}/${totalServers}  Purchased: ${purchasedCount}/25 (${(totalPurchasedRAM/1000).toFixed(1)}TB)`);
-        
-        // Add uptime and cycle information
-        const uptimeMs = Date.now() - botnetStartTime;
-        const uptimeMin = Math.floor(uptimeMs / 60000);
-        const uptimeSec = Math.floor((uptimeMs % 60000) / 1000);
-        const cyclesPerMin = totalBatchCycles > 0 && uptimeMin > 0 ? (totalBatchCycles / uptimeMin).toFixed(1) : '0.0';
-        
-        ns.print(`│ Ready: ${readyTargets.length}  Prep: ${prepTargets.length}  Batches: ${totalBatchCycles} cycles (${cyclesPerMin}/min)`);
-        ns.print(`│ Uptime: ${uptimeMin}m ${uptimeSec}s  Efficiency: $${(incomeRate / Math.max(scriptStats.total, 1)).toFixed(0)}/script`);
-        
-        if (topTargets.length > 0) {
-            ns.print(`├─ ACTIVE TARGETS ────────────────────────────────────────────`);
-            topTargets.forEach(([target, stats]) => {
-                const total = stats.hack + stats.weaken + stats.grow;
-                const targetDisplay = target.substring(0, 16).padEnd(16);
-                ns.print(`│ ${targetDisplay} ${total.toString().padStart(3)} scripts (H:${stats.hack.toString().padStart(2)} W:${stats.weaken.toString().padStart(2)} G:${stats.grow.toString().padStart(2)})`);
-            });
-        }
-        
-        // Repboost system reporting
-        if (options.repboost) {
-            const repboostScript = 'simple-' + 'sh' + 'are.js';
-            const repboostScripts = servers.flatMap(s => ns.ps(s.hostname).filter((p: any) => p.filename.includes(repboostScript)));
-            if (repboostScripts.length > 0 || repboostSystemActive) {
-                ns.print(`├─ REPBOOST SYSTEM ───────────────────────────────────────────`);
-                
-                if (repboostSystemActive && currentShareAllocation) {
-                    const totalThreads = currentShareAllocation.totalBaseThreads || 0;
-                    const effectiveThreads = currentShareAllocation.totalEffectiveThreads || 0;
-                    const reputationBonus = currentShareAllocation.averageReputationBonus || 1.0;
-                    const ramUsed = currentShareAllocation.totalRAMUsed || 0;
-                    const repboostRuntime = repboostStartTime > 0 ? Math.floor((Date.now() - repboostStartTime) / 1000) : 0;
-                    
-                    const repboostStatus = repboostDetector?.detectFactionWork();
-                    const repboostName = repboostStatus?.detectedFactionName || 'Unknown';
-                    
-                    ns.print(`│ Status: ACTIVE (${repboostRuntime}s)  Faction: ${repboostName.substring(0, 12)}`);
-                    ns.print(`│ Threads: ${totalThreads} base → ${effectiveThreads.toFixed(0)} effective  Rep bonus: ${reputationBonus.toFixed(3)}x`);
-                    ns.print(`│ Servers: ${repboostScripts.length}  RAM used: ${(ramUsed/1000).toFixed(1)}GB  Scripts: ${repboostScripts.length}`);
-                    
-                    if (currentShareAllocation.serverAllocations && currentShareAllocation.serverAllocations.length > 0) {
-                        const topRepboostServers = currentShareAllocation.serverAllocations
-                            .filter((alloc: any) => alloc.baseThreads > 0)
-                            .sort((a: any, b: any) => b.baseThreads - a.baseThreads)
-                            .slice(0, 3);
-                        
-                        topRepboostServers.forEach((alloc: any) => {
-                            const serverDisplay = alloc.hostname.substring(0, 16).padEnd(16);
-                            const cores = alloc.cpuCores || 1; // Default to 1 core if not available
-                            ns.print(`│ ${serverDisplay} ${alloc.baseThreads.toString().padStart(3)} threads  ${cores} cores`);
-                        });
-                    }
-                } else if (repboostDetector) {
-                    const repboostStatus = repboostDetector.detectFactionWork();
-                    if (repboostStatus.isWorkingForFaction) {
-                        const stability = repboostDetector.isDetectionStable(repboostStatus, 3) ? 'Stable' : 'Unstable';
-                        ns.print(`│ Status: WAITING (${stability})  Faction: ${repboostStatus.detectedFactionName || 'Detecting...'}`);
-                        ns.print(`│ Delay: ${options['repboost-stability-delay']}ms  Detection: ${repboostStatus.consecutiveDetections}/3`);
-                    } else {
-                        ns.print(`│ Status: DISABLED - No repboost work detected`);
-                    }
-                } else {
-                    ns.print(`│ Status: INACTIVE - Repboost system enabled but not initialized`);
-                }
-            }
-        }
-        
-        ns.print(`└──────────────────────────────────────────────────────────────`);
-    } else {
-        ns.print(`BOTNET: No active scripts - waiting for next cycle...`);
+      }
     }
+  }
+
+  ns.tprint(`🧹 Exit cleanup complete: ${killedCount} remote scripts terminated from ${totalScanned} accessible servers`);
 }
 
-function takeNetworkRAMSnapshot(ns: NS, attackers: ServerData[]): INetworkRAMSnapshot {
-    const servers: { hostname: string; availableRAM: number }[] = [];
-    let totalAvailable = 0;
-    
-    for (const attacker of attackers) {
-        // Use cheap individual calls instead of expensive getServer()
-        const maxRam = ns.getServerMaxRam(attacker.hostname);
-        const usedRam = ns.getServerUsedRam(attacker.hostname);
-        const availableRam = maxRam - usedRam;
-        const reserveForHome = attacker.hostname === 'home' ? BOTNET_CONFIG.HOME_RAM_RESERVE : 0;
-        const usableRAM = Math.max(0, availableRam - reserveForHome);
-        
-        servers.push({ hostname: attacker.hostname, availableRAM: usableRAM });
-        totalAvailable += usableRAM;
-    }
-    
-    return { totalAvailable, servers };
-}
+// Recursive function to get all servers in the network
+function getAllServers(ns: NS): string[] {
+  const visited = new Set<string>();
+  const servers: string[] = [];
 
-function selectHackableTargets(targets: ServerData[]): ServerData[] {
-    const hackableTargets = targets.filter(target => {
-        const moneyRatio = target.moneyAvailable / Math.max(target.moneyMax, 1);
-        const securityOverMin = target.hackDifficulty - target.minDifficulty;
-        
-        return moneyRatio >= BOTNET_CONFIG.MONEY_THRESHOLD && securityOverMin <= BOTNET_CONFIG.SECURITY_TOLERANCE;
-    });
-    
-    // Sort by efficiency: money per weaken time, prioritizing high-value quick targets
-    return hackableTargets.sort((a, b) => {
-        const efficiencyA = (a.moneyMax / a.weakenTime) * (a.moneyAvailable / a.moneyMax);
-        const efficiencyB = (b.moneyMax / b.weakenTime) * (b.moneyAvailable / b.moneyMax);
-        return efficiencyB - efficiencyA;
-    });
-}
+  function scanRecursive(hostname: string) {
+    if (visited.has(hostname)) return;
+    visited.add(hostname);
+    servers.push(hostname);
 
-function calculateFullHWGWBatch(ns: NS, target: ServerData): IHWGWBatch {
-    const targetMoney = target.moneyAvailable * BOTNET_CONFIG.HACK_PERCENTAGE;
-    
-    // Calculate hack threads more efficiently
-    const baseHackThreads = Math.ceil(ns.hackAnalyzeThreads(target.hostname, targetMoney));
-    const hackThreads = Math.max(1, baseHackThreads);
-    
-    // Calculate security increases and required weaken threads
-    const hackSecIncrease = ns.hackAnalyzeSecurity(hackThreads, target.hostname);
-    const weakenEffect = ns.weakenAnalyze(1);
-    const weaken1Threads = Math.ceil(hackSecIncrease / weakenEffect);
-    
-    // Calculate grow threads needed to restore the money we're taking
-    const moneyAfterHack = target.moneyAvailable - targetMoney;
-    const growthNeeded = target.moneyMax / Math.max(moneyAfterHack, 1);
-    // Cap growth analysis to prevent extreme values on very low-money targets
-    const growThreads = Math.ceil(ns.growthAnalyze(target.hostname, Math.min(growthNeeded, BOTNET_CONFIG.GROWTH_ANALYSIS_CAP)));
-    
-    const growSecIncrease = ns.growthAnalyzeSecurity(growThreads, target.hostname);
-    const weaken2Threads = Math.ceil(growSecIncrease / weakenEffect);
-    
-    const now = Date.now();
-    
-    // Calculate optimal timing for HWGW batch
-    const hackStartDelay = now + target.weakenTime - target.hackTime + (3 * BOTNET_CONFIG.HWGW_TIMING_GAP);
-    const weaken1StartDelay = now + BOTNET_CONFIG.HWGW_TIMING_GAP;
-    const growStartDelay = now + target.weakenTime - target.growTime + (2 * BOTNET_CONFIG.HWGW_TIMING_GAP);
-    const weaken2StartDelay = now;
-    
-    return {
-        target,
-        hackThreads,
-        weaken1Threads,
-        growThreads,
-        weaken2Threads,
-        totalThreads: hackThreads + weaken1Threads + growThreads + weaken2Threads,
-        hackStartDelay,
-        weaken1StartDelay,
-        growStartDelay,
-        weaken2StartDelay
-    };
-}
+    const connected = ns.scan(hostname);
+    for (const server of connected) {
+      scanRecursive(server);
+    }
+  }
 
-function calculatePrepBatch(ns: NS, target: ServerData, availableRAMBudget: number, scriptRamCost: number): IPrepBatch | null {
-    const maxThreadsAvailable = Math.floor(availableRAMBudget / scriptRamCost);
-    
-    const securityOverMin = target.hackDifficulty - target.minDifficulty;
-    const moneyRatio = target.moneyAvailable / Math.max(target.moneyMax, 1);
-    
-    if (securityOverMin > 1) {
-        const weakenEffect = ns.weakenAnalyze(1);
-        const weakenThreadsNeeded = Math.ceil(securityOverMin / weakenEffect);
-        const weakenThreads = Math.min(weakenThreadsNeeded, maxThreadsAvailable);
-        
-        return {
-            target,
-            weakenThreads,
-            growThreads: 0,
-            totalThreads: weakenThreads,
-            priority: 'security'
-        };
-    } else if (moneyRatio < 0.95) {
-        const growthMultiplier = target.moneyMax / Math.max(target.moneyAvailable, 1);
-        const growThreadsNeeded = Math.ceil(ns.growthAnalyze(target.hostname, Math.min(growthMultiplier, 100)));
-        const growThreads = Math.min(growThreadsNeeded, maxThreadsAvailable);
-        
-        return {
-            target,
-            weakenThreads: 0,
-            growThreads,
-            totalThreads: growThreads,
-            priority: 'money'
-        };
-    }
-    
-    return null;
-}
-
-function executeHWGWBatches(ns: NS, hwgwBatches: IHWGWBatch[], prepBatches: IPrepBatch[], networkSnapshot: INetworkRAMSnapshot, scriptRamCost: number, debug: boolean): IExecutionResults {
-    let totalScripts = 0;
-    let successfulScripts = 0;
-    let failedScripts = 0;
-    
-    const serverRAM: Record<string, number> = {};
-    for (const server of networkSnapshot.servers) {
-        serverRAM[server.hostname] = server.availableRAM;
-    }
-    
-    for (const batch of hwgwBatches) {
-        const scripts = [
-            { type: 'hack', threads: batch.hackThreads, delay: batch.hackStartDelay },
-            { type: 'weaken', threads: batch.weaken1Threads, delay: batch.weaken1StartDelay },
-            { type: 'grow', threads: batch.growThreads, delay: batch.growStartDelay },
-            { type: 'weaken', threads: batch.weaken2Threads, delay: batch.weaken2StartDelay }
-        ];
-        
-        for (const script of scripts) {
-            if (script.threads === 0) continue;
-            
-            const result = allocateAndExecuteScript(ns, script.type, script.threads, script.delay, batch.target.hostname, serverRAM, scriptRamCost, debug);
-            totalScripts++;
-            if (result.success) successfulScripts++;
-            else failedScripts++;
-        }
-    }
-    
-    for (const batch of prepBatches) {
-        if (batch.weakenThreads > 0) {
-            const result = allocateAndExecuteScript(ns, 'weaken', batch.weakenThreads, Date.now() + 1000, batch.target.hostname, serverRAM, scriptRamCost, debug);
-            totalScripts++;
-            if (result.success) successfulScripts++;
-            else failedScripts++;
-        }
-        
-        if (batch.growThreads > 0) {
-            const result = allocateAndExecuteScript(ns, 'grow', batch.growThreads, Date.now() + 1000, batch.target.hostname, serverRAM, scriptRamCost, debug);
-            totalScripts++;
-            if (result.success) successfulScripts++;
-            else failedScripts++;
-        }
-    }
-    
-    return { totalScripts, successfulScripts, failedScripts };
-}
-
-function allocateAndExecuteScript(ns: NS, scriptType: string, threads: number, delay: number, targetHostname: string, serverRAM: Record<string, number>, scriptRamCost: number, debug: boolean): { success: boolean; pid: number } {
-    if (threads <= 0) {
-        if (debug) {
-            ns.tprint(`ERROR: Invalid thread count ${threads} for ${scriptType} -> ${targetHostname}`);
-        }
-        return { success: false, pid: 0 };
-    }
-    
-    let scriptFile = '';
-    switch (scriptType) {
-        case 'hack': scriptFile = 'remote/simple-hack.js'; break;
-        case 'weaken': scriptFile = 'remote/simple-weaken.js'; break;
-        case 'grow': scriptFile = 'remote/simple-grow.js'; break;
-        default: return { success: false, pid: 0 };
-    }
-    
-    let remainingThreads = threads;
-    let totalSuccess = true;
-    let firstPid = 0;
-    
-    for (const [hostname, availableRAM] of Object.entries(serverRAM)) {
-        if (remainingThreads === 0) break;
-        if (availableRAM < scriptRamCost) continue;
-        
-        const maxThreadsOnServer = Math.max(0, Math.floor(availableRAM / scriptRamCost));
-        const threadsToAllocate = Math.min(remainingThreads, maxThreadsOnServer);
-        
-        if (threadsToAllocate <= 0) continue;
-        
-        const ramUsed = threadsToAllocate * scriptRamCost;
-        serverRAM[hostname] -= ramUsed;
-        
-        const pid = ns.exec(scriptFile, hostname, threadsToAllocate, targetHostname, delay);
-        const success = pid !== 0;
-        
-        if (!success) {
-            // If script execution fails, restore RAM allocation for retry
-            serverRAM[hostname] += ramUsed;
-            totalSuccess = false;
-            
-            if (debug) {
-                ns.tprint(`FAILED: ${scriptType} on ${hostname} (${threadsToAllocate}t) -> ${targetHostname} - RAM restored`);
-            }
-        } else {
-            if (firstPid === 0) {
-                firstPid = pid;
-            }
-            
-            if (debug) {
-                ns.tprint(`SUCCESS: ${scriptType} on ${hostname} (${threadsToAllocate}t/${threads}t) -> ${targetHostname} (PID: ${pid})`);
-            }
-        }
-        
-        remainingThreads -= threadsToAllocate;
-    }
-    
-    if (remainingThreads > 0) {
-        if (debug) {
-            ns.tprint(`PARTIAL: ${scriptType} allocated ${threads - remainingThreads}/${threads} threads to ${targetHostname} (${remainingThreads} threads couldn't be allocated)`);
-        }
-        totalSuccess = false;
-    }
-    
-    return { success: totalSuccess, pid: firstPid };
+  scanRecursive('home');
+  return servers;
 }

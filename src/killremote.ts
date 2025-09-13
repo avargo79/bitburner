@@ -16,15 +16,13 @@ export async function main(ns: NS) {
     for (const hostname of allServers) {
         try {
             const server = ns.getServer(hostname);
-            if (server.hasAdminRights && server.maxRam > 0) {
-                const runningScripts = ns.ps(hostname);
-                for (const script of runningScripts) {
-                    if (script.filename.startsWith('remote/')) {
-                        const killed = ns.scriptKill(script.filename, hostname);
-                        if (killed) {
-                            ns.print(`Killed ${script.filename} on ${hostname}`);
-                            totalKilled++;
-                        }
+            const runningScripts = ns.ps(hostname);
+            for (const script of runningScripts) {
+                if (script.filename.startsWith('remote/')) {
+                    const killed = ns.scriptKill(script.filename, hostname);
+                    if (killed) {
+                        ns.print(`Killed ${script.filename} on ${hostname}`);
+                        totalKilled++;
                     }
                 }
             }

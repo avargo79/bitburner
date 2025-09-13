@@ -284,11 +284,92 @@ For simple scripts that don't require full spec-driven development:
 3. Verify RAM constraints and NS API usage patterns
 4. Test script restart behavior (stateless operation)
 
+### **⚠️ CRITICAL: Thorough Analysis Before Code Cleanup**
+**Always verify actual implementation completeness before removing "unused" code**
+
+When analyzing code for cleanup, **DO NOT assume unused code means incomplete features**. Follow this thorough analysis process:
+
+#### **Step 1: Trace Complete Data Flow**
+- **Check producers AND consumers**: If code publishes data, verify something reads it
+- **Follow communication patterns**: Port communication, event queues, database writes
+- **Verify end-to-end pipelines**: Data generation → transmission → processing → usage
+
+#### **Step 2: Examine All Related Files**  
+- **Remote scripts**: Check if distributed components are publishing data
+- **Main orchestrators**: Verify they're reading from expected sources
+- **Supporting infrastructure**: Ensure processing pipelines exist and are active
+
+#### **Step 3: Identify Missing Links**
+- **Broken communication**: Publishers without readers, readers without publishers
+- **Simulation vs Reality**: Temporary testing code still active in production
+- **Half-implemented features**: Infrastructure exists but key components missing
+
+#### **Common Analysis Mistakes**
+- ❌ **Assuming unused = incomplete**: Code may be unused because a critical link is missing
+- ❌ **Local file analysis**: Missing cross-file communication patterns  
+- ❌ **Surface-level review**: Not tracing actual data flow end-to-end
+- ❌ **Ignoring remote components**: Distributed scripts may be actively working
+
+#### **Example: Botnet Event System Analysis**
+```
+Initial Assessment: "Event processing code appears unused"
+✅ Thorough Analysis Revealed:
+- Remote scripts (hk.ts, gr.ts, wk.ts) ARE publishing real events to port 20
+- Main botnet script has NO port reading code to consume them  
+- simulateEventProcessing() generates fake data instead of reading real events
+- Event processing pipeline EXISTS and works, just fed incorrect data
+
+Correct Action: Add missing port reader, NOT remove "unused" event infrastructure
+```
+
+#### **Before Any Code Cleanup**
+1. **Map complete system architecture** across all related files
+2. **Trace actual data flows** from source to destination  
+3. **Identify what's missing** vs what's truly unused
+4. **Test communication patterns** to verify assumptions
+5. **Document findings** before making changes
+
+**Remember**: Systems that appear broken may be 95% complete with one critical missing piece. Removing the existing infrastructure makes the fix much harder than adding the missing component.
+
 ## Common Issues & Solutions
 - **Build errors**: Check TypeScript import paths and module resolution
 - **Runtime failures**: Verify correct NS API usage in DynamicScript
 - **Database issues**: Ensure IndexedDB store names match schema
 - **Script spawn failures**: Check RAM availability and file sync status
+
+## Known Issues & TODOs
+
+### **⚠️ CRITICAL: Broken Event Communication in Botnet System**
+**Status**: Active bug requiring immediate fix
+**Location**: `src/botnet.ts` and `src/remote/{hk,gr,wk}.ts`
+
+**Problem**: Remote scripts are publishing real HWGW operation events to port 20, but the main botnet script is not reading them. Instead, it uses `simulateEventProcessing()` to generate fake events with random values.
+
+**Evidence**:
+- ✅ Remote scripts (`hk.ts`, `gr.ts`, `wk.ts`) publish events: `ns.getPortHandle(20).write(event)`
+- ❌ Main botnet script has NO port reading code - no `getPortHandle()` calls anywhere
+- ❌ Uses `simulateEventProcessing()` with hardcoded fake values instead of real data
+- ✅ Event processing pipeline exists and works, just fed fake data
+
+**Impact**:
+- Performance metrics are completely fictional
+- Money tracking shows fake gains instead of actual earnings
+- Success/failure rates are simulated rather than real
+- Optimization decisions based on incorrect data
+
+**Required Fix**:
+1. **Add port reading logic** to `processEvents()` method in main botnet script
+2. **Replace simulation** with real event processing once port reading works
+3. **Test complete event communication pipeline** to verify real data flow
+4. **Keep existing performance tracking** - it will work once real events arrive
+
+**Files Affected**:
+- `src/botnet.ts` - Missing port reader in `processEvents()` method
+- `src/remote/hk.ts` - Already publishes real hack events ✅
+- `src/remote/gr.ts` - Already publishes real grow events ✅  
+- `src/remote/wk.ts` - Already publishes real weaken events ✅
+
+**Priority**: High - System appears to work but is using fake data for all optimization decisions
 
 ## Key Classes & Methods
 - `Database.getInstance()` - Persistent storage singleton
