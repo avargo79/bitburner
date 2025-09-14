@@ -776,6 +776,19 @@ class BotnetUtilities {
   static getAvailableRAM(ns: NS, hostname: string): number {
     const totalRAM = ns.getServerMaxRam(hostname);
     const usedRAM = ns.getServerUsedRam(hostname);
+    
+    // Reserve space for essential scripts on home server
+    if (hostname === 'home') {
+      // Essential scripts running on home:
+      // - contracts.ts: ~17.4GB (documented)
+      // - server-manager.ts: ~20-25GB (extensive NS API usage)
+      // - navigator.ts: ~5-10GB (browser automation)
+      // - health-check.ts: ~2-3GB (monitoring)
+      // Total reservation: 55GB
+      const ESSENTIAL_SCRIPTS_RESERVATION = 55; // GB
+      return Math.max(0, totalRAM - usedRAM - ESSENTIAL_SCRIPTS_RESERVATION);
+    }
+    
     return Math.max(0, totalRAM - usedRAM);
   }
 
@@ -1013,10 +1026,10 @@ class ProfessionalWaveScheduler {
     // More concurrent batches for faster servers
     const maxByTiming = Math.floor(batchDuration / this.config.cycleTimingDelay);
 
-    // Constrain by RAM availability (rough estimate)
+    // Constrain by RAM availability (rough estimate) - use 80% for HWGW, reserve 20% for prep
     const ramPerBatch = this.estimateBatchRAMCost(target);
-    const totalAvailableRAM = this.calculateAvailableRAM();
-    const maxByRAM = Math.floor(totalAvailableRAM / ramPerBatch);
+    const availableRAMForHWGW = this.calculateAvailableRAMForHWGW();
+    const maxByRAM = Math.floor(availableRAMForHWGW / ramPerBatch);
 
     return Math.min(maxByTiming, maxByRAM, this.config.maxBatches);
   }
@@ -1198,6 +1211,18 @@ class ProfessionalWaveScheduler {
     return allServers
       .filter(server => this.ns.hasRootAccess(server))
       .reduce((total, server) => total + (this.ns.getServerMaxRam(server) - this.ns.getServerUsedRam(server)), 0);
+  }
+
+  private calculateAvailableRAMForHWGW(): number {
+    // Reserve 20% of total RAM for prep operations
+    const totalRAM = this.calculateAvailableRAM();
+    return totalRAM * 0.8; // 80% for HWGW batching
+  }
+
+  private calculateAvailableRAMForPrep(): number {
+    // Use 20% of total RAM for prep operations  
+    const totalRAM = this.calculateAvailableRAM();
+    return totalRAM * 0.2; // 20% for prep operations
   }
 
   private canAllocateRAM(ramNeeded: number): boolean {
@@ -2104,8 +2129,8 @@ class BotnetController {
       return this.config.maxBatches;
     }
 
-    // Calculate available RAM across network
-    const availableRAM = BotnetUtilities.calculateAvailableRAM(this.ns);
+    // Calculate available RAM across network (use 80% for HWGW, reserve 20% for prep)
+    const availableRAMForHWGW = BotnetUtilities.calculateAvailableRAM(this.ns) * 0.8;
     
     // Estimate RAM cost per batch for current target using current dynamic batch size
     const dynamicBatchSize = this.targetManager.getDynamicBatchSize();
@@ -2118,7 +2143,7 @@ class BotnetController {
     }
 
     // Calculate theoretical maximum batches (use configured RAM utilization for safety)
-    const theoreticalMaxBatches = Math.floor((availableRAM * this.config.maxRAMUtilization) / batchRAMCost);
+    const theoreticalMaxBatches = Math.floor((availableRAMForHWGW * this.config.maxRAMUtilization) / batchRAMCost);
     
     // Apply safety limits to prevent game-breaking scenarios
     const safeMinBatches = Math.max(50, this.config.maxBatches); // Never go below reasonable minimum
@@ -2133,7 +2158,7 @@ class BotnetController {
     
     if (batchCountChanged || (dynamicMaxBatches !== this.config.maxBatches && logCooldownMet)) {
       const percentChange = ((dynamicMaxBatches - this.config.maxBatches) / this.config.maxBatches) * 100;
-      this.logger.info(`🔢 Dynamic scaling: ${this.config.maxBatches} → ${dynamicMaxBatches} batches (${this.ns.formatNumber(availableRAM)}GB available, ${this.ns.formatNumber(batchRAMCost)}GB per batch)`);
+      this.logger.info(`🔢 Dynamic scaling: ${this.config.maxBatches} → ${dynamicMaxBatches} batches (${this.ns.formatNumber(availableRAMForHWGW)}GB available for HWGW after essential scripts reservation, ${this.ns.formatNumber(batchRAMCost)}GB per batch)`);
       this.lastDynamicBatchCount = dynamicMaxBatches;
       this.lastScalingLogTime = Date.now();
     }
