@@ -4,6 +4,7 @@
   "compilerOptions": {
     "module": "esnext",
     "target": "esnext",
+    "lib": ["esnext", "dom"],
     "moduleResolution": "node",
     "noImplicitReturns": true,
     "noImplicitThis": true,

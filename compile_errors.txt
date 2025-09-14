@@ -1,0 +1,478 @@
+src/lib/material-ui-integration.ts(545,48): error TS2345: Argument of type 'ComponentSearchCriteria' is not assignable to parameter of type 'string'.
+src/lib/material-ui-integration.ts(552,27): error TS2339: Property 'getCurrentTheme' does not exist on type 'typeof MUIThemeAccess'.
+src/lib/react-element-finder.ts(43,86): error TS2554: Expected 1 arguments, but got 2.
+src/lib/react-element-finder.ts(44,54): error TS2345: Argument of type 'ReactComponent | null' is not assignable to parameter of type 'ReactComponentInfo[]'.
+  Type 'null' is not assignable to type 'ReactComponentInfo[]'.
+src/lib/react-element-finder.ts(49,56): error TS2339: Property 'findMUIComponents' does not exist on type 'MaterialUIHelper'.
+src/lib/react-element-finder.ts(366,25): error TS2339: Property 'onclick' does not exist on type 'Element'.
+src/lib/react-element-finder.ts(409,77): error TS2339: Property 'innerText' does not exist on type 'Element'.
+src/lib/react-event-handler.ts(673,33): error TS2339: Property 'triggerReactEvent' does not exist on type 'typeof ReactEventDispatcher'.
+src/lib/react-event-handler.ts(680,55): error TS2345: Argument of type 'Element' is not assignable to parameter of type 'ReactComponent | MUIComponent'.
+src/lib/react-game-page.ts(49,13): error TS2322: Type 'ReactComponent | null' is not assignable to type 'ReactComponentInfo[]'.
+  Type 'null' is not assignable to type 'ReactComponentInfo[]'.
+src/lib/react-game-page.ts(49,58): error TS2554: Expected 1 arguments, but got 2.
+src/lib/react-game-page.ts(63,41): error TS2339: Property 'findMUIComponents' does not exist on type 'MaterialUIHelper'.
+src/lib/react-game-page.ts(87,44): error TS2576: Property 'simulateClick' does not exist on type 'ReactEventHandler'. Did you mean to access the static member 'ReactEventHandler.simulateClick' instead?
+src/lib/react-game-page.ts(137,77): error TS2339: Property 'innerText' does not exist on type 'Element'.
+src/lib/react-game-page.ts(173,25): error TS2339: Property 'onclick' does not exist on type 'Element'.
+src/lib/react-game-state-monitor.ts(42,13): error TS2740: Type 'Map<any, any>' is missing the following properties from type 'StateAlert[]': length, pop, push, concat, and 24 more.
+src/lib/react-game-state-monitor.ts(243,45): error TS2345: Argument of type 'unknown' is not assignable to parameter of type 'Error'.
+src/lib/react-game-state-sync.ts(268,39): error TS2339: Property 'CustomEvent' does not exist on type 'Window'.
+src/lib/react-navigation-workflows.ts(435,41): error TS2739: Type '{ name: string; description: string; version: string; steps: ({ id: string; name: string; description: string; page: "stats"; action: string; } | { id: string; name: string; description: string; page: "hacknet"; action: string; } | { ...; })[]; }' is missing the following properties from type 'Workflow': id, status, currentStepIndex, progress, createdAt
+src/lib/react-navigation-workflows.ts(472,41): error TS2739: Type '{ name: string; description: string; version: string; steps: ({ id: string; name: string; description: string; page: "factions"; action: string; parameters?: undefined; } | { id: string; name: string; description: string; page: "factions"; action: string; parameters: any[]; } | { ...; })[]; }' is missing the following properties from type 'Workflow': id, status, currentStepIndex, progress, createdAt
+src/lib/react-navigation-workflows.ts(510,41): error TS2739: Type '{ name: string; description: string; version: string; steps: ({ id: string; name: string; description: string; page: "stockmarket"; action: string; parameters?: undefined; } | { id: string; name: string; description: string; page: "stockmarket"; action: string; parameters: number[]; })[]; }' is missing the following properties from type 'Workflow': id, status, currentStepIndex, progress, createdAt
+src/lib/react-navigator.ts(182,27): error TS2339: Property 'ensureOnPage' does not exist on type 'ReactGamePage'.
+src/lib/react-navigator.ts(201,24): error TS2339: Property 'ensureOnPage' does not exist on type 'ReactGamePage'.
+src/lib/react-navigator.ts(500,65): error TS2339: Property 'getPlayerStats' does not exist on type 'ReactStatsPage'.
+src/lib/react-navigator.ts(502,68): error TS2551: Property 'getHacknetInfo' does not exist on type 'ReactHacknetPage'. Did you mean 'getHacknetNodes'?
+src/lib/react-pages/react-augmentations-page.ts(43,14): error TS2515: Non-abstract class 'ReactAugmentationsPage' does not implement inherited abstract member 'getPrimaryComponent' from class 'ReactGamePage'.
+src/lib/react-pages/react-augmentations-page.ts(43,14): error TS2515: Non-abstract class 'ReactAugmentationsPage' does not implement inherited abstract member 'isOnPage' from class 'ReactGamePage'.
+src/lib/react-pages/react-augmentations-page.ts(43,14): error TS2515: Non-abstract class 'ReactAugmentationsPage' does not implement inherited abstract member 'navigate' from class 'ReactGamePage'.
+src/lib/react-pages/react-augmentations-page.ts(56,24): error TS2339: Property 'ensureOnPage' does not exist on type 'ReactAugmentationsPage'.
+src/lib/react-pages/react-augmentations-page.ts(57,24): error TS2339: Property 'waitForPageLoad' does not exist on type 'ReactAugmentationsPage'.
+src/lib/react-pages/react-augmentations-page.ts(69,18): error TS2339: Property 'logError' does not exist on type 'ReactAugmentationsPage'.
+src/lib/react-pages/react-augmentations-page.ts(78,24): error TS2339: Property 'ensureOnPage' does not exist on type 'ReactAugmentationsPage'.
+src/lib/react-pages/react-augmentations-page.ts(79,24): error TS2339: Property 'waitForPageLoad' does not exist on type 'ReactAugmentationsPage'.
+src/lib/react-pages/react-augmentations-page.ts(91,18): error TS2339: Property 'logError' does not exist on type 'ReactAugmentationsPage'.
+src/lib/react-pages/react-augmentations-page.ts(101,51): error TS2551: Property 'findComponent' does not exist on type 'ReactAugmentationsPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-augmentations-page.ts(107,45): error TS2551: Property 'findComponent' does not exist on type 'ReactAugmentationsPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-augmentations-page.ts(116,41): error TS2551: Property 'findComponent' does not exist on type 'ReactAugmentationsPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-augmentations-page.ts(123,22): error TS2339: Property 'logError' does not exist on type 'ReactAugmentationsPage'.
+src/lib/react-pages/react-augmentations-page.ts(127,42): error TS2551: Property 'findComponent' does not exist on type 'ReactAugmentationsPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-augmentations-page.ts(135,22): error TS2339: Property 'logError' does not exist on type 'ReactAugmentationsPage'.
+src/lib/react-pages/react-augmentations-page.ts(139,24): error TS2339: Property 'clickElement' does not exist on type 'ReactAugmentationsPage'.
+src/lib/react-pages/react-augmentations-page.ts(140,24): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactAugmentationsPage'.
+src/lib/react-pages/react-augmentations-page.ts(142,46): error TS2551: Property 'findComponent' does not exist on type 'ReactAugmentationsPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-augmentations-page.ts(149,28): error TS2339: Property 'clickElement' does not exist on type 'ReactAugmentationsPage'.
+src/lib/react-pages/react-augmentations-page.ts(150,28): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactAugmentationsPage'.
+src/lib/react-pages/react-augmentations-page.ts(156,18): error TS2339: Property 'logError' does not exist on type 'ReactAugmentationsPage'.
+src/lib/react-pages/react-augmentations-page.ts(165,44): error TS2551: Property 'findComponent' does not exist on type 'ReactAugmentationsPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-augmentations-page.ts(172,28): error TS2339: Property 'clickElement' does not exist on type 'ReactAugmentationsPage'.
+src/lib/react-pages/react-augmentations-page.ts(173,28): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactAugmentationsPage'.
+src/lib/react-pages/react-augmentations-page.ts(176,59): error TS2345: Argument of type '{ className: RegExp; timeout: number; }' is not assignable to parameter of type 'string'.
+src/lib/react-pages/react-augmentations-page.ts(182,58): error TS2345: Argument of type 'ReactComponentInfo' is not assignable to parameter of type 'Element'.
+src/lib/react-pages/react-augmentations-page.ts(191,18): error TS2339: Property 'logError' does not exist on type 'ReactAugmentationsPage'.
+src/lib/react-pages/react-augmentations-page.ts(200,48): error TS2551: Property 'findComponent' does not exist on type 'ReactAugmentationsPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-augmentations-page.ts(207,28): error TS2339: Property 'clickElement' does not exist on type 'ReactAugmentationsPage'.
+src/lib/react-pages/react-augmentations-page.ts(208,28): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactAugmentationsPage'.
+src/lib/react-pages/react-augmentations-page.ts(216,18): error TS2339: Property 'logError' does not exist on type 'ReactAugmentationsPage'.
+src/lib/react-pages/react-augmentations-page.ts(233,43): error TS2551: Property 'findComponent' does not exist on type 'ReactAugmentationsPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-augmentations-page.ts(242,46): error TS2551: Property 'findComponent' does not exist on type 'ReactAugmentationsPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-augmentations-page.ts(252,37): error TS2339: Property 'extractTextContent' does not exist on type 'ReactAugmentationsPage'.
+src/lib/react-pages/react-augmentations-page.ts(256,22): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/lib/react-pages/react-augmentations-page.ts(257,25): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/lib/react-pages/react-augmentations-page.ts(262,18): error TS2339: Property 'logError' does not exist on type 'ReactAugmentationsPage'.
+src/lib/react-pages/react-augmentations-page.ts(269,43): error TS2551: Property 'findComponent' does not exist on type 'ReactAugmentationsPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-augmentations-page.ts(278,42): error TS2551: Property 'findComponent' does not exist on type 'ReactAugmentationsPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-augmentations-page.ts(287,43): error TS2551: Property 'findComponent' does not exist on type 'ReactAugmentationsPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-augmentations-page.ts(295,46): error TS2551: Property 'findComponent' does not exist on type 'ReactAugmentationsPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-augmentations-page.ts(306,18): error TS2339: Property 'logError' does not exist on type 'ReactAugmentationsPage'.
+src/lib/react-pages/react-augmentations-page.ts(313,46): error TS2551: Property 'findComponent' does not exist on type 'ReactAugmentationsPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-augmentations-page.ts(320,22): error TS2339: Property 'logError' does not exist on type 'ReactAugmentationsPage'.
+src/lib/react-pages/react-augmentations-page.ts(324,24): error TS2339: Property 'clickElement' does not exist on type 'ReactAugmentationsPage'.
+src/lib/react-pages/react-augmentations-page.ts(325,24): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactAugmentationsPage'.
+src/lib/react-pages/react-augmentations-page.ts(327,46): error TS2551: Property 'findComponent' does not exist on type 'ReactAugmentationsPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-augmentations-page.ts(334,28): error TS2339: Property 'clickElement' does not exist on type 'ReactAugmentationsPage'.
+src/lib/react-pages/react-augmentations-page.ts(335,28): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactAugmentationsPage'.
+src/lib/react-pages/react-augmentations-page.ts(341,18): error TS2339: Property 'logError' does not exist on type 'ReactAugmentationsPage'.
+src/lib/react-pages/react-augmentations-page.ts(348,62): error TS2345: Argument of type '{ text: RegExp; timeout: number; }' is not assignable to parameter of type 'string'.
+src/lib/react-pages/react-augmentations-page.ts(354,60): error TS2345: Argument of type '{ role: string; timeout: number; }' is not assignable to parameter of type 'string'.
+src/lib/react-pages/react-augmentations-page.ts(358,17): error TS2322: Type 'ReactComponentInfo[]' is not assignable to type 'Element[]'.
+  Type 'ReactComponentInfo' is not assignable to type 'Element'.
+src/lib/react-pages/react-augmentations-page.ts(361,13): error TS2322: Type 'ReactComponentInfo[]' is not assignable to type 'Element[]'.
+src/lib/react-pages/react-augmentations-page.ts(364,18): error TS2339: Property 'logError' does not exist on type 'ReactAugmentationsPage'.
+src/lib/react-pages/react-augmentations-page.ts(373,38): error TS2339: Property 'extractTextContent' does not exist on type 'ReactAugmentationsPage'.
+src/lib/react-pages/react-augmentations-page.ts(378,37): error TS2339: Property 'parseNumber' does not exist on type 'ReactAugmentationsPage'.
+src/lib/react-pages/react-augmentations-page.ts(380,59): error TS2345: Argument of type '{ className: RegExp; ancestor: Element; timeout: number; }' is not assignable to parameter of type 'string'.
+src/lib/react-pages/react-augmentations-page.ts(387,58): error TS2345: Argument of type 'ReactComponentInfo' is not assignable to parameter of type 'Element'.
+src/lib/react-pages/react-augmentations-page.ts(396,18): error TS2339: Property 'logError' does not exist on type 'ReactAugmentationsPage'.
+src/lib/react-pages/react-augmentations-page.ts(403,38): error TS2339: Property 'extractTextContent' does not exist on type 'ReactAugmentationsPage'.
+src/lib/react-pages/react-augmentations-page.ts(409,32): error TS2339: Property 'parseNumber' does not exist on type 'ReactAugmentationsPage'.
+src/lib/react-pages/react-augmentations-page.ts(412,34): error TS2339: Property 'parseNumber' does not exist on type 'ReactAugmentationsPage'.
+src/lib/react-pages/react-augmentations-page.ts(421,22): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/lib/react-pages/react-augmentations-page.ts(422,25): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/lib/react-pages/react-augmentations-page.ts(424,42): error TS2551: Property 'findComponent' does not exist on type 'ReactAugmentationsPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-augmentations-page.ts(448,18): error TS2339: Property 'logError' does not exist on type 'ReactAugmentationsPage'.
+src/lib/react-pages/react-bladeburner-page.ts(41,14): error TS2515: Non-abstract class 'ReactBladeburnerPage' does not implement inherited abstract member 'getPrimaryComponent' from class 'ReactGamePage'.
+src/lib/react-pages/react-bladeburner-page.ts(41,14): error TS2515: Non-abstract class 'ReactBladeburnerPage' does not implement inherited abstract member 'isOnPage' from class 'ReactGamePage'.
+src/lib/react-pages/react-bladeburner-page.ts(41,14): error TS2515: Non-abstract class 'ReactBladeburnerPage' does not implement inherited abstract member 'navigate' from class 'ReactGamePage'.
+src/lib/react-pages/react-bladeburner-page.ts(52,24): error TS2339: Property 'ensureOnPage' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(53,24): error TS2339: Property 'waitForPageLoad' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(55,44): error TS2551: Property 'findComponent' does not exist on type 'ReactBladeburnerPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-bladeburner-page.ts(60,49): error TS2339: Property 'extractTextContent' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(62,31): error TS2339: Property 'parseNumber' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(64,47): error TS2551: Property 'findComponent' does not exist on type 'ReactBladeburnerPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-bladeburner-page.ts(69,55): error TS2339: Property 'extractTextContent' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(74,45): error TS2551: Property 'findComponent' does not exist on type 'ReactBladeburnerPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-bladeburner-page.ts(79,51): error TS2339: Property 'extractTextContent' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(81,32): error TS2339: Property 'parseNumber' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(83,51): error TS2551: Property 'findComponent' does not exist on type 'ReactBladeburnerPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-bladeburner-page.ts(88,63): error TS2339: Property 'extractTextContent' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(92,46): error TS2551: Property 'findComponent' does not exist on type 'ReactBladeburnerPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-bladeburner-page.ts(97,53): error TS2339: Property 'extractTextContent' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(101,53): error TS2551: Property 'findComponent' does not exist on type 'ReactBladeburnerPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-bladeburner-page.ts(106,67): error TS2339: Property 'extractTextContent' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(120,18): error TS2339: Property 'logError' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(129,62): error TS2345: Argument of type '{ text: RegExp; timeout: number; }' is not assignable to parameter of type 'string'.
+src/lib/react-pages/react-bladeburner-page.ts(135,70): error TS2345: Argument of type 'ReactComponentInfo' is not assignable to parameter of type 'Element'.
+src/lib/react-pages/react-bladeburner-page.ts(142,18): error TS2339: Property 'logError' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(149,46): error TS2551: Property 'findComponent' does not exist on type 'ReactBladeburnerPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-bladeburner-page.ts(155,22): error TS2339: Property 'logError' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(159,44): error TS2551: Property 'findComponent' does not exist on type 'ReactBladeburnerPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-bladeburner-page.ts(167,22): error TS2339: Property 'logError' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(171,24): error TS2339: Property 'clickElement' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(172,24): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(177,18): error TS2339: Property 'logError' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(184,43): error TS2551: Property 'findComponent' does not exist on type 'ReactBladeburnerPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-bladeburner-page.ts(191,22): error TS2339: Property 'logError' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(195,24): error TS2339: Property 'clickElement' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(196,24): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(201,18): error TS2339: Property 'logError' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(210,45): error TS2551: Property 'findComponent' does not exist on type 'ReactBladeburnerPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-bladeburner-page.ts(217,28): error TS2339: Property 'clickElement' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(218,28): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(221,61): error TS2345: Argument of type '{ className: RegExp; timeout: number; }' is not assignable to parameter of type 'string'.
+src/lib/react-pages/react-bladeburner-page.ts(227,53): error TS2345: Argument of type 'ReactComponentInfo' is not assignable to parameter of type 'Element'.
+src/lib/react-pages/react-bladeburner-page.ts(236,18): error TS2339: Property 'logError' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(243,45): error TS2551: Property 'findComponent' does not exist on type 'ReactBladeburnerPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-bladeburner-page.ts(249,22): error TS2339: Property 'logError' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(253,46): error TS2551: Property 'findComponent' does not exist on type 'ReactBladeburnerPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-bladeburner-page.ts(261,22): error TS2339: Property 'logError' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(265,24): error TS2339: Property 'clickElement' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(266,24): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(271,18): error TS2339: Property 'logError' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(280,43): error TS2551: Property 'findComponent' does not exist on type 'ReactBladeburnerPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-bladeburner-page.ts(287,28): error TS2339: Property 'clickElement' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(288,28): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(291,60): error TS2345: Argument of type '{ className: RegExp; timeout: number; }' is not assignable to parameter of type 'string'.
+src/lib/react-pages/react-bladeburner-page.ts(297,51): error TS2345: Argument of type 'ReactComponentInfo' is not assignable to parameter of type 'Element'.
+src/lib/react-pages/react-bladeburner-page.ts(306,18): error TS2339: Property 'logError' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(313,44): error TS2551: Property 'findComponent' does not exist on type 'ReactBladeburnerPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-bladeburner-page.ts(319,22): error TS2339: Property 'logError' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(323,45): error TS2551: Property 'findComponent' does not exist on type 'ReactBladeburnerPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-bladeburner-page.ts(331,22): error TS2339: Property 'logError' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(335,24): error TS2339: Property 'clickElement' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(336,24): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(341,18): error TS2339: Property 'logError' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(348,46): error TS2551: Property 'findComponent' does not exist on type 'ReactBladeburnerPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-bladeburner-page.ts(354,22): error TS2339: Property 'logError' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(358,46): error TS2551: Property 'findComponent' does not exist on type 'ReactBladeburnerPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-bladeburner-page.ts(366,22): error TS2339: Property 'logError' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(371,28): error TS2339: Property 'clickElement' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(372,28): error TS2339: Property 'waitForDelay' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(375,24): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(380,18): error TS2339: Property 'logError' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(387,46): error TS2551: Property 'findComponent' does not exist on type 'ReactBladeburnerPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-bladeburner-page.ts(393,22): error TS2339: Property 'logError' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(397,49): error TS2551: Property 'findComponent' does not exist on type 'ReactBladeburnerPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-bladeburner-page.ts(405,22): error TS2339: Property 'logError' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(409,42): error TS2339: Property 'isElementChecked' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(412,28): error TS2339: Property 'clickElement' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(413,28): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(419,18): error TS2339: Property 'logError' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(428,38): error TS2339: Property 'extractTextContent' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(437,62): error TS2345: Argument of type '{ className: RegExp; ancestor: Element; timeout: number; }' is not assignable to parameter of type 'string'.
+src/lib/react-pages/react-bladeburner-page.ts(444,55): error TS2345: Argument of type 'ReactComponentInfo' is not assignable to parameter of type 'Element'.
+src/lib/react-pages/react-bladeburner-page.ts(453,18): error TS2339: Property 'logError' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(460,38): error TS2339: Property 'extractTextContent' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(497,18): error TS2339: Property 'logError' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(504,38): error TS2339: Property 'extractTextContent' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(521,18): error TS2339: Property 'logError' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(528,38): error TS2339: Property 'extractTextContent' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(537,37): error TS2339: Property 'parseNumber' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-bladeburner-page.ts(548,18): error TS2339: Property 'logError' does not exist on type 'ReactBladeburnerPage'.
+src/lib/react-pages/react-corporation-page.ts(203,37): error TS2339: Property 'placeholder' does not exist on type 'Element'.
+src/lib/react-pages/react-corporation-page.ts(219,37): error TS2339: Property 'simulateTyping' does not exist on type 'ReactEventHandler'.
+src/lib/react-pages/react-corporation-page.ts(377,37): error TS2339: Property 'placeholder' does not exist on type 'Element'.
+src/lib/react-pages/react-corporation-page.ts(387,41): error TS2339: Property 'simulateTyping' does not exist on type 'ReactEventHandler'.
+src/lib/react-pages/react-factions-page.ts(307,45): error TS2339: Property 'simulateTyping' does not exist on type 'ReactEventHandler'.
+src/lib/react-pages/react-gang-page.ts(37,14): error TS2515: Non-abstract class 'ReactGangPage' does not implement inherited abstract member 'getPrimaryComponent' from class 'ReactGamePage'.
+src/lib/react-pages/react-gang-page.ts(37,14): error TS2515: Non-abstract class 'ReactGangPage' does not implement inherited abstract member 'isOnPage' from class 'ReactGamePage'.
+src/lib/react-pages/react-gang-page.ts(37,14): error TS2515: Non-abstract class 'ReactGangPage' does not implement inherited abstract member 'navigate' from class 'ReactGamePage'.
+src/lib/react-pages/react-gang-page.ts(48,24): error TS2339: Property 'ensureOnPage' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(49,24): error TS2339: Property 'waitForPageLoad' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(51,47): error TS2551: Property 'findComponent' does not exist on type 'ReactGangPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-gang-page.ts(60,34): error TS2339: Property 'extractTextContent' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(77,18): error TS2339: Property 'logError' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(86,58): error TS2345: Argument of type '{ role: string; timeout: number; }' is not assignable to parameter of type 'string'.
+src/lib/react-pages/react-gang-page.ts(92,63): error TS2345: Argument of type 'ReactComponentInfo' is not assignable to parameter of type 'Element'.
+  Type 'ReactComponentInfo' is missing the following properties from type 'Element': attributes, classList, className, clientHeight, and 159 more.
+src/lib/react-pages/react-gang-page.ts(101,18): error TS2339: Property 'logError' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(108,46): error TS2551: Property 'findComponent' does not exist on type 'ReactGangPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-gang-page.ts(115,22): error TS2339: Property 'logError' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(119,24): error TS2339: Property 'clickElement' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(120,24): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(122,42): error TS2551: Property 'findComponent' does not exist on type 'ReactGangPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-gang-page.ts(129,22): error TS2339: Property 'logError' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(133,24): error TS2339: Property 'typeText' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(135,46): error TS2551: Property 'findComponent' does not exist on type 'ReactGangPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-gang-page.ts(142,22): error TS2339: Property 'logError' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(146,24): error TS2339: Property 'clickElement' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(147,24): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(149,47): error TS2551: Property 'findComponent' does not exist on type 'ReactGangPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-gang-page.ts(157,18): error TS2339: Property 'logError' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(164,42): error TS2551: Property 'findComponent' does not exist on type 'ReactGangPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-gang-page.ts(171,22): error TS2339: Property 'logError' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(175,45): error TS2551: Property 'findComponent' does not exist on type 'ReactGangPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-gang-page.ts(182,22): error TS2339: Property 'logError' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(186,24): error TS2339: Property 'selectOption' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(187,24): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(189,45): error TS2551: Property 'findComponent' does not exist on type 'ReactGangPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-gang-page.ts(197,28): error TS2339: Property 'clickElement' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(198,28): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(204,18): error TS2339: Property 'logError' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(213,49): error TS2551: Property 'findComponent' does not exist on type 'ReactGangPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-gang-page.ts(222,57): error TS2345: Argument of type '{ role: string; ancestor: any; timeout: number; }' is not assignable to parameter of type 'string'.
+src/lib/react-pages/react-gang-page.ts(229,63): error TS2345: Argument of type 'ReactComponentInfo' is not assignable to parameter of type 'Element'.
+src/lib/react-pages/react-gang-page.ts(238,18): error TS2339: Property 'logError' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(245,48): error TS2551: Property 'findComponent' does not exist on type 'ReactGangPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-gang-page.ts(253,22): error TS2339: Property 'logError' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(257,42): error TS2339: Property 'isElementChecked' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(260,28): error TS2339: Property 'clickElement' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(261,28): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(267,18): error TS2339: Property 'logError' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(274,42): error TS2551: Property 'findComponent' does not exist on type 'ReactGangPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-gang-page.ts(281,22): error TS2339: Property 'logError' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(285,48): error TS2551: Property 'findComponent' does not exist on type 'ReactGangPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-gang-page.ts(293,22): error TS2339: Property 'logError' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(297,24): error TS2339: Property 'clickElement' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(298,24): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(300,46): error TS2551: Property 'findComponent' does not exist on type 'ReactGangPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-gang-page.ts(306,22): error TS2339: Property 'logError' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(310,42): error TS2551: Property 'findComponent' does not exist on type 'ReactGangPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-gang-page.ts(318,22): error TS2339: Property 'logError' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(322,24): error TS2339: Property 'clickElement' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(323,24): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(328,18): error TS2339: Property 'logError' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(335,42): error TS2551: Property 'findComponent' does not exist on type 'ReactGangPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-gang-page.ts(342,22): error TS2339: Property 'logError' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(346,45): error TS2551: Property 'findComponent' does not exist on type 'ReactGangPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-gang-page.ts(354,22): error TS2339: Property 'logError' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(358,24): error TS2339: Property 'clickElement' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(359,24): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(361,46): error TS2551: Property 'findComponent' does not exist on type 'ReactGangPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-gang-page.ts(368,28): error TS2339: Property 'clickElement' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(369,28): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(375,18): error TS2339: Property 'logError' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(382,38): error TS2339: Property 'extractTextContent' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(391,35): error TS2339: Property 'parseNumber' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(394,34): error TS2339: Property 'parseNumber' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(397,33): error TS2339: Property 'parseNumber' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(427,18): error TS2339: Property 'logError' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(434,38): error TS2339: Property 'extractTextContent' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(440,32): error TS2339: Property 'parseNumber' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(451,18): error TS2339: Property 'logError' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(458,49): error TS2551: Property 'findComponent' does not exist on type 'ReactGangPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-gang-page.ts(463,59): error TS2339: Property 'extractTextContent' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(467,45): error TS2551: Property 'findComponent' does not exist on type 'ReactGangPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-gang-page.ts(472,51): error TS2339: Property 'extractTextContent' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(474,32): error TS2339: Property 'parseNumber' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(479,18): error TS2339: Property 'logError' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(486,47): error TS2551: Property 'findComponent' does not exist on type 'ReactGangPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-gang-page.ts(491,55): error TS2339: Property 'extractTextContent' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(493,34): error TS2339: Property 'parseNumber' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(495,46): error TS2551: Property 'findComponent' does not exist on type 'ReactGangPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-gang-page.ts(500,53): error TS2339: Property 'extractTextContent' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(502,38): error TS2339: Property 'parseNumber' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(504,45): error TS2551: Property 'findComponent' does not exist on type 'ReactGangPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-gang-page.ts(509,51): error TS2339: Property 'extractTextContent' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(511,32): error TS2339: Property 'parseNumber' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-gang-page.ts(516,18): error TS2339: Property 'logError' does not exist on type 'ReactGangPage'.
+src/lib/react-pages/react-sleeves-page.ts(40,14): error TS2515: Non-abstract class 'ReactSleevesPage' does not implement inherited abstract member 'getPrimaryComponent' from class 'ReactGamePage'.
+src/lib/react-pages/react-sleeves-page.ts(40,14): error TS2515: Non-abstract class 'ReactSleevesPage' does not implement inherited abstract member 'isOnPage' from class 'ReactGamePage'.
+src/lib/react-pages/react-sleeves-page.ts(40,14): error TS2515: Non-abstract class 'ReactSleevesPage' does not implement inherited abstract member 'navigate' from class 'ReactGamePage'.
+src/lib/react-pages/react-sleeves-page.ts(53,24): error TS2339: Property 'ensureOnPage' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(54,24): error TS2339: Property 'waitForPageLoad' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(56,62): error TS2345: Argument of type '{ className: RegExp; timeout: number; }' is not assignable to parameter of type 'string'.
+src/lib/react-pages/react-sleeves-page.ts(62,62): error TS2345: Argument of type '{ role: string; timeout: number; }' is not assignable to parameter of type 'string'.
+src/lib/react-pages/react-sleeves-page.ts(70,55): error TS2345: Argument of type 'ReactComponentInfo' is not assignable to parameter of type 'Element'.
+src/lib/react-pages/react-sleeves-page.ts(79,18): error TS2339: Property 'logError' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(91,43): error TS2551: Property 'findComponent' does not exist on type 'ReactSleevesPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-sleeves-page.ts(99,22): error TS2339: Property 'logError' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(103,24): error TS2339: Property 'clickElement' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(104,24): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(106,43): error TS2551: Property 'findComponent' does not exist on type 'ReactSleevesPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-sleeves-page.ts(112,22): error TS2339: Property 'logError' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(116,24): error TS2339: Property 'clickElement' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(117,24): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(120,51): error TS2551: Property 'findComponent' does not exist on type 'ReactSleevesPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-sleeves-page.ts(126,32): error TS2339: Property 'clickElement' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(127,32): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(131,46): error TS2551: Property 'findComponent' does not exist on type 'ReactSleevesPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-sleeves-page.ts(138,28): error TS2339: Property 'clickElement' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(139,28): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(145,18): error TS2339: Property 'logError' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(157,45): error TS2551: Property 'findComponent' does not exist on type 'ReactSleevesPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-sleeves-page.ts(165,22): error TS2339: Property 'logError' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(169,24): error TS2339: Property 'clickElement' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(170,24): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(172,46): error TS2551: Property 'findComponent' does not exist on type 'ReactSleevesPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-sleeves-page.ts(179,22): error TS2339: Property 'logError' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(183,24): error TS2339: Property 'clickElement' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(184,24): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(189,18): error TS2339: Property 'logError' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(201,42): error TS2551: Property 'findComponent' does not exist on type 'ReactSleevesPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-sleeves-page.ts(209,22): error TS2339: Property 'logError' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(213,24): error TS2339: Property 'clickElement' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(214,24): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(216,43): error TS2551: Property 'findComponent' does not exist on type 'ReactSleevesPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-sleeves-page.ts(222,22): error TS2339: Property 'logError' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(226,42): error TS2551: Property 'findComponent' does not exist on type 'ReactSleevesPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-sleeves-page.ts(234,22): error TS2339: Property 'logError' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(238,24): error TS2339: Property 'clickElement' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(239,24): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(244,18): error TS2339: Property 'logError' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(266,46): error TS2551: Property 'findComponent' does not exist on type 'ReactSleevesPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-sleeves-page.ts(274,28): error TS2339: Property 'clickElement' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(275,28): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(278,63): error TS2345: Argument of type '{ className: RegExp; timeout: number; }' is not assignable to parameter of type 'string'.
+src/lib/react-pages/react-sleeves-page.ts(284,63): error TS2345: Argument of type 'ReactComponentInfo' is not assignable to parameter of type 'Element'.
+src/lib/react-pages/react-sleeves-page.ts(293,18): error TS2339: Property 'logError' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(320,44): error TS2551: Property 'findComponent' does not exist on type 'ReactSleevesPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-sleeves-page.ts(328,22): error TS2339: Property 'logError' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(332,24): error TS2339: Property 'clickElement' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(333,24): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(335,44): error TS2551: Property 'findComponent' does not exist on type 'ReactSleevesPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-sleeves-page.ts(341,22): error TS2339: Property 'logError' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(345,24): error TS2339: Property 'clickElement' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(346,24): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(351,18): error TS2339: Property 'logError' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(363,46): error TS2551: Property 'findComponent' does not exist on type 'ReactSleevesPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-sleeves-page.ts(371,22): error TS2339: Property 'logError' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(375,24): error TS2339: Property 'clickElement' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(376,24): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(378,46): error TS2551: Property 'findComponent' does not exist on type 'ReactSleevesPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-sleeves-page.ts(384,22): error TS2339: Property 'logError' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(388,24): error TS2339: Property 'clickElement' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(389,24): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(391,43): error TS2551: Property 'findComponent' does not exist on type 'ReactSleevesPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-sleeves-page.ts(397,28): error TS2339: Property 'clickElement' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(398,28): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(404,18): error TS2339: Property 'logError' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(411,62): error TS2345: Argument of type '{ className: RegExp; timeout: number; }' is not assignable to parameter of type 'string'.
+src/lib/react-pages/react-sleeves-page.ts(417,17): error TS2322: Type 'ReactComponentInfo' is not assignable to type 'Element'.
+src/lib/react-pages/react-sleeves-page.ts(420,46): error TS2551: Property 'findComponent' does not exist on type 'ReactSleevesPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-sleeves-page.ts(426,22): error TS2339: Property 'logError' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(432,18): error TS2339: Property 'logError' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(439,38): error TS2339: Property 'extractTextContent' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(448,35): error TS2339: Property 'parseNumber' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(451,37): error TS2339: Property 'parseNumber' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(493,18): error TS2339: Property 'logError' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(500,38): error TS2339: Property 'extractTextContent' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(506,31): error TS2339: Property 'parseNumber' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-sleeves-page.ts(518,42): error TS2551: Property 'findComponent' does not exist on type 'ReactSleevesPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-sleeves-page.ts(530,18): error TS2339: Property 'logError' does not exist on type 'ReactSleevesPage'.
+src/lib/react-pages/react-stock-market-page.ts(48,14): error TS2515: Non-abstract class 'ReactStockMarketPage' does not implement inherited abstract member 'getPrimaryComponent' from class 'ReactGamePage'.
+src/lib/react-pages/react-stock-market-page.ts(48,14): error TS2515: Non-abstract class 'ReactStockMarketPage' does not implement inherited abstract member 'isOnPage' from class 'ReactGamePage'.
+src/lib/react-pages/react-stock-market-page.ts(48,14): error TS2515: Non-abstract class 'ReactStockMarketPage' does not implement inherited abstract member 'navigate' from class 'ReactGamePage'.
+src/lib/react-pages/react-stock-market-page.ts(61,24): error TS2339: Property 'ensureOnPage' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(62,24): error TS2339: Property 'waitForPageLoad' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(64,57): error TS2345: Argument of type '{ role: string; timeout: number; }' is not assignable to parameter of type 'string'.
+src/lib/react-pages/react-stock-market-page.ts(70,65): error TS2345: Argument of type '{ className: RegExp; timeout: number; }' is not assignable to parameter of type 'string'.
+src/lib/react-pages/react-stock-market-page.ts(78,53): error TS2345: Argument of type 'ReactComponentInfo' is not assignable to parameter of type 'Element'.
+src/lib/react-pages/react-stock-market-page.ts(87,18): error TS2339: Property 'logError' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(94,45): error TS2551: Property 'findComponent' does not exist on type 'ReactStockMarketPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-stock-market-page.ts(100,22): error TS2339: Property 'logError' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(107,18): error TS2339: Property 'logError' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(114,45): error TS2551: Property 'findComponent' does not exist on type 'ReactStockMarketPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-stock-market-page.ts(120,22): error TS2339: Property 'logError' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(124,42): error TS2551: Property 'findComponent' does not exist on type 'ReactStockMarketPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-stock-market-page.ts(132,22): error TS2339: Property 'logError' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(136,24): error TS2339: Property 'clickElement' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(137,24): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(139,44): error TS2551: Property 'findComponent' does not exist on type 'ReactStockMarketPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-stock-market-page.ts(146,22): error TS2339: Property 'logError' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(150,24): error TS2339: Property 'typeText' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(152,46): error TS2551: Property 'findComponent' does not exist on type 'ReactStockMarketPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-stock-market-page.ts(159,22): error TS2339: Property 'logError' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(163,24): error TS2339: Property 'clickElement' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(164,24): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(169,18): error TS2339: Property 'logError' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(176,45): error TS2551: Property 'findComponent' does not exist on type 'ReactStockMarketPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-stock-market-page.ts(182,22): error TS2339: Property 'logError' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(186,43): error TS2551: Property 'findComponent' does not exist on type 'ReactStockMarketPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-stock-market-page.ts(194,22): error TS2339: Property 'logError' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(198,24): error TS2339: Property 'clickElement' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(199,24): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(201,44): error TS2551: Property 'findComponent' does not exist on type 'ReactStockMarketPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-stock-market-page.ts(208,22): error TS2339: Property 'logError' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(212,24): error TS2339: Property 'typeText' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(214,46): error TS2551: Property 'findComponent' does not exist on type 'ReactStockMarketPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-stock-market-page.ts(221,22): error TS2339: Property 'logError' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(225,24): error TS2339: Property 'clickElement' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(226,24): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(231,18): error TS2339: Property 'logError' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(238,45): error TS2551: Property 'findComponent' does not exist on type 'ReactStockMarketPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-stock-market-page.ts(244,22): error TS2339: Property 'logError' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(248,46): error TS2551: Property 'findComponent' does not exist on type 'ReactStockMarketPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-stock-market-page.ts(256,28): error TS2339: Property 'clickElement' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(257,28): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(269,18): error TS2339: Property 'logError' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(280,48): error TS2551: Property 'findComponent' does not exist on type 'ReactStockMarketPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-stock-market-page.ts(287,28): error TS2339: Property 'clickElement' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(288,28): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(291,63): error TS2345: Argument of type '{ className: RegExp; timeout: number; }' is not assignable to parameter of type 'string'.
+src/lib/react-pages/react-stock-market-page.ts(297,57): error TS2345: Argument of type 'ReactComponentInfo' is not assignable to parameter of type 'Element'.
+src/lib/react-pages/react-stock-market-page.ts(315,18): error TS2339: Property 'logError' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(327,45): error TS2551: Property 'findComponent' does not exist on type 'ReactStockMarketPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-stock-market-page.ts(333,22): error TS2339: Property 'logError' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(337,44): error TS2551: Property 'findComponent' does not exist on type 'ReactStockMarketPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-stock-market-page.ts(345,22): error TS2339: Property 'logError' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(349,24): error TS2339: Property 'clickElement' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(350,24): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(352,44): error TS2551: Property 'findComponent' does not exist on type 'ReactStockMarketPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-stock-market-page.ts(359,22): error TS2339: Property 'logError' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(363,24): error TS2339: Property 'typeText' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(365,46): error TS2551: Property 'findComponent' does not exist on type 'ReactStockMarketPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-stock-market-page.ts(372,22): error TS2339: Property 'logError' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(376,24): error TS2339: Property 'clickElement' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(377,24): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(382,18): error TS2339: Property 'logError' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(389,45): error TS2551: Property 'findComponent' does not exist on type 'ReactStockMarketPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-stock-market-page.ts(395,22): error TS2339: Property 'logError' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(399,44): error TS2551: Property 'findComponent' does not exist on type 'ReactStockMarketPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-stock-market-page.ts(407,22): error TS2339: Property 'logError' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(411,24): error TS2339: Property 'clickElement' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(412,24): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(414,44): error TS2551: Property 'findComponent' does not exist on type 'ReactStockMarketPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-stock-market-page.ts(421,22): error TS2339: Property 'logError' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(425,24): error TS2339: Property 'typeText' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(427,46): error TS2551: Property 'findComponent' does not exist on type 'ReactStockMarketPage'. Did you mean 'findComponents'?
+src/lib/react-pages/react-stock-market-page.ts(434,22): error TS2339: Property 'logError' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(438,24): error TS2339: Property 'clickElement' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(439,24): error TS2339: Property 'waitForStableDOM' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(444,18): error TS2339: Property 'logError' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(474,38): error TS2339: Property 'extractTextContent' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(483,32): error TS2339: Property 'parseNumber' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(486,33): error TS2339: Property 'parseNumber' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(493,36): error TS2339: Property 'parseNumber' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(502,35): error TS2339: Property 'parseNumber' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(505,35): error TS2339: Property 'parseNumber' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(530,18): error TS2339: Property 'logError' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(537,38): error TS2339: Property 'extractTextContent' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(549,35): error TS2339: Property 'parseNumber' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(552,39): error TS2339: Property 'parseNumber' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-stock-market-page.ts(573,18): error TS2339: Property 'logError' does not exist on type 'ReactStockMarketPage'.
+src/lib/react-pages/react-terminal-page.ts(119,37): error TS2339: Property 'placeholder' does not exist on type 'Element'.
+src/lib/react-pages/react-terminal-page.ts(152,37): error TS2339: Property 'simulateTyping' does not exist on type 'ReactEventHandler'.
+src/lib/react-pages/react-terminal-page.ts(156,37): error TS2339: Property 'simulateKeyPress' does not exist on type 'ReactEventHandler'.
+src/lib/react-pages/react-terminal-page.ts(173,17): error TS2322: Type '(component: ReactComponentInfo) => boolean | undefined' is not assignable to type '(component: ReactComponentInfo) => boolean'.
+  Type 'boolean | undefined' is not assignable to type 'boolean'.
+    Type 'undefined' is not assignable to type 'boolean'.
+src/navigator-react-types.ts(219,51): error TS2693: 'ReactGamePage' only refers to a type, but is being used as a value here.
+src/quick-test.ts(47,21): error TS7053: Element implicitly has an 'any' type because expression of type 'string' can't be used to index type 'typeof globalThis'.
+  No index signature with a parameter of type 'string' was found on type 'typeof globalThis'.
+src/quick-test.ts(48,21): error TS7053: Element implicitly has an 'any' type because expression of type 'string' can't be used to index type 'typeof globalThis'.
+  No index signature with a parameter of type 'string' was found on type 'typeof globalThis'.
+src/system-test.ts(35,23): error TS2673: Constructor of class 'Logger' is private and only accessible within the class declaration.
+src/system-test.ts(55,55): error TS2554: Expected 1 arguments, but got 2.
+src/system-test.ts(107,21): error TS7053: Element implicitly has an 'any' type because expression of type 'string' can't be used to index type 'typeof globalThis'.
+  No index signature with a parameter of type 'string' was found on type 'typeof globalThis'.
+src/system-test.ts(113,21): error TS7053: Element implicitly has an 'any' type because expression of type 'string' can't be used to index type 'typeof globalThis'.
+  No index signature with a parameter of type 'string' was found on type 'typeof globalThis'.
+src/system-test.ts(133,21): error TS7053: Element implicitly has an 'any' type because expression of type 'string' can't be used to index type 'typeof globalThis'.
+  No index signature with a parameter of type 'string' was found on type 'typeof globalThis'.
+src/system-test.ts(246,62): error TS2339: Property 'data' does not exist on type 'NetscriptPort'.
+src/system-test.ts(335,28): error TS2673: Constructor of class 'Logger' is private and only accessible within the class declaration.
+src/system-test.ts(528,25): error TS7053: Element implicitly has an 'any' type because expression of type 'string' can't be used to index type 'typeof globalThis'.
+  No index signature with a parameter of type 'string' was found on type 'typeof globalThis'.
