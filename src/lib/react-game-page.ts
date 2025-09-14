@@ -2,7 +2,7 @@ import { getWindowAPI } from '/lib/react-browser-utils';
 import { findReactComponent } from '/lib/react-component-finder';
 import { MaterialUIHelper } from '/lib/material-ui-integration';
 import { ReactEventHandler } from '/lib/react-event-handler';
-import { GameSection, NavigationParams, ReactComponentInfo, NavigationResult } from '/navigator-react-types';
+import { GameSection, NavigationParams, ReactComponentInfo, NavigationResult } from '/lib/navigator-react-types';
 
 /**
  * Base class for React-powered game page navigation

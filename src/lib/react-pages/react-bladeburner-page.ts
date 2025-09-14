@@ -1,5 +1,5 @@
 import { ReactGamePage } from '/lib/react-game-page';
-import { ComponentSearchCriteria } from '/navigator-react-types';
+import { ComponentSearchCriteria } from '/lib/navigator-react-types';
 
 export interface BladeburnerAction {
     name: string;

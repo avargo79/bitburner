@@ -1,6 +1,6 @@
 import { ReactGamePage } from '/lib/react-game-page';
 import { ReactElementFinder } from '/lib/react-element-finder';
-import { GameSection, NavigationParams, NavigationResult, ReactComponentInfo } from '/navigator-react-types';
+import { GameSection, NavigationParams, NavigationResult, ReactComponentInfo } from '/lib/navigator-react-types';
 
 /**
  * React-powered City page navigation

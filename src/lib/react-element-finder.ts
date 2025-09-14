@@ -1,7 +1,7 @@
 import { getWindowAPI, getDocumentAPI } from '/lib/react-browser-utils';
 import { findReactComponent } from '/lib/react-component-finder';
 import { MaterialUIHelper } from '/lib/material-ui-integration';
-import { ReactComponentInfo, ComponentSearchCriteria } from '/navigator-react-types';
+import { ReactComponentInfo, ComponentSearchCriteria } from '/lib/navigator-react-types';
 
 /**
  * Advanced React component element finder with Material-UI integration

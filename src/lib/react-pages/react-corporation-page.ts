@@ -1,7 +1,7 @@
 import { ReactGamePage } from '/lib/react-game-page';
 import { ReactElementFinder } from '/lib/react-element-finder';
 import { ReactEventHandler } from '/lib/react-event-handler';
-import { GameSection, NavigationParams, NavigationResult, ReactComponentInfo } from '/navigator-react-types';
+import { GameSection, NavigationParams, NavigationResult, ReactComponentInfo } from '/lib/navigator-react-types';
 
 /**
  * React-powered Corporation page navigation
