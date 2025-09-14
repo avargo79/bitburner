@@ -168,9 +168,9 @@ interface DynamicTarget {
 
 const DEFAULT_BOTNET_CONFIG: BotnetConfiguration = {
   // Core timing - Professional Wave System (Alain's approach)
-  mainLoopDelay: 1000,
-  cycleTimingDelay: 4000, // 4 seconds between batch starts
-  queueDelay: 1000, // 1 second delay before first script
+  mainLoopDelay: 100,             // Much faster batch launching - 100ms instead of 1000ms
+  cycleTimingDelay: 1000,         // Reduce delay between batch starts to 1s instead of 4s  
+  queueDelay: 200,                // Faster queue processing
   maxBatches: 400, // Maximum overlapping batches
   recoveryThreadPadding: 1.0, // Thread multiplier for recovery
   baseTimeDelay: 250, // Fine-tuning delay for operation spacing
@@ -185,13 +185,13 @@ const DEFAULT_BOTNET_CONFIG: BotnetConfiguration = {
   weakenSecurityDecrease: 0.05,
 
   // Performance tuning
-  maxEventsPerCycle: 50,
-  maxActiveBatches: 15,
-  batchSize: 10,
-  dynamicBatchSizeMin: 5,
-  dynamicBatchSizeMax: 50,
-  dynamicBatchSizeMultiplier: 1.2,
-  maxRAMUtilization: 0.8,
+  maxEventsPerCycle: 100,
+  maxActiveBatches: 50,          // Scale up active batches
+  batchSize: 50,                 // Larger base batch size
+  dynamicBatchSizeMin: 25,       // Higher minimum
+  dynamicBatchSizeMax: 500,      // Much higher maximum for massive RAM
+  dynamicBatchSizeMultiplier: 1.5,
+  maxRAMUtilization: 0.8,        // Use 80% of available RAM
 
   // Target management
   targetServer: '',
@@ -537,9 +537,17 @@ class BotnetUtilities {
       weaken: 1.75   // wk.js (both hack and grow weaken)
     };
 
-    // Start with conservative bounds to prevent massive thread calculations
+    // Start with bounds based on available RAM - scale aggressively for massive systems
     let minSize = Math.max(1, config.batchSize); // Use config as minimum, but at least 1
-    let maxSize = Math.min(200, Math.floor(availableForBatch / 50)); // Much more conservative max
+    let maxSize = Math.floor(availableForBatch / 25); // More aggressive scaling for massive RAM
+    
+    // For systems with massive RAM (>1TB available for batches), allow much larger batches
+    if (availableForBatch > 1000) { // More than 1TB available
+      maxSize = Math.min(1000, maxSize); // Cap at 1000 for systems with massive RAM
+    } else {
+      maxSize = Math.min(200, maxSize); // Conservative cap for smaller systems
+    }
+    
     let optimalSize = minSize;
 
     // Safety check: if maxSize is too small, use a reasonable default
@@ -582,8 +590,8 @@ class BotnetUtilities {
       if (minSize > maxSize) break;
     }
 
-    // Ensure we don't go below minimum viable size
-    return Math.max(optimalSize, config.batchSize);
+    // Return optimal size with reasonable bounds
+    return Math.min(Math.max(optimalSize, config.batchSize), config.dynamicBatchSizeMax);
   }
 
   /**
@@ -1377,7 +1385,7 @@ class BotnetTargetManager {
     return this.dynamicBatchSize;
   }
 
-  private calculateCurrentUtilizationRatio(): number {
+  calculateCurrentUtilizationRatio(): number {
     const totalRAM = BotnetUtilities.getTotalNetworkRAM(this.ns);
     const usedRAM = totalRAM - BotnetUtilities.calculateAvailableRAM(this.ns);
     return totalRAM > 0 ? usedRAM / totalRAM : 0;
@@ -1942,18 +1950,42 @@ class BotnetController {
         // Evaluate and potentially switch targets
         await this.targetManager.evaluateAndSelectTarget();
 
-        // Launch new batches using professional wave scheduling
+        // Launch new batches using professional wave scheduling with burst mode
         const now = Date.now();
+        const utilizationRatio = this.targetManager.calculateCurrentUtilizationRatio();
+        const isLowUtilization = utilizationRatio < 0.4; // Under 40% utilization
+        
+        // Use burst mode when utilization is low - allow faster batch launching
+        const effectiveCycleDelay = isLowUtilization ? 
+          Math.min(this.config.cycleTimingDelay, 500) :  // Burst: max 500ms between waves
+          this.config.cycleTimingDelay;                  // Normal: use config delay
+        
         const canLaunchWave = this.activeBatches.size < this.config.maxBatches &&
-          (now - this.lastBatchTime) >= this.config.cycleTimingDelay;
+          (now - this.lastBatchTime) >= effectiveCycleDelay;
 
         if (canLaunchWave) {
           const currentTarget = this.targetManager.getCurrentTarget();
-          const batchesScheduled = await this.waveScheduler.scheduleWaveSequence(currentTarget);
+          
+          // In burst mode, try to launch multiple waves to fill RAM faster
+          let totalBatchesScheduled = 0;
+          const maxWaves = isLowUtilization ? 5 : 1; // Launch up to 5 waves in burst mode
+          
+          for (let wave = 0; wave < maxWaves && this.activeBatches.size < this.config.maxBatches; wave++) {
+            const batchesScheduled = await this.waveScheduler.scheduleWaveSequence(currentTarget);
+            if (batchesScheduled === 0) break; // Stop if no batches could be scheduled
+            
+            totalBatchesScheduled += batchesScheduled;
+            
+            // Small delay between waves in burst mode
+            if (wave < maxWaves - 1 && isLowUtilization) {
+              await this.ns.sleep(100); // 100ms between burst waves
+            }
+          }
 
-          if (batchesScheduled > 0) {
+          if (totalBatchesScheduled > 0) {
             this.lastBatchTime = now;
-            this.logger.info(`🌊 Launched ${batchesScheduled} overlapping batches for ${currentTarget}`);
+            const modeText = isLowUtilization ? `🚀 BURST (${maxWaves} waves)` : "🌊";
+            this.logger.info(`${modeText} Launched ${totalBatchesScheduled} batches for ${currentTarget} (util: ${(utilizationRatio*100).toFixed(1)}%)`);
           }
         }
 
