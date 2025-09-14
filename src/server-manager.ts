@@ -19,6 +19,28 @@ interface ServerManagementResult {
     upgradedCount: number;
     totalServers: number;
     totalRam: number;
+    networkStats: NetworkStatistics;
+    purchasedServerStats: PurchasedServerStatistics;
+}
+
+interface NetworkStatistics {
+    totalServers: number;
+    rootedServers: number;
+    rootableServers: number;
+    highValueTargets: number;
+    totalRam: number;
+    usableRam: number;
+    averageHackLevel: number;
+}
+
+interface PurchasedServerStatistics {
+    count: number;
+    maxCount: number;
+    totalRam: number;
+    averageRam: number;
+    upgradeableCount: number;
+    nextUpgradeCost: number;
+    totalInvestment: number;
 }
 
 // Configuration
@@ -34,37 +56,53 @@ export function autocomplete(data: AutocompleteData, _args: any) {
         ...data.servers,
         '--debug',
         '--max-servers',
-        '--power'
+        '--power',
+        '--dashboard'
     ];
 }
 
 export async function main(ns: NS): Promise<void> {
+    ns.disableLog('ALL');
+
     const args = ns.flags([
         ['debug', false],
         ['max-servers', CONFIG.MAX_PURCHASED_SERVERS],
-        ['power', CONFIG.TARGET_RAM_POWER]
+        ['power', CONFIG.TARGET_RAM_POWER],
+        ['dashboard', true]
     ]);
 
     const debug = args.debug as boolean;
     const maxServers = args['max-servers'] as number;
     const targetRamPower = args['power'] as number;
+    const showDashboard = args['dashboard'] as boolean;
 
     if (debug) ns.tprint("Server Manager starting...");
+
+    let lastDashboardTime = 0;
+    const dashboardInterval = 10000; // Show dashboard every 10 seconds
 
     while (true) {
         try {
             const result = await manageServers(ns, maxServers, targetRamPower, debug);
+            const now = Date.now();
 
-            if (debug || result.rootedCount > 0 || result.purchasedCount > 0 || result.upgradedCount > 0) {
+            // Show enhanced dashboard periodically or when significant changes occur
+            if (showDashboard && (now - lastDashboardTime > dashboardInterval ||
+                result.rootedCount > 0 || result.purchasedCount > 0 || result.upgradedCount > 0)) {
+
+                showServerManagementDashboard(ns, result);
+                lastDashboardTime = now;
+            } else if (!showDashboard && (result.rootedCount > 0 || result.purchasedCount > 0 || result.upgradedCount > 0)) {
+                // Simple status for non-dashboard mode
                 ns.print(`Server Management: rooted=${result.rootedCount}, bought=${result.purchasedCount}, upgraded=${result.upgradedCount}`);
-                ns.print(`Network: ${result.totalServers} servers, ${(result.totalRam / 1000).toFixed(1)}TB total`);
+                ns.print(`Network: ${result.totalServers} servers, ${ns.formatNumber(result.totalRam)}GB total`);
             }
 
         } catch (error) {
             ns.print(`Server management error: ${error}`);
         }
 
-        await ns.sleep(2000); // Check every 10 seconds
+        await ns.sleep(2000); // Check every 2 seconds
     }
 }
 
@@ -79,7 +117,9 @@ async function manageServers(ns: NS, maxServers: number, targetRamPower: number,
     // 3. Manage purchased servers
     const { purchasedCount, upgradedCount } = await managePurchasedServers(ns, serverData, maxServers, targetRamPower, debug);
 
-    // 4. Calculate totals
+    // 4. Calculate comprehensive statistics
+    const networkStats = calculateNetworkStatistics(ns, serverData);
+    const purchasedServerStats = calculatePurchasedServerStatistics(ns, serverData, maxServers, targetRamPower);
     const totalRam = serverData.reduce((sum, s) => sum + s.maxRam, 0);
 
     return {
@@ -87,7 +127,9 @@ async function manageServers(ns: NS, maxServers: number, targetRamPower: number,
         purchasedCount,
         upgradedCount,
         totalServers: serverData.length,
-        totalRam
+        totalRam,
+        networkStats,
+        purchasedServerStats
     };
 }
 
@@ -235,4 +277,185 @@ async function managePurchasedServers(ns: NS, servers: ServerData[], maxServers:
     }
 
     return { purchasedCount, upgradedCount };
+}
+
+function calculateNetworkStatistics(ns: NS, servers: ServerData[]): NetworkStatistics {
+    let rootedServers = 0;
+    let rootableServers = 0;
+    let highValueTargets = 0;
+    let usableRam = 0;
+    let totalHackLevel = 0;
+    let hackableServers = 0;
+
+    const playerHackLevel = ns.getHackingLevel();
+
+    for (const server of servers) {
+        if (server.hasAdminRights) {
+            rootedServers++;
+            usableRam += server.maxRam;
+        } else if (server.requiredHackingSkill <= playerHackLevel &&
+            server.hostname !== 'home' && !server.purchasedByPlayer) {
+            rootableServers++;
+        }
+
+        if (server.maxMoney > 1_000_000 && server.hasAdminRights) {
+            highValueTargets++;
+        }
+
+        if (server.requiredHackingSkill > 0) {
+            totalHackLevel += server.requiredHackingSkill;
+            hackableServers++;
+        }
+    }
+
+    return {
+        totalServers: servers.length,
+        rootedServers,
+        rootableServers,
+        highValueTargets,
+        totalRam: servers.reduce((sum, s) => sum + s.maxRam, 0),
+        usableRam,
+        averageHackLevel: hackableServers > 0 ? Math.round(totalHackLevel / hackableServers) : 0
+    };
+}
+
+function calculatePurchasedServerStatistics(ns: NS, servers: ServerData[], maxServers: number, targetRamPower: number): PurchasedServerStatistics {
+    const purchasedServers = servers.filter(s => s.purchasedByPlayer);
+    const maxRam = Math.pow(2, targetRamPower);
+
+    let upgradeableCount = 0;
+    let nextUpgradeCost = Infinity;
+    let totalInvestment = 0;
+
+    // Calculate total investment (rough estimate)
+    for (const server of purchasedServers) {
+        // Estimate cost based on RAM progression: start RAM, then doubling
+        let currentRam = CONFIG.PURCHASED_SERVER_START_RAM;
+        let serverCost = ns.getPurchasedServerCost(currentRam);
+
+        while (currentRam < server.maxRam) {
+            currentRam *= 2;
+            serverCost += ns.getPurchasedServerUpgradeCost(server.hostname, currentRam);
+        }
+        totalInvestment += serverCost;
+
+        // Check if server can be upgraded
+        if (server.maxRam < maxRam) {
+            upgradeableCount++;
+            const upgradeCost = ns.getPurchasedServerUpgradeCost(server.hostname, server.maxRam * 2);
+            if (upgradeCost < nextUpgradeCost) {
+                nextUpgradeCost = upgradeCost;
+            }
+        }
+    }
+
+    const totalRam = purchasedServers.reduce((sum, s) => sum + s.maxRam, 0);
+
+    return {
+        count: purchasedServers.length,
+        maxCount: maxServers,
+        totalRam,
+        averageRam: purchasedServers.length > 0 ? totalRam / purchasedServers.length : 0,
+        upgradeableCount,
+        nextUpgradeCost: nextUpgradeCost === Infinity ? 0 : nextUpgradeCost,
+        totalInvestment
+    };
+}
+
+function showServerManagementDashboard(ns: NS, result: ServerManagementResult): void {
+    const playerMoney = ns.getServerMoneyAvailable('home');
+    const playerHackLevel = ns.getHackingLevel();
+
+    ns.clearLog();
+    ns.print('┌─ SERVER MANAGEMENT DASHBOARD');
+
+    // Network Overview
+    ns.print('├─ NETWORK OVERVIEW');
+    ns.print(`│ Total Network: ${result.networkStats.totalServers} servers | Rooted: ${result.networkStats.rootedServers} | Available: ${result.networkStats.rootableServers}`);
+    ns.print(`│ RAM Capacity: ${ns.formatNumber(result.networkStats.totalRam)}GB total | ${ns.formatNumber(result.networkStats.usableRam)}GB usable | Utilization: ${((ns.getServerUsedRam('home') / result.networkStats.usableRam) * 100).toFixed(1)}%`);
+    ns.print(`│ Network Stats: ${result.networkStats.highValueTargets} high-value targets | Avg hack level: ${result.networkStats.averageHackLevel} (player: ${playerHackLevel})`);
+
+    // Purchased Servers
+    ns.print('├─ PURCHASED SERVERS');
+    const purchasedStats = result.purchasedServerStats;
+    ns.print(`│ Fleet Status: ${purchasedStats.count}/${purchasedStats.maxCount} servers | ${ns.formatNumber(purchasedStats.totalRam)}GB total | Avg: ${ns.formatNumber(purchasedStats.averageRam)}GB per server`);
+
+    if (purchasedStats.upgradeableCount > 0) {
+        const canAffordUpgrade = playerMoney >= purchasedStats.nextUpgradeCost;
+        const affordabilityStatus = canAffordUpgrade ? '✅ Affordable' : '💰 Need more money';
+        ns.print(`│ Upgrades: ${purchasedStats.upgradeableCount} servers can be upgraded | Next: ${ns.formatNumber(purchasedStats.nextUpgradeCost)} ${affordabilityStatus}`);
+    } else {
+        ns.print(`│ Upgrades: All servers at maximum capacity`);
+    }
+
+    if (purchasedStats.count < purchasedStats.maxCount) {
+        const newServerCost = ns.getPurchasedServerCost(CONFIG.PURCHASED_SERVER_START_RAM);
+        const canAffordNew = playerMoney >= newServerCost;
+        const newServerStatus = canAffordNew ? '✅ Can buy' : '💰 Need more money';
+        ns.print(`│ Expansion: Can buy ${purchasedStats.maxCount - purchasedStats.count} more servers | Next: ${ns.formatNumber(newServerCost)} ${newServerStatus}`);
+    }
+
+    ns.print(`│ Investment: ${ns.formatNumber(purchasedStats.totalInvestment)} total invested | ROI: ${((purchasedStats.totalRam / (purchasedStats.totalInvestment / 1_000_000)) || 0).toFixed(1)}GB per $1M`);
+
+    // Recent Activity
+    if (result.rootedCount > 0 || result.purchasedCount > 0 || result.upgradedCount > 0) {
+        ns.print('├─ RECENT ACTIVITY');
+        if (result.rootedCount > 0) ns.print(`│ 🔓 Rooted ${result.rootedCount} new servers`);
+        if (result.purchasedCount > 0) ns.print(`│ 💳 Purchased ${result.purchasedCount} new servers`);
+        if (result.upgradedCount > 0) ns.print(`│ ⬆️ Upgraded ${result.upgradedCount} servers`);
+    }
+
+    // Recommendations
+    ns.print('├─ RECOMMENDATIONS');
+    const recommendations = generateRecommendations(ns, result, playerMoney, playerHackLevel);
+    if (recommendations.length > 0) {
+        for (const rec of recommendations) {
+            ns.print(`│ ${rec}`);
+        }
+    } else {
+        ns.print(`│ 🎯 System optimally configured - continue operations`);
+    }
+
+    ns.print('└─────────────────────────────────────────────');
+}
+
+function generateRecommendations(ns: NS, result: ServerManagementResult, playerMoney: number, playerHackLevel: number): string[] {
+    const recommendations: string[] = [];
+    const purchased = result.purchasedServerStats;
+    const network = result.networkStats;
+
+    // Priority 1: Root available servers
+    if (network.rootableServers > 0) {
+        recommendations.push(`🔓 HIGH: Root ${network.rootableServers} available servers to expand network`);
+    }
+
+    // Priority 2: Buy new purchased servers if slots available and affordable
+    if (purchased.count < purchased.maxCount) {
+        const newServerCost = ns.getPurchasedServerCost(CONFIG.PURCHASED_SERVER_START_RAM);
+        if (playerMoney >= newServerCost) {
+            recommendations.push(`💳 MEDIUM: Purchase new server for ${ns.formatNumber(newServerCost)} (${purchased.maxCount - purchased.count} slots left)`);
+        } else if (playerMoney >= newServerCost * 0.5) {
+            recommendations.push(`💰 LOW: Save for new server (${ns.formatNumber(newServerCost - playerMoney)} more needed)`);
+        }
+    }
+
+    // Priority 3: Upgrade existing servers
+    if (purchased.upgradeableCount > 0 && purchased.nextUpgradeCost > 0) {
+        if (playerMoney >= purchased.nextUpgradeCost) {
+            recommendations.push(`⬆️ MEDIUM: Upgrade server for ${ns.formatNumber(purchased.nextUpgradeCost)} (${purchased.upgradeableCount} upgradeable)`);
+        }
+    }
+
+    // Priority 4: Network growth suggestions
+    if (network.rootedServers > 20 && purchased.count === 0) {
+        recommendations.push(`🚀 MEDIUM: Consider purchasing servers for dedicated RAM capacity`);
+    }
+
+    // Priority 5: Hacking level recommendations
+    const avgNetworkLevel = network.averageHackLevel;
+    if (playerHackLevel < avgNetworkLevel * 0.8) {
+        recommendations.push(`📚 LOW: Train hacking to access higher-level servers (current: ${playerHackLevel}, network avg: ${avgNetworkLevel})`);
+    }
+
+    return recommendations;
 }
