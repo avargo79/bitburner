@@ -34,7 +34,7 @@ export function autocomplete(data: AutocompleteData, _args: any) {
         ...data.servers,
         '--debug',
         '--max-servers',
-        '--target-ram-power'
+        '--power'
     ];
 }
 
@@ -42,12 +42,12 @@ export async function main(ns: NS): Promise<void> {
     const args = ns.flags([
         ['debug', false],
         ['max-servers', CONFIG.MAX_PURCHASED_SERVERS],
-        ['target-ram-power', CONFIG.TARGET_RAM_POWER]
+        ['power', CONFIG.TARGET_RAM_POWER]
     ]);
 
     const debug = args.debug as boolean;
     const maxServers = args['max-servers'] as number;
-    const targetRamPower = args['target-ram-power'] as number;
+    const targetRamPower = args['power'] as number;
 
     if (debug) ns.tprint("Server Manager starting...");
 
