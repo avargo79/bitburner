@@ -2,6 +2,27 @@ import { Gang, NS } from "@ns";
 
 const factionName = "Slum Snakes";
 
+// Configuration constants
+const CONFIG = {
+    TERRITORY: {
+        EQUIPMENT_THRESHOLD: 0.89,
+        MIN_WIN_CHANCE: 0.51,
+        COMPLETE_CONTROL: 1.0,
+    },
+    WANTED: {
+        PENALTY_THRESHOLD: 0.95,
+        LEVEL_THRESHOLD: 1000,
+    },
+    ASCENSION: {
+        MIN_GAIN: 1.2,
+        FORCE_GAIN: 2.0,
+        TARGET_MULTIPLIER: 16,
+        MIN_MEMBERS_FOR_EARLY_ASCEND: 10,
+        MAX_GANG_SIZE: 12,
+    },
+    VIGILANTE_RATIO: 0.5, // Every other member (50%)
+} as const;
+
 const TASK_XREF: TaskInfo[] = [
     {
         taskName: "Mug People",
@@ -18,13 +39,6 @@ const TASK_XREF: TaskInfo[] = [
         chanceToWinClash: 0,
     },
     {
-        taskName: "Terrorism",
-        maxMembers: 11,
-        minStats: 100,
-        minAscend: 16,
-        chanceToWinClash: 0,
-    },
-    {
         taskName: "Human Trafficking",
         maxMembers: 12,
         minStats: 100,
@@ -34,11 +48,11 @@ const TASK_XREF: TaskInfo[] = [
 ];
 const TASK_WARFARE: TaskInfo = {
     taskName: "Territory Warfare",
-    maxMembers: 12,
+    maxMembers: CONFIG.ASCENSION.MAX_GANG_SIZE,
     minStats: 100,
     minAscend: 16,
-    chanceToWinClash: 0.9,
-}; // based on chance to win
+    chanceToWinClash: CONFIG.TERRITORY.MIN_WIN_CHANCE,
+};
 
 export async function main(ns: NS): Promise<void> {
     ns.disableLog("ALL");
@@ -59,21 +73,28 @@ export async function main(ns: NS): Promise<void> {
 
         if (myGang.canRecruit) recruit(gang);
         const members = myGang.members;
-        const task = <TaskInfo>TASK_XREF.find((t) => members.length <= t.maxMembers);
+        const task = TASK_XREF.find((t) => members.length <= t.maxMembers);
+        
+        if (!task) {
+            ns.tprint(`ERROR: No task found for gang size ${members.length}`);
+            await ns.sleep(5000);
+            continue;
+        }
+        
         ns.print("Selected: ", task.taskName, ": ", task.maxMembers, " - ", members.length);
 
         members.forEach((member, i) => {
             tryAscend(ns, member);
 
-            if (myGang.territory > 0.89) {
+            if (myGang.territory > CONFIG.TERRITORY.EQUIPMENT_THRESHOLD) {
                 tryBuyEquipment(ns, member, ALL_EQUIPMENT);
             }
 
-            if (i % 2 == 1 && myGang.wantedPenalty < 0.95 && myGang.wantedLevel > 1000) {
+            if (i % 2 == 1 && myGang.wantedPenalty < CONFIG.WANTED.PENALTY_THRESHOLD && myGang.wantedLevel > CONFIG.WANTED.LEVEL_THRESHOLD) {
                 ns.gang.setMemberTask(member.name, "Vigilante Justice");
-            } else if (member.isAscend(TASK_WARFARE.minAscend) && member.canDoTask(TASK_WARFARE) && chanceToWinClash <= 0.9) {
+            } else if (member.isAscend(TASK_WARFARE.minAscend) && member.canDoTask(TASK_WARFARE) && chanceToWinClash <= CONFIG.TERRITORY.MIN_WIN_CHANCE) {
                 if (member.data.task !== TASK_WARFARE.taskName) gang.setMemberTask(member.name, TASK_WARFARE.taskName);
-            } else if (member.isAscend(task.minAscend) && member.canDoTask(task, chanceToWinClash)) {
+            } else if (member.isAscend(task.minAscend) && member.canDoTask(task)) {
                 if (member.data.task !== task.taskName) gang.setMemberTask(member.name, task.taskName);
             } else {
                 if (member.data.task !== "Train Combat") gang.setMemberTask(member.name, "Train Combat");
@@ -100,41 +121,49 @@ function tryAscend(ns: NS, member: PlayerGangMember) {
 
     try {
         const stats = ns.gang.getMemberInformation(member.name);
-        const result = Math.max(asc.cha, asc.def, asc.dex, asc.hack, asc.str);
-        const highest = Math.max(
+        const maxAscensionGain = Math.max(asc.cha, asc.def, asc.dex, asc.hack, asc.str, asc.agi);
+        const currentHighestMult = Math.max(
             stats.cha_asc_mult,
             stats.def_asc_mult,
             stats.dex_asc_mult,
             stats.hack_asc_mult,
-            stats.str_asc_mult
+            stats.str_asc_mult,
+            stats.agi_asc_mult
         );
 
-        if (result >= 1.2 && (memberNames.length < 10 || memberNames.length == 12)) {
+        // Force ascend for massive gains (2x or more)
+        if (maxAscensionGain >= CONFIG.ASCENSION.FORCE_GAIN) {
             ns.gang.ascendMember(member.name);
-        } else if (result >= 2) {
+            ns.print(`${member.name} ascended (${maxAscensionGain.toFixed(2)}x gain)`);
+            return;
+        }
+
+        // Early game: ascend at lower threshold when we have enough members
+        if (maxAscensionGain >= CONFIG.ASCENSION.MIN_GAIN && memberNames.length >= CONFIG.ASCENSION.MIN_MEMBERS_FOR_EARLY_ASCEND) {
             ns.gang.ascendMember(member.name);
+            ns.print(`${member.name} ascended (${maxAscensionGain.toFixed(2)}x gain)`);
+            return;
         }
-        if (highest < 16) {
-            if (stats.agi_asc_mult * asc.agi > 16) {
+
+        // Push each stat to target multiplier threshold
+        if (currentHighestMult < CONFIG.ASCENSION.TARGET_MULTIPLIER) {
+            const shouldAscend = (
+                (stats.agi_asc_mult * asc.agi >= CONFIG.ASCENSION.TARGET_MULTIPLIER) ||
+                (stats.dex_asc_mult * asc.dex >= CONFIG.ASCENSION.TARGET_MULTIPLIER) ||
+                (stats.def_asc_mult * asc.def >= CONFIG.ASCENSION.TARGET_MULTIPLIER) ||
+                (stats.cha_asc_mult * asc.cha >= CONFIG.ASCENSION.TARGET_MULTIPLIER) ||
+                (stats.str_asc_mult * asc.str >= CONFIG.ASCENSION.TARGET_MULTIPLIER) ||
+                (stats.hack_asc_mult * asc.hack >= CONFIG.ASCENSION.TARGET_MULTIPLIER)
+            );
+            
+            if (shouldAscend) {
                 ns.gang.ascendMember(member.name);
-            }
-            if (stats.dex_asc_mult * asc.dex > 16) {
-                ns.gang.ascendMember(member.name);
-            }
-            if (stats.def_asc_mult * asc.def > 16) {
-                ns.gang.ascendMember(member.name);
-            }
-            if (stats.cha_asc_mult * asc.cha > 16) {
-                ns.gang.ascendMember(member.name);
-            }
-            if (stats.str_asc_mult * asc.str > 16) {
-                ns.gang.ascendMember(member.name);
-            }
-            if (stats.hack_asc_mult * asc.hack > 16) {
-                ns.gang.ascendMember(member.name);
+                ns.print(`${member.name} ascended (reached ${CONFIG.ASCENSION.TARGET_MULTIPLIER}x threshold)`);
             }
         }
-    } catch { }
+    } catch (error) {
+        ns.print(`ERROR in tryAscend for ${member.name}: ${String(error)}`);
+    }
 }
 
 function tryBuyEquipment(ns: NS, member: PlayerGangMember, equipmentList: string[]) {
@@ -145,11 +174,24 @@ function tryBuyEquipment(ns: NS, member: PlayerGangMember, equipmentList: string
     for (const equipment of buyList) {
         if (ns.getServerMoneyAvailable("home") < ns.gang.getEquipmentCost(equipment)) continue;
         const bought = ns.gang.purchaseEquipment(member.name, equipment);
-        if (bought) ns.print(member.name, " bought ", buyList[0]);
+        if (bought) {
+            ns.print(`${member.name} bought ${equipment}`);
+        }
     }
 }
 
 function tryTerritoryWar(ns: NS) {
+    const gangInfo = ns.gang.getGangInformation();
+    
+    // Already control all territory
+    if (gangInfo.territory >= CONFIG.TERRITORY.COMPLETE_CONTROL) {
+        if (gangInfo.territoryWarfareEngaged) {
+            ns.gang.setTerritoryWarfare(false);
+            ns.print("Territory complete - warfare disabled");
+        }
+        return 1;
+    }
+
     const otherGangsInfo = ns.gang.getOtherGangInformation();
     const otherGangNames = Object.keys(otherGangsInfo);
     const otherGangData = Object.values(otherGangsInfo);
@@ -158,26 +200,36 @@ function tryTerritoryWar(ns: NS) {
         ...otherGangData[index],
     }));
 
-    let min = 1;
+    let minWinChance = 1;
     for (const otherGang of otherGangs) {
+        // Skip gangs with no territory or equal power (ties)
+        if (otherGang.territory === 0 || gangInfo.power === otherGang.power) {
+            continue;
+        }
+        
         const chanceToWin = ns.gang.getChanceToWinClash(otherGang.name);
-        if (ns.gang.getGangInformation().power == otherGang.power) {
-        } else if (chanceToWin < min && otherGang.territory > 0) {
-            min = chanceToWin;
+        if (chanceToWin < minWinChance) {
+            minWinChance = chanceToWin;
         }
     }
 
-    if (ns.gang.getGangInformation().territory < 1) {
-        ns.print("territory: " + (100 * ns.gang.getGangInformation().territory).toFixed(2) + "%");
-        ns.print("win chance: " + (100 * min).toFixed(5) + "%");
-        if (min > 0.51) {
+    ns.print(`Territory: ${(100 * gangInfo.territory).toFixed(2)}%`);
+    ns.print(`Min win chance: ${(100 * minWinChance).toFixed(2)}%`);
+
+    // Engage warfare if we have good odds
+    if (minWinChance > CONFIG.TERRITORY.MIN_WIN_CHANCE) {
+        if (!gangInfo.territoryWarfareEngaged) {
             ns.gang.setTerritoryWarfare(true);
-        } else if (ns.gang.getGangInformation().territoryWarfareEngaged) {
+            ns.print("Territory warfare ENABLED");
+        }
+    } else {
+        if (gangInfo.territoryWarfareEngaged) {
             ns.gang.setTerritoryWarfare(false);
+            ns.print("Territory warfare DISABLED (low win chance)");
         }
     }
 
-    return min;
+    return minWinChance;
 }
 
 interface OtherGang {
@@ -290,13 +342,20 @@ class PlayerGangMember {
         };
     }
 
-    canDoTask(task: TaskInfo, chanceToWinClash = 1) {
-        if (this.stats.agi.level < this.stats.agi.asc_mult * this.stats.agi.mult * task.minStats) return false;
-        if (this.stats.def.level < this.stats.def.asc_mult * this.stats.def.mult * task.minStats) return false;
-        if (this.stats.dex.level < this.stats.dex.asc_mult * this.stats.dex.mult * task.minStats) return false;
-        if (this.stats.str.level < this.stats.str.asc_mult * this.stats.str.mult * task.minStats) return false;
+    canDoTask(task: TaskInfo) {
+        // Check if member has sufficient stats for the task
+        // Stats are calculated as: level * asc_mult * mult
+        const effectiveAgi = this.stats.agi.level * this.stats.agi.asc_mult * this.stats.agi.mult;
+        const effectiveDef = this.stats.def.level * this.stats.def.asc_mult * this.stats.def.mult;
+        const effectiveDex = this.stats.dex.level * this.stats.dex.asc_mult * this.stats.dex.mult;
+        const effectiveStr = this.stats.str.level * this.stats.str.asc_mult * this.stats.str.mult;
 
-        return true;
+        return (
+            effectiveAgi >= task.minStats &&
+            effectiveDef >= task.minStats &&
+            effectiveDex >= task.minStats &&
+            effectiveStr >= task.minStats
+        );
     }
 
     isAscend(goal: number) {
@@ -313,10 +372,10 @@ class PlayerGangMember {
     }
 }
 
-class TaskInfo {
-    public taskName!: string;
-    public maxMembers!: number;
-    public minStats!: number;
-    public minAscend!: number;
-    public chanceToWinClash!: number;
+interface TaskInfo {
+    taskName: string;
+    maxMembers: number;
+    minStats: number;
+    minAscend: number;
+    chanceToWinClash: number;
 }
