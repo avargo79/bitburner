@@ -64,19 +64,19 @@ let debug = false;
 let startTime = 0;
 
 const defaultTradingStrategy: TradingStrategy = {
-  strategy: 'default',
+  strategy: 'aggressive',
   enabled: true,
-  buyThreshold: 0.55,
-  sellThreshold: 0.45,
-  maxPositionSize: 0.15,
+  buyThreshold: 0.52,  // More aggressive - capture more opportunities
+  sellThreshold: 0.48,  // More aggressive - exit faster on downtrends
+  maxPositionSize: 0.25,  // Larger positions - maximize gains on winners
   riskManagement: {
-    stopLoss: -0.10,
-    takeProfitRatio: 2.0,
-    maxTotalExposure: 0.80
+    stopLoss: -0.05,  // Tighter stop loss - cut losses faster
+    takeProfitRatio: 1.5,  // Take profits sooner - lock in gains
+    maxTotalExposure: 0.95  // Higher exposure - keep money working
   },
   capitalAllocation: {
-    reserveRatio: 0.20,
-    minCashBuffer: 100000
+    reserveRatio: 0.05,  // Minimal reserve - maximize invested capital
+    minCashBuffer: 10000  // Lower buffer - more aggressive deployment
   },
   debug: false
 };
@@ -137,10 +137,10 @@ export async function main(ns: NS): Promise<void> {
         if (debug) ns.tprint('[Stocks] Status display error: ' + statusErr);
       }
       
-      await ns.sleep(3000); // Run every 3 seconds
+      await ns.sleep(2000); // Run every 2 seconds for faster response
     } catch (err) {
       ns.tprint('[Stocks] ERROR: ' + (err && (err as any).message ? (err as any).message : err));
-      await ns.sleep(10000); // Wait longer on error
+      await ns.sleep(5000); // Wait on error
     }
   }
 }
@@ -285,9 +285,11 @@ async function executeTrading(ns: NS): Promise<void> {
     totalExposure += pos.shares * pos.currentPrice;
   }
   
-  const maxExposure = cash * strategy.riskManagement.maxTotalExposure;
-  const minCash = Math.max(strategy.capitalAllocation.reserveRatio * cash, strategy.capitalAllocation.minCashBuffer);
+  const totalCapital = cash + totalExposure;
+  const maxExposure = totalCapital * strategy.riskManagement.maxTotalExposure;
+  const minCash = Math.max(strategy.capitalAllocation.reserveRatio * totalCapital, strategy.capitalAllocation.minCashBuffer);
   
+  // PHASE 1: Sell underperforming positions first to free up capital
   for (const metric of metrics.values()) {
     const position = positions.get(metric.symbol);
     
@@ -298,7 +300,11 @@ async function executeTrading(ns: NS): Promise<void> {
       const stopLoss = profitPct <= strategy.riskManagement.stopLoss;
       const takeProfit = profitPct >= Math.abs(strategy.riskManagement.stopLoss) * strategy.riskManagement.takeProfitRatio;
       
-      if (metric.forecast < strategy.sellThreshold || stopLoss || takeProfit) {
+      // Sell if forecast drops, hit stop loss, or take profit
+      // Also sell immediately if forecast goes below 0.5 (negative expectation)
+      const immediateSell = metric.forecast < 0.50;
+      
+      if (metric.forecast < strategy.sellThreshold || stopLoss || takeProfit || immediateSell) {
         const sold = ns.stock.sellStock(metric.symbol, position.shares);
         
         // Record transaction
@@ -310,7 +316,7 @@ async function executeTrading(ns: NS): Promise<void> {
           timestamp: Date.now(),
           action: 'sell',
           shares: position.shares,
-          reason: stopLoss ? 'stopLoss' : takeProfit ? 'takeProfit' : 'forecast'
+          reason: immediateSell ? 'immediateSell' : stopLoss ? 'stopLoss' : takeProfit ? 'takeProfit' : 'forecast'
         };
         history.push(historyEntry);
         
@@ -322,48 +328,78 @@ async function executeTrading(ns: NS): Promise<void> {
         }
       }
     }
+  }
+  
+  // PHASE 2: Buy opportunities - prioritize by expected value
+  const buyOpportunities = Array.from(metrics.values())
+    .filter(m => !positions.has(m.symbol) && m.forecast > strategy.buyThreshold)
+    .map(m => ({
+      metric: m,
+      expectedValue: (m.forecast - 0.5) * m.volatility, // Higher forecast + volatility = more profit potential
+      score: m.forecast
+    }))
+    .sort((a, b) => b.expectedValue - a.expectedValue);
+  
+  for (const opportunity of buyOpportunities) {
+    const metric = opportunity.metric;
     
-    // --- BUY LOGIC ---
-    else if (metric.forecast > strategy.buyThreshold && totalExposure < maxExposure) {
-      const availableCash = cash - minCash;
-      const maxPositionValue = availableCash * strategy.maxPositionSize;
-      const sharesToBuy = Math.floor(maxPositionValue / metric.price);
+    // Recalculate exposure after each purchase
+    totalExposure = 0;
+    for (const pos of positions.values()) {
+      totalExposure += pos.shares * pos.currentPrice;
+    }
+    
+    if (totalExposure >= maxExposure) break;
+    
+    const availableCash = ns.getServerMoneyAvailable('home') - minCash;
+    const remainingExposureCapacity = maxExposure - totalExposure;
+    
+    // Dynamic position sizing: invest more in high-confidence opportunities
+    const confidenceMultiplier = Math.min(2.0, (metric.forecast - 0.5) * 4); // 0.52 forecast = 1.08x, 0.60 forecast = 1.4x
+    const targetPositionSize = Math.min(
+      strategy.maxPositionSize * confidenceMultiplier,
+      0.30 // Cap at 30% for any single position
+    );
+    
+    const maxPositionValue = Math.min(
+      availableCash * targetPositionSize,
+      remainingExposureCapacity
+    );
+    const sharesToBuy = Math.floor(maxPositionValue / metric.askPrice);
+    
+    if (sharesToBuy > 0 && availableCash >= sharesToBuy * metric.askPrice) {
+      const bought = ns.stock.buyStock(metric.symbol, sharesToBuy);
       
-      if (sharesToBuy > 0 && availableCash >= sharesToBuy * metric.price) {
-        const bought = ns.stock.buyStock(metric.symbol, sharesToBuy);
+      if (bought > 0) {
+        const newPosition: StockPosition = {
+          symbol: metric.symbol,
+          shares: bought,
+          avgPrice: metric.askPrice,
+          currentPrice: metric.price,
+          forecast: metric.forecast,
+          volatility: metric.volatility,
+          lastUpdate: Date.now(),
+          profitLoss: 0,
+          profitLossPercent: 0
+        };
         
-        if (bought > 0) {
-          const newPosition: StockPosition = {
-            symbol: metric.symbol,
-            shares: bought,
-            avgPrice: metric.price,
-            currentPrice: metric.price,
-            forecast: metric.forecast,
-            volatility: metric.volatility,
-            lastUpdate: Date.now(),
-            profitLoss: 0,
-            profitLossPercent: 0
-          };
-          
-          positions.set(metric.symbol, newPosition);
-          totalExposure += bought * metric.price;
-          
-          // Record transaction
-          const historyEntry: StockHistoryEntry = {
-            symbol: metric.symbol,
-            price: metric.price,
-            forecast: metric.forecast,
-            volatility: metric.volatility,
-            timestamp: Date.now(),
-            action: 'buy',
-            shares: bought,
-            reason: 'forecast'
-          };
-          history.push(historyEntry);
-          
-          if (debug) {
-            ns.tprint(`[Stocks] BOUGHT ${bought} shares of ${metric.symbol} at $${metric.price.toFixed(2)} - Total: $${(bought * metric.price).toFixed(2)}`);
-          }
+        positions.set(metric.symbol, newPosition);
+        
+        // Record transaction
+        const historyEntry: StockHistoryEntry = {
+          symbol: metric.symbol,
+          price: metric.askPrice,
+          forecast: metric.forecast,
+          volatility: metric.volatility,
+          timestamp: Date.now(),
+          action: 'buy',
+          shares: bought,
+          reason: 'highExpectedValue'
+        };
+        history.push(historyEntry);
+        
+        if (debug) {
+          ns.tprint(`[Stocks] BOUGHT ${bought} shares of ${metric.symbol} at $${metric.askPrice.toFixed(2)} (forecast: ${(metric.forecast * 100).toFixed(1)}%, EV: ${opportunity.expectedValue.toFixed(4)})`);
         }
       }
     }

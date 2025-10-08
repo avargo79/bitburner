@@ -6,7 +6,7 @@ This is a sophisticated Bitburner game automation framework built with TypeScrip
 ## Architecture & Patterns
 - **Standalone scripts**: Each script is self-contained with main(ns: NS) function
 - **Direct NS API usage**: Scripts interact directly with Bitburner NS API
-- **Stateless operation**: Scripts gather data fresh from NS API each run (no persistent storage)
+- **Flexible state management**: Scripts can use stateless patterns or localStorage/browser storage as appropriate
 - **Modular design**: Features separated into main scripts (`/src`), utilities (`/src/lib`), remote scripts (`/src/remote`)
 - **Distributed execution**: Remote scripts enable parallel processing across multiple servers
 - **Self-contained interfaces**: Each script defines its own types and data structures inline
@@ -91,12 +91,6 @@ for contracts, analyzes each type, and executes solutions. Use localStorage to c
 successful solution patterns and track performance metrics. Create remote scripts for
 distributed contract solving across multiple servers. Respect RAM constraints and
 implement proper error handling for network failures.
-```
-/plan The contract solver will extend the existing ScriptTask architecture with a new
-ContractSolverTask. Use the Database singleton for caching contract patterns and solutions.
-Implement as a service that interfaces with the Network component to discover contracts
-across servers. Create algorithm implementations for each contract type as separate
-modules. Use DynamicScript for execution and respect the 25GB browser API limitations.
 ```
 
 ### Phase 3: Task Breakdown (`/tasks` command)
@@ -216,10 +210,10 @@ Use these resources to inform technical decisions and validate implementation ap
 When writing functional requirements for Bitburner features:
 
 **Game Integration Requirements**:
-- **GI-001**: System MUST integrate with existing NS API through DynamicScript
+- **GI-001**: System MUST integrate with NS API and respect script execution patterns
 - **GI-002**: System MUST respect server RAM constraints and report memory usage
-- **GI-003**: System MUST persist state in IndexedDB to survive game resets
-- **GI-004**: System MUST register as ScriptTask with appropriate priority and interval
+- **GI-003**: System MUST handle game resets and state recovery appropriately
+- **GI-004**: System MUST operate autonomously with appropriate timing intervals
 
 **Performance Requirements**:
 - **PR-001**: System MUST execute within [X]GB RAM budget per server
@@ -228,10 +222,10 @@ When writing functional requirements for Bitburner features:
 - **PR-004**: System MUST scale to [X] servers without performance degradation
 
 **Data Requirements**:
-- **DR-001**: System MUST store [specific data] in Database with schema version
-- **DR-002**: System MUST maintain data consistency across game sessions
-- **DR-003**: System MUST provide data migration for schema updates
-- **DR-004**: System MUST expose data through [specific interface]
+- **DR-001**: System MUST define clear data structures and state management
+- **DR-002**: System MUST handle data consistency across script executions
+- **DR-003**: System MUST provide appropriate data persistence strategies
+- **DR-004**: System MUST expose data through well-defined interfaces
 
 **Automation Requirements**:
 - **AR-001**: System MUST operate autonomously without user intervention
@@ -273,8 +267,7 @@ When defining data models, consider these standard entities:
 - Contract solving accuracy
 
 **System Health Metrics**:
-- Task execution reliability
-- Database operation success rate
+- Script execution reliability
 - Network topology discovery completeness
 - Error recovery effectiveness
 
@@ -298,7 +291,7 @@ When analyzing code for cleanup, **DO NOT assume unused code means incomplete fe
 
 #### **Step 1: Trace Complete Data Flow**
 - **Check producers AND consumers**: If code publishes data, verify something reads it
-- **Follow communication patterns**: Port communication, event queues, database writes
+- **Follow communication patterns**: Script communication, event handling, data flow
 - **Verify end-to-end pipelines**: Data generation → transmission → processing → usage
 
 #### **Step 2: Examine All Related Files**  
@@ -340,49 +333,14 @@ Correct Action: Add missing port reader, NOT remove "unused" event infrastructur
 
 ## Common Issues & Solutions
 - **Build errors**: Check TypeScript import paths and module resolution
-- **Runtime failures**: Verify correct NS API usage in DynamicScript
-- **Database issues**: Ensure IndexedDB store names match schema
+- **Runtime failures**: Verify correct NS API usage and script execution
 - **Script spawn failures**: Check RAM availability and file sync status
 
 ## Known Issues & TODOs
 
-### **⚠️ CRITICAL: Broken Event Communication in Botnet System**
-**Status**: Active bug requiring immediate fix
-**Location**: `src/botnet.ts` and `src/remote/{hk,gr,wk}.ts`
 
-**Problem**: Remote scripts are publishing real HWGW operation events to port 20, but the main botnet script is not reading them. Instead, it uses `simulateEventProcessing()` to generate fake events with random values.
 
-**Evidence**:
-- ✅ Remote scripts (`hk.ts`, `gr.ts`, `wk.ts`) publish events: `ns.getPortHandle(20).write(event)`
-- ❌ Main botnet script has NO port reading code - no `getPortHandle()` calls anywhere
-- ❌ Uses `simulateEventProcessing()` with hardcoded fake values instead of real data
-- ✅ Event processing pipeline exists and works, just fed fake data
 
-**Impact**:
-- Performance metrics are completely fictional
-- Money tracking shows fake gains instead of actual earnings
-- Success/failure rates are simulated rather than real
-- Optimization decisions based on incorrect data
-
-**Required Fix**:
-1. **Add port reading logic** to `processEvents()` method in main botnet script
-2. **Replace simulation** with real event processing once port reading works
-3. **Test complete event communication pipeline** to verify real data flow
-4. **Keep existing performance tracking** - it will work once real events arrive
-
-**Files Affected**:
-- `src/botnet.ts` - Missing port reader in `processEvents()` method
-- `src/remote/hk.ts` - Already publishes real hack events ✅
-- `src/remote/gr.ts` - Already publishes real grow events ✅  
-- `src/remote/wk.ts` - Already publishes real weaken events ✅
-
-**Priority**: High - System appears to work but is using fake data for all optimization decisions
-
-## Key Classes & Methods
-- `Database.getInstance()` - Persistent storage singleton
-- `DynamicScript.new()` - Runtime NS API execution
-- `ScriptTask` - Base class for automation logic
-- `Configuration.getInstance()` - Settings management
 
 ## Build & Development Commands
 - `npm run watch` - Start development with file watching, TypeScript compilation, and game sync
@@ -404,30 +362,28 @@ Correct Action: Add missing port reader, NOT remove "unused" event infrastructur
 
 ## Code Style & Conventions
 ### Imports & Modules
-- **Absolute imports**: Always use `/` prefix from src root (e.g., `import { Database } from "/lib/database"`)
-- **Path aliases**: `@ns` for NetscriptDefinitions.d.ts, `@react` for lib/react.ts
+- **Absolute imports**: Always use `/` prefix from src root (e.g., `import { Logger } from "/lib/logger"`)
+- **Path aliases**: `@ns` for NetscriptDefinitions.d.ts
 - **Default exports**: Use for tasks and main entry points
 - **Named exports**: Use for utilities, enums, interfaces
 
 ### TypeScript Patterns
 - **Strict typing**: Strict TypeScript mode enabled, avoid `any` type
-- **Interface naming**: Prefix with `I` (e.g., `IScriptTask`, `IRemoteScriptArgs`)
-- **Enum usage**: For constants and configurations (e.g., `DatabaseStoreName`, `TaskNames`)
+- **Interface naming**: Use descriptive names (e.g., `ServerInfo`, `BatchEvent`)
+- **Enum usage**: For constants and configurations
 - **Async/await**: Preferred over promises, minimal try/catch usage
 - **No unnecessary destructuring**: Keep variable access simple
 - **Single-word variables**: Prefer concise naming where possible
 
 ### File & Directory Structure
 - **Naming**: kebab-case for files, PascalCase for classes/types, camelCase for variables/functions
-- `/lib/` - Shared utilities (database, network, system, configuration)
-- `/models/` - TypeScript interfaces and type definitions
-- `/tasks/` - Automation task implementations
+- `/lib/` - Shared utilities (logger, browser utils, common functions)
 - `/remote/` - Scripts designed for distributed execution on multiple servers
-- **Entry points**: `daemon.ts` (main orchestrator), `start.ts` (initialization)
+- **Entry points**: Main automation scripts in `/src` directory
 
 ### Game-Specific Patterns
 - **NS interface**: All Bitburner API calls go through the `ns` parameter
-- **Database persistence**: Store all critical state in IndexedDB to survive game resets
+- **State management**: Choose appropriate persistence strategy (localStorage, in-memory, etc.)
 - **Memory management**: Scripts must be RAM-efficient for in-game constraints
 - **Distributed computing**: Use purchased servers for parallel processing
 - **Network topology**: Automatically discover and root servers for botnet expansion
@@ -469,8 +425,7 @@ Correct Action: Add missing port reader, NOT remove "unused" event infrastructur
 ### Testing & Debugging
 - Test in-game using the built-in development console
 - Use `ns.print()` and `ns.tprint()` for debugging output
-- Monitor task execution through the HUD manager
-- Verify database state persistence across game sessions
+- Monitor script execution and resource usage
 - Check network topology updates and server status
 
 ## Integration Notes

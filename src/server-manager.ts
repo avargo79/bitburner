@@ -47,7 +47,7 @@ interface PurchasedServerStatistics {
 const CONFIG = {
     PURCHASED_SERVER_START_RAM: 2,
     MAX_PURCHASED_SERVERS: 25,
-    TARGET_RAM_POWER: 13, // 2^20 = 1TB max per server
+    TARGET_RAM_POWER: 10, // 2^20 = 1TB max per server
     HOME_RAM_RESERVE: 32
 };
 
