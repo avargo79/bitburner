@@ -52,11 +52,15 @@ export async function main(ns: NS): Promise<void> {
                 ns.tprint("Traveling to Aevum to hit the casino");
                 currentState = STATES.TRAVEL_CASINO
             }
-        } else if (player.money >= 100_000 && player.city == "Aevum") {
+        } else if (player.money >= 100_000 && player.city == "Aevum" && currentState != STATES.GAMBLING) {
             ns.tprint("Gambling at the casino until 10b");
-            ns.spawn("casino-bot.js", 1);
-            currentState = STATES.GAMBLING;
+            ns.exec("casino-bot.js", "home", 1);
+            ns.exec("contracts.js", "home", 1);
+            ns.exec("server-manager.js", "home", 1);
+            ns.exec("botnet.js", "home", 1);
+            break;
         }
+
         await ns.sleep(500);
     }
 

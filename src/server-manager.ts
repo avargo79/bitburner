@@ -11,12 +11,14 @@ interface ServerData {
     moneyAvailable: number;
     hackDifficulty: number;
     minDifficulty: number;
+    backdoorInstalled: boolean;
 }
 
 interface ServerManagementResult {
     rootedCount: number;
     purchasedCount: number;
     upgradedCount: number;
+    backdooredCount: number;
     totalServers: number;
     totalRam: number;
     networkStats: NetworkStatistics;
@@ -27,6 +29,8 @@ interface NetworkStatistics {
     totalServers: number;
     rootedServers: number;
     rootableServers: number;
+    backdooredServers: number;
+    backdoorableServers: number;
     highValueTargets: number;
     totalRam: number;
     usableRam: number;
@@ -48,7 +52,8 @@ const CONFIG = {
     PURCHASED_SERVER_START_RAM: 2,
     MAX_PURCHASED_SERVERS: 25,
     TARGET_RAM_POWER: 10, // 2^20 = 1TB max per server
-    HOME_RAM_RESERVE: 32
+    HOME_RAM_RESERVE: 32,
+    ENABLE_BACKDOORS: true
 };
 
 export function autocomplete(data: AutocompleteData, _args: any) {
@@ -57,7 +62,9 @@ export function autocomplete(data: AutocompleteData, _args: any) {
         '--debug',
         '--max-servers',
         '--power',
-        '--dashboard'
+        '--dashboard',
+        '--no-backdoors',
+        '--test-backdoors'
     ];
 }
 
@@ -68,13 +75,23 @@ export async function main(ns: NS): Promise<void> {
         ['debug', false],
         ['max-servers', CONFIG.MAX_PURCHASED_SERVERS],
         ['power', CONFIG.TARGET_RAM_POWER],
-        ['dashboard', true]
+        ['dashboard', true],
+        ['no-backdoors', false],
+        ['test-backdoors', false]
     ]);
 
     const debug = args.debug as boolean;
     const maxServers = args['max-servers'] as number;
     const targetRamPower = args['power'] as number;
     const showDashboard = args['dashboard'] as boolean;
+    const enableBackdoors = !args['no-backdoors'] as boolean && CONFIG.ENABLE_BACKDOORS;
+    const testBackdoors = args['test-backdoors'] as boolean;
+
+    if (testBackdoors) {
+        ns.tprint("🧪 Running backdoor test mode");
+        await testBackdoorFunctionality(ns);
+        return;
+    }
 
     if (debug) ns.tprint("Server Manager starting...");
 
@@ -83,18 +100,18 @@ export async function main(ns: NS): Promise<void> {
 
     while (true) {
         try {
-            const result = await manageServers(ns, maxServers, targetRamPower, debug);
+            const result = await manageServers(ns, maxServers, targetRamPower, enableBackdoors, debug);
             const now = Date.now();
 
             // Show enhanced dashboard periodically or when significant changes occur
             if (showDashboard && (now - lastDashboardTime > dashboardInterval ||
-                result.rootedCount > 0 || result.purchasedCount > 0 || result.upgradedCount > 0)) {
+                result.rootedCount > 0 || result.purchasedCount > 0 || result.upgradedCount > 0 || result.backdooredCount > 0)) {
 
                 showServerManagementDashboard(ns, result);
                 lastDashboardTime = now;
-            } else if (!showDashboard && (result.rootedCount > 0 || result.purchasedCount > 0 || result.upgradedCount > 0)) {
+            } else if (!showDashboard && (result.rootedCount > 0 || result.purchasedCount > 0 || result.upgradedCount > 0 || result.backdooredCount > 0)) {
                 // Simple status for non-dashboard mode
-                ns.print(`Server Management: rooted=${result.rootedCount}, bought=${result.purchasedCount}, upgraded=${result.upgradedCount}`);
+                ns.print(`Server Management: rooted=${result.rootedCount}, backdoored=${result.backdooredCount}, bought=${result.purchasedCount}, upgraded=${result.upgradedCount}`);
                 ns.print(`Network: ${result.totalServers} servers, ${ns.formatNumber(result.totalRam)}GB total`);
             }
 
@@ -106,7 +123,7 @@ export async function main(ns: NS): Promise<void> {
     }
 }
 
-async function manageServers(ns: NS, maxServers: number, targetRamPower: number, debug: boolean): Promise<ServerManagementResult> {
+async function manageServers(ns: NS, maxServers: number, targetRamPower: number, enableBackdoors: boolean, debug: boolean): Promise<ServerManagementResult> {
     // 1. Discover all servers
     const allServers = discoverAllServers(ns);
     const serverData = allServers.map(hostname => buildServerData(ns, hostname));
@@ -114,10 +131,19 @@ async function manageServers(ns: NS, maxServers: number, targetRamPower: number,
     // 2. Root new servers
     const rootedCount = rootServers(ns, serverData, debug);
 
-    // 3. Manage purchased servers
+    // 3. Backdoor servers that meet requirements (if enabled)
+    if (debug && enableBackdoors) {
+        ns.print(`🚪 Backdoor functionality enabled - checking for backdoor opportunities`);
+    } else if (debug && !enableBackdoors) {
+        ns.print(`🚪 Backdoor functionality disabled`);
+    }
+
+    const backdooredCount = enableBackdoors ? await backdoorServers(ns, serverData, debug) : 0;
+
+    // 4. Manage purchased servers
     const { purchasedCount, upgradedCount } = await managePurchasedServers(ns, serverData, maxServers, targetRamPower, debug);
 
-    // 4. Calculate comprehensive statistics
+    // 5. Calculate comprehensive statistics
     const networkStats = calculateNetworkStatistics(ns, serverData);
     const purchasedServerStats = calculatePurchasedServerStatistics(ns, serverData, maxServers, targetRamPower);
     const totalRam = serverData.reduce((sum, s) => sum + s.maxRam, 0);
@@ -126,6 +152,7 @@ async function manageServers(ns: NS, maxServers: number, targetRamPower: number,
         rootedCount,
         purchasedCount,
         upgradedCount,
+        backdooredCount,
         totalServers: serverData.length,
         totalRam,
         networkStats,
@@ -173,7 +200,8 @@ function buildServerData(ns: NS, hostname: string): ServerData {
             maxMoney: server.moneyMax || 0,
             moneyAvailable: server.moneyAvailable || 0,
             hackDifficulty: server.hackDifficulty || 1,
-            minDifficulty: server.minDifficulty || 1
+            minDifficulty: server.minDifficulty || 1,
+            backdoorInstalled: server.backdoorInstalled === true  // Handle undefined properly
         };
     } catch (e) {
         // Return safe defaults for inaccessible servers
@@ -187,7 +215,8 @@ function buildServerData(ns: NS, hostname: string): ServerData {
             maxMoney: 0,
             moneyAvailable: 0,
             hackDifficulty: 100,
-            minDifficulty: 1
+            minDifficulty: 1,
+            backdoorInstalled: false
         };
     }
 }
@@ -221,6 +250,238 @@ function rootServers(ns: NS, servers: ServerData[], debug: boolean): number {
     }
 
     return rootedCount;
+}
+
+async function backdoorServers(ns: NS, servers: ServerData[], debug: boolean): Promise<number> {
+    let backdooredCount = 0;
+    const playerHackLevel = ns.getHackingLevel();
+
+    // Check if Singularity API is available
+    if (!ns.singularity) {
+        if (debug) {
+            ns.print(`❌ Singularity API not available - backdoor functionality disabled`);
+            ns.print(`   Requirements:`);
+            ns.print(`   - Source-File 4 (The Singularity) is required`);
+            ns.print(`   - Complete BitNode-4 or have SF4 from previous runs`);
+            ns.print(`   - RAM costs are 16x/4x/1x based on SF4 level (1/2/3+)`);
+        }
+        return 0;
+    }
+
+    // Check if we can actually call Singularity functions
+    try {
+        // Test if we can call a basic Singularity function
+        ns.singularity.getCurrentWork();
+        if (debug) {
+            ns.print(`✅ Singularity API accessible and functional`);
+        }
+    } catch (e) {
+        if (debug) {
+            ns.print(`❌ Singularity API exists but not functional: ${e}`);
+            ns.print(`   This usually means insufficient Source-File 4 level`);
+        }
+        return 0;
+    }
+
+    if (debug) {
+        const candidateServers = servers.filter(s =>
+            !s.backdoorInstalled &&
+            s.hasAdminRights &&
+            !s.purchasedByPlayer &&
+            s.hostname !== 'home' &&
+            s.requiredHackingSkill <= playerHackLevel
+        );
+        ns.print(`Checking ${candidateServers.length} servers for backdoor opportunities`);
+        candidateServers.forEach(s => ns.print(`  - ${s.hostname} (hack level: ${s.requiredHackingSkill})`));
+    }
+
+    for (const server of servers) {
+        // Skip if already backdoored, not rooted, player-purchased, or home
+        if (server.backdoorInstalled ||
+            !server.hasAdminRights ||
+            server.purchasedByPlayer ||
+            server.hostname === 'home') {
+            continue;
+        }
+
+        // Skip if player doesn't have sufficient hacking level
+        if (server.requiredHackingSkill > playerHackLevel) {
+            continue;
+        }
+
+        try {
+            if (debug) {
+                ns.print(`Attempting to backdoor: ${server.hostname} (hack level: ${server.requiredHackingSkill})`);
+            }
+
+            // Use Singularity API to connect and install backdoor
+            if (await installBackdoorViaSingularity(ns, server.hostname, debug)) {
+                server.backdoorInstalled = true;
+                backdooredCount++;
+
+                if (debug) {
+                    ns.print(`✅ Successfully backdoored: ${server.hostname}`);
+                } else {
+                    ns.print(`Backdoored: ${server.hostname}`);
+                }
+            } else {
+                if (debug) {
+                    ns.print(`❌ Failed to backdoor: ${server.hostname}`);
+                }
+            }
+
+        } catch (e) {
+            if (debug) {
+                ns.print(`❌ Exception while backdooring ${server.hostname}: ${e}`);
+            } else {
+                ns.print(`Failed to backdoor ${server.hostname}: ${e}`);
+            }
+        }
+
+        // Always return to home after each backdoor attempt (success or failure)
+        try {
+            if (ns.getHostname() !== 'home') {
+                ns.singularity.connect('home');
+                if (debug && ns.getHostname() !== 'home') {
+                    ns.print(`Warning: Failed to return to home, currently on ${ns.getHostname()}`);
+                }
+            }
+        } catch (e) {
+            if (debug) {
+                ns.print(`Error returning to home after ${server.hostname}: ${e}`);
+            }
+        }
+
+        // Small delay between backdoor attempts
+        await ns.sleep(100);
+    }
+
+    // Final verification that we're on home after all backdoor operations
+    try {
+        if (ns.getHostname() !== 'home') {
+            ns.singularity.connect('home');
+            if (debug) {
+                ns.print(`Final return to home completed. Current server: ${ns.getHostname()}`);
+            }
+        }
+    } catch (e) {
+        if (debug) {
+            ns.print(`Warning: Final return to home failed: ${e}. Current server: ${ns.getHostname()}`);
+        }
+    }
+
+    return backdooredCount;
+}
+
+async function installBackdoorViaSingularity(ns: NS, hostname: string, debug: boolean): Promise<boolean> {
+    try {
+        if (debug) {
+            ns.print(`  🔍 Finding path to ${hostname}`);
+        }
+
+        // Find path to the target server
+        const path = findPathToServer(ns, hostname);
+        if (!path) {
+            if (debug) ns.print(`  ❌ Could not find path to ${hostname}`);
+            return false;
+        }
+
+        if (debug) {
+            ns.print(`  🛤️ Path to ${hostname}: ${path.join(' -> ')}`);
+        }
+
+        // Connect to the server using Singularity API
+        for (let i = 1; i < path.length; i++) {
+            const target = path[i];
+
+            if (debug) {
+                ns.print(`  🔗 Connecting terminal to ${target}`);
+                ns.print(`  ℹ️ Note: Script location (${ns.getHostname()}) != terminal location`);
+            }
+
+            const connectResult = ns.singularity.connect(target);
+            if (debug) {
+                ns.print(`  🔌 ns.singularity.connect(${target}) returned: ${connectResult}`);
+            }
+
+            if (!connectResult) {
+                if (debug) ns.print(`  ❌ Connection to ${target} failed`);
+                // Return terminal to home before failing
+                try {
+                    ns.singularity.connect('home');
+                } catch (e) {
+                    if (debug) ns.print(`  ❌ Failed to return terminal to home: ${e}`);
+                }
+                return false;
+            }
+
+            // Small delay to allow connection to complete
+            await ns.sleep(100);
+        }
+
+        if (debug) {
+            ns.print(`  🎯 Terminal should now be on ${hostname}, installing backdoor...`);
+        }
+
+        // Install backdoor using Singularity API
+        await ns.singularity.installBackdoor();
+
+        if (debug) {
+            ns.print(`  ✅ Backdoor installation completed for ${hostname}`);
+        }
+
+        // Always return to home after successful backdoor
+        try {
+            ns.singularity.connect('home');
+        } catch (e) {
+            if (debug) ns.print(`Warning: Failed to return to home after backdooring ${hostname}: ${e}`);
+        }
+
+        return true;
+
+    } catch (e) {
+        if (debug) {
+            ns.print(`Singularity backdoor failed for ${hostname}: ${e}`);
+        }
+
+        // Ensure we return to home even if backdoor failed
+        try {
+            ns.singularity.connect('home');
+        } catch (e2) {
+            if (debug) ns.print(`Critical: Failed to return to home after backdoor error: ${e2}`);
+        }
+
+        return false;
+    }
+}
+
+function findPathToServer(ns: NS, targetHostname: string): string[] | null {
+    const visited = new Set<string>();
+    const queue: { hostname: string; path: string[] }[] = [{ hostname: 'home', path: ['home'] }];
+
+    while (queue.length > 0) {
+        const { hostname, path } = queue.shift()!;
+
+        if (hostname === targetHostname) {
+            return path;
+        }
+
+        if (visited.has(hostname)) continue;
+        visited.add(hostname);
+
+        try {
+            const neighbors = ns.scan(hostname);
+            for (const neighbor of neighbors) {
+                if (!visited.has(neighbor)) {
+                    queue.push({ hostname: neighbor, path: [...path, neighbor] });
+                }
+            }
+        } catch (e) {
+            // Skip servers we can't scan
+        }
+    }
+
+    return null;
 }
 
 async function managePurchasedServers(ns: NS, servers: ServerData[], maxServers: number, targetRamPower: number, debug: boolean): Promise<{ purchasedCount: number, upgradedCount: number }> {
@@ -282,6 +543,8 @@ async function managePurchasedServers(ns: NS, servers: ServerData[], maxServers:
 function calculateNetworkStatistics(ns: NS, servers: ServerData[]): NetworkStatistics {
     let rootedServers = 0;
     let rootableServers = 0;
+    let backdooredServers = 0;
+    let backdoorableServers = 0;
     let highValueTargets = 0;
     let usableRam = 0;
     let totalHackLevel = 0;
@@ -298,6 +561,15 @@ function calculateNetworkStatistics(ns: NS, servers: ServerData[]): NetworkStati
             rootableServers++;
         }
 
+        if (server.backdoorInstalled) {
+            backdooredServers++;
+        } else if (server.hasAdminRights &&
+            !server.purchasedByPlayer &&
+            server.hostname !== 'home' &&
+            server.requiredHackingSkill <= playerHackLevel) {
+            backdoorableServers++;
+        }
+
         if (server.maxMoney > 1_000_000 && server.hasAdminRights) {
             highValueTargets++;
         }
@@ -312,6 +584,8 @@ function calculateNetworkStatistics(ns: NS, servers: ServerData[]): NetworkStati
         totalServers: servers.length,
         rootedServers,
         rootableServers,
+        backdooredServers,
+        backdoorableServers,
         highValueTargets,
         totalRam: servers.reduce((sum, s) => sum + s.maxRam, 0),
         usableRam,
@@ -372,6 +646,7 @@ function showServerManagementDashboard(ns: NS, result: ServerManagementResult): 
     // Network Overview
     ns.print('├─ NETWORK OVERVIEW');
     ns.print(`│ Total Network: ${result.networkStats.totalServers} servers | Rooted: ${result.networkStats.rootedServers} | Available: ${result.networkStats.rootableServers}`);
+    ns.print(`│ Backdoors: ${result.networkStats.backdooredServers} installed | ${result.networkStats.backdoorableServers} available | Access enhanced: ${result.networkStats.backdooredServers > 0 ? '✅' : '❌'}`);
     ns.print(`│ RAM Capacity: ${ns.formatNumber(result.networkStats.totalRam)}GB total | ${ns.formatNumber(result.networkStats.usableRam)}GB usable | Utilization: ${((ns.getServerUsedRam('home') / result.networkStats.usableRam) * 100).toFixed(1)}%`);
     ns.print(`│ Network Stats: ${result.networkStats.highValueTargets} high-value targets | Avg hack level: ${result.networkStats.averageHackLevel} (player: ${playerHackLevel})`);
 
@@ -398,9 +673,10 @@ function showServerManagementDashboard(ns: NS, result: ServerManagementResult): 
     ns.print(`│ Investment: ${ns.formatNumber(purchasedStats.totalInvestment)} total invested | ROI: ${((purchasedStats.totalRam / (purchasedStats.totalInvestment / 1_000_000)) || 0).toFixed(1)}GB per $1M`);
 
     // Recent Activity
-    if (result.rootedCount > 0 || result.purchasedCount > 0 || result.upgradedCount > 0) {
+    if (result.rootedCount > 0 || result.purchasedCount > 0 || result.upgradedCount > 0 || result.backdooredCount > 0) {
         ns.print('├─ RECENT ACTIVITY');
         if (result.rootedCount > 0) ns.print(`│ 🔓 Rooted ${result.rootedCount} new servers`);
+        if (result.backdooredCount > 0) ns.print(`│ 🚪 Backdoored ${result.backdooredCount} servers`);
         if (result.purchasedCount > 0) ns.print(`│ 💳 Purchased ${result.purchasedCount} new servers`);
         if (result.upgradedCount > 0) ns.print(`│ ⬆️ Upgraded ${result.upgradedCount} servers`);
     }
@@ -429,7 +705,12 @@ function generateRecommendations(ns: NS, result: ServerManagementResult, playerM
         recommendations.push(`🔓 HIGH: Root ${network.rootableServers} available servers to expand network`);
     }
 
-    // Priority 2: Buy new purchased servers if slots available and affordable
+    // Priority 2: Backdoor available servers
+    if (network.backdoorableServers > 0) {
+        recommendations.push(`🚪 HIGH: Backdoor ${network.backdoorableServers} servers for enhanced access and faction benefits`);
+    }
+
+    // Priority 3: Buy new purchased servers if slots available and affordable
     if (purchased.count < purchased.maxCount) {
         const newServerCost = ns.getPurchasedServerCost(CONFIG.PURCHASED_SERVER_START_RAM);
         if (playerMoney >= newServerCost) {
@@ -439,23 +720,137 @@ function generateRecommendations(ns: NS, result: ServerManagementResult, playerM
         }
     }
 
-    // Priority 3: Upgrade existing servers
+    // Priority 4: Upgrade existing servers
     if (purchased.upgradeableCount > 0 && purchased.nextUpgradeCost > 0) {
         if (playerMoney >= purchased.nextUpgradeCost) {
             recommendations.push(`⬆️ MEDIUM: Upgrade server for ${ns.formatNumber(purchased.nextUpgradeCost)} (${purchased.upgradeableCount} upgradeable)`);
         }
     }
 
-    // Priority 4: Network growth suggestions
+    // Priority 5: Network growth suggestions
     if (network.rootedServers > 20 && purchased.count === 0) {
         recommendations.push(`🚀 MEDIUM: Consider purchasing servers for dedicated RAM capacity`);
     }
 
-    // Priority 5: Hacking level recommendations
+    // Priority 6: Hacking level recommendations
     const avgNetworkLevel = network.averageHackLevel;
     if (playerHackLevel < avgNetworkLevel * 0.8) {
         recommendations.push(`📚 LOW: Train hacking to access higher-level servers (current: ${playerHackLevel}, network avg: ${avgNetworkLevel})`);
     }
 
+    // Priority 7: Backdoor benefits info
+    if (network.backdooredServers > 0 && network.backdoorableServers === 0) {
+        recommendations.push(`✅ EXCELLENT: All available servers backdoored - maximum network access achieved`);
+    }
+
     return recommendations;
+}
+
+async function testBackdoorFunctionality(ns: NS): Promise<void> {
+    ns.tprint("🔍 Testing backdoor functionality...");
+
+    // Check Singularity API availability
+    if (!ns.singularity) {
+        ns.tprint("❌ Singularity API not available!");
+        ns.tprint("   Requirements for backdoor functionality:");
+        ns.tprint("   - Must have Source-File 4 (The Singularity)");
+        ns.tprint("   - Complete BitNode-4 or obtain SF4 from previous runs");
+        ns.tprint("   - RAM costs: 16x (SF4.1), 4x (SF4.2), 1x (SF4.3+)");
+        return;
+    }
+
+    // Test Singularity API functionality
+    try {
+        ns.singularity.getCurrentWork();
+        ns.tprint("✅ Singularity API available and functional");
+    } catch (e) {
+        ns.tprint("❌ Singularity API exists but not functional!");
+        ns.tprint(`   Error: ${e}`);
+        ns.tprint("   This usually indicates insufficient Source-File 4 level");
+        return;
+    }
+
+    // Test basic Singularity functionality
+    try {
+        const initialServer = ns.getHostname();
+        ns.tprint(`📍 Script running on: ${initialServer} (this is script location, not terminal location)`);
+
+        // Test connecting to home (should be safe)
+        ns.tprint(`🏠 Testing terminal connection to home...`);
+        const homeConnectResult = ns.singularity.connect('home');
+        await ns.sleep(100);
+        ns.tprint(`🔌 Connect to home returned: ${homeConnectResult}`);
+
+        // Get available neighbors from home
+        const neighbors = ns.scan('home');
+        ns.tprint(`🌐 Neighbors from home: ${neighbors.join(', ')}`);
+
+        if (neighbors.length > 1) { // More than just the current server
+            const testTarget = neighbors.find(n => n !== initialServer) || neighbors[0];
+            ns.tprint(`🎯 Testing terminal connection to: ${testTarget}`);
+
+            const testConnectResult = ns.singularity.connect(testTarget);
+            await ns.sleep(200);
+            ns.tprint(`🔌 Connect to ${testTarget} returned: ${testConnectResult}`);
+
+            if (testConnectResult) {
+                ns.tprint(`✅ Terminal connection appears to be working!`);
+                ns.tprint(`ℹ️ Note: We cannot verify terminal location via NS API`);
+
+                // Return terminal to home
+                const homeReturn = ns.singularity.connect('home');
+                await ns.sleep(100);
+                ns.tprint(`🏠 Return to home result: ${homeReturn}`);
+            } else {
+                ns.tprint(`❌ Singularity connection not working properly`);
+                ns.tprint(`   This might be a game version issue or Singularity access problem`);
+            }
+        }
+
+    } catch (e) {
+        ns.tprint(`❌ Error during Singularity test: ${e}`);
+    }
+
+    // Test basic functions
+    try {
+        const currentServer = ns.getHostname();
+        ns.tprint(`📍 Current server: ${currentServer}`);
+
+        // Discover servers
+        const allServers = discoverAllServers(ns);
+        const serverData = allServers.map(hostname => buildServerData(ns, hostname));
+        ns.tprint(`🌐 Discovered ${allServers.length} servers`);
+
+        // Find backdoor candidates
+        const playerHackLevel = ns.getHackingLevel();
+        const candidates = serverData.filter(s =>
+            !s.backdoorInstalled &&
+            s.hasAdminRights &&
+            !s.purchasedByPlayer &&
+            s.hostname !== 'home' &&
+            s.requiredHackingSkill <= playerHackLevel
+        );
+
+        ns.tprint(`🎯 Found ${candidates.length} backdoor candidates:`);
+        candidates.forEach(s => {
+            ns.tprint(`   - ${s.hostname} (hack level: ${s.requiredHackingSkill}, already backdoored: ${s.backdoorInstalled})`);
+        });
+
+        if (candidates.length > 0) {
+            const testServer = candidates[0];
+            ns.tprint(`🧪 Testing backdoor on ${testServer.hostname}...`);
+
+            const success = await installBackdoorViaSingularity(ns, testServer.hostname, true);
+            if (success) {
+                ns.tprint(`✅ Test backdoor successful on ${testServer.hostname}`);
+            } else {
+                ns.tprint(`❌ Test backdoor failed on ${testServer.hostname}`);
+            }
+        } else {
+            ns.tprint("ℹ️ No backdoor candidates available for testing");
+        }
+
+    } catch (e) {
+        ns.tprint(`❌ Error during backdoor test: ${e}`);
+    }
 }

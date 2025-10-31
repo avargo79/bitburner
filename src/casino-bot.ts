@@ -74,6 +74,7 @@ export default class CasinoBotV2 {
       // Step 0: Preemptive check for kicked out (like Alain does)
       if (await this.checkKickedOutFast()) {
         this.ns.tprint("🎉 We've already been kicked out of the casino!");
+        await this.purchaseTorAndPrograms();
         return;
       }
 
@@ -89,9 +90,89 @@ export default class CasinoBotV2 {
       // Step 4: Ultra-fast casino loop
       await this.casinoLoop();
 
+      // Step 5: After successful completion (kicked out), purchase TOR and programs
+      await this.purchaseTorAndPrograms();
+
     } catch (error) {
       this.ns.tprint(`❌ Error: ${error}`);
       if (this.config.debugMode) this.debug(`Full error: ${error}`);
+    }
+  }
+
+  private async purchaseTorAndPrograms(): Promise<void> {
+    this.ns.tprint("");
+    this.ns.tprint("═══════════════════════════════════════════════");
+    this.ns.tprint("  Post-Casino: Purchasing TOR & Programs");
+    this.ns.tprint("═══════════════════════════════════════════════");
+
+    try {
+      // Purchase TOR router if not already owned
+      if (!this.ns.hasTorRouter()) {
+        const torCost = 200000; // TOR router costs $200k
+        const currentMoney = this.getCurrentMoney();
+
+        if (currentMoney >= torCost) {
+          const purchased = this.ns.singularity.purchaseTor();
+          if (purchased) {
+            this.ns.tprint("✓ Purchased TOR router ($200k)");
+          } else {
+            this.ns.tprint("⚠ Failed to purchase TOR router");
+            return;
+          }
+        } else {
+          this.ns.tprint(`⚠ Not enough money for TOR router (need $${torCost.toLocaleString()})`);
+          return;
+        }
+      } else {
+        this.ns.tprint("✓ TOR router already owned");
+      }
+
+      // List of all darkweb programs in order of usefulness
+      const programs = [
+        { name: "BruteSSH.exe", cost: 500000 },
+        { name: "FTPCrack.exe", cost: 1500000 },
+        { name: "relaySMTP.exe", cost: 5000000 },
+        { name: "HTTPWorm.exe", cost: 30000000 },
+        { name: "SQLInject.exe", cost: 250000000 },
+        { name: "DeepscanV1.exe", cost: 500000 },
+        { name: "DeepscanV2.exe", cost: 25000000 },
+        { name: "ServerProfiler.exe", cost: 500000 },
+        { name: "AutoLink.exe", cost: 1000000 },
+        { name: "Formulas.exe", cost: 5000000000 },
+      ];
+
+      let totalSpent = 0;
+      let programsPurchased = 0;
+
+      for (const program of programs) {
+        // Check if already owned
+        if (this.ns.fileExists(program.name, "home")) {
+          this.ns.tprint(`  ✓ ${program.name} - already owned`);
+          continue;
+        }
+
+        // Check if we have enough money
+        const currentMoney = this.getCurrentMoney();
+        if (currentMoney >= program.cost) {
+          const purchased = this.ns.singularity.purchaseProgram(program.name);
+          if (purchased) {
+            totalSpent += program.cost;
+            programsPurchased++;
+            this.ns.tprint(`  ✓ Purchased ${program.name} ($${(program.cost / 1e6).toFixed(1)}m)`);
+          } else {
+            this.ns.tprint(`  ⚠ Failed to purchase ${program.name}`);
+          }
+        } else {
+          this.ns.tprint(`  ⏭ Skipping ${program.name} ($${(program.cost / 1e6).toFixed(1)}m) - insufficient funds`);
+        }
+      }
+
+      this.ns.tprint("");
+      this.ns.tprint(`Summary: Purchased ${programsPurchased} programs for $${(totalSpent / 1e6).toFixed(1)}m`);
+      this.ns.tprint("═══════════════════════════════════════════════");
+
+    } catch (error) {
+      this.ns.tprint(`❌ Error purchasing TOR/programs: ${error}`);
     }
   }
 
@@ -179,7 +260,7 @@ export default class CasinoBotV2 {
   // Cache all frequently used elements once for speed
   private async cacheElements(): Promise<void> {
     this.log("🔧 Caching DOM elements for speed...");
-    
+
     const doc = getDocumentAPI();
 
     // Cache save button
@@ -200,11 +281,11 @@ export default class CasinoBotV2 {
   // Ultra-fast element finder with minimal retries (based on Alain's approach)
   private findElementFast(xpath: string, maxRetries: number = 5): Element | null {
     const doc = getDocumentAPI();
-    
+
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       const element = doc.evaluate(xpath, doc, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue as Element;
       if (element) return element;
-      
+
       // Only retry with minimal delay if not found
       if (attempt < maxRetries) {
         // Synchronous micro-delay (much faster than async sleep)
@@ -218,7 +299,7 @@ export default class CasinoBotV2 {
   // Ultra-fast click using Alain's method
   private async clickElementFast(element: HTMLElement): Promise<void> {
     await this.sleep(2); // Hardcoded 2ms - before click
-    
+
     // Find React click handler using Alain's voodoo method
     const fnOnClick = (element as any)[Object.keys(element)[1]]?.onClick;
     if (fnOnClick) {
@@ -227,15 +308,15 @@ export default class CasinoBotV2 {
       // Fallback to native click
       element.click();
     }
-    
+
     await this.sleep(2); // Hardcoded 2ms - after click
   }
 
   private async saveGame(): Promise<void> {
     this.log("💾 Saving game...");
-    
+
     if (!this.cached.saveButton) throw new Error("Save button not cached");
-    
+
     await this.sleep(5); // Hardcoded 5ms - before save
     await this.clickElementFast(this.cached.saveButton);
     await this.sleep(5); // Hardcoded 5ms - after save
@@ -286,7 +367,7 @@ export default class CasinoBotV2 {
             await this.saveGame();
           }
           this.stats.wins++;
-          
+
           // Quick check after each win to see if we've been kicked out (like Alain)
           if (await this.checkKickedOutFast()) {
             this.log("🎉 Detected kicked out after win!");
@@ -297,7 +378,7 @@ export default class CasinoBotV2 {
           netWinnings -= bet;
           this.stats.losses++;
           this.stats.totalReloads++;
-          
+
           // Reload if losing badly (like Alain's logic)
           if (currentMoney < 1E8 || netWinnings <= peakWinnings - 10 * 1E8) {
             await this.reloadPageFast();
@@ -398,17 +479,17 @@ export default class CasinoBotV2 {
       if (this.findElementFast("//button[text() = 'Hit']", retries)) {
         return null; // Game not over yet
       }
-      
+
       // Check for lose
       if (this.findElementFast("//p[contains(text(), 'lost')]", retries)) {
         return "lose";
       }
-      
+
       // Check for win (both "won" and "Won" like Alain)
       if (this.findElementFast("//p/text()[contains(.,'won') or contains(.,'Won')]", retries)) {
         return "win";
       }
-      
+
       // Check for tie
       if (this.findElementFast("//p[contains(text(), 'Tie')]", retries)) {
         return "tie";
@@ -439,7 +520,7 @@ export default class CasinoBotV2 {
     // Based on Alain's robust cheater detection with modal handling
     let retries = 0;
     while (retries++ < 5) { // Check up to 5 times
-      
+
       // Primary check: Look for the cheater message (exact text from Alain)
       const kickedOutElement = this.findElementFast("//span[contains(text(), 'Alright cheater get out of here')]", 3);
       if (kickedOutElement) {
@@ -462,10 +543,10 @@ export default class CasinoBotV2 {
         await this.sleep(10); // Small delay after closing modal
         continue; // Try again after closing the modal
       }
-      
+
       break; // No more modals to close
     }
-    
+
     return false;
   }
 

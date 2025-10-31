@@ -538,7 +538,7 @@ class BotnetUtilities {
   /**
    * Target Analysis Utilities
    */
-  static analyzeTarget(ns: NS, hostname: string, config: BotnetConfiguration): DynamicTargetAnalysis | null {
+  static analyzeTarget(ns: NS, hostname: string, config: BotnetConfiguration, debugMode: boolean = false): DynamicTargetAnalysis | null {
     try {
       if (hostname === 'home') return null;
 
@@ -564,25 +564,85 @@ class BotnetUtilities {
       if (maxMoney < config.minTargetMoney * 10 && currentMoneyRatio < 0.01) {
         return null;
       }
+
+      // Use formulas to calculate precise money per second for fully prepped servers
+      let moneyPerSecond = 0;
+      let hackTime = 0;
+      let growTime = 0;
+      let weakenTime = 0;
+      let hackChance = 0;
+      let hackPercentPerThread = 0;
+
+      try {
+        // Get server and player info for formulas
+        const server = ns.getServer(hostname);
+        const player = ns.getPlayer();
+
+        // Simulate fully prepped server (min security, max money)
+        const preppedServer = {
+          ...server,
+          hackDifficulty: server.minDifficulty,
+          moneyAvailable: server.moneyMax
+        };
+
+        // Calculate times and hack stats for prepped server
+        hackTime = ns.formulas.hacking.hackTime(preppedServer, player);
+        growTime = ns.formulas.hacking.growTime(preppedServer, player);
+        weakenTime = ns.formulas.hacking.weakenTime(preppedServer, player);
+        hackChance = ns.formulas.hacking.hackChance(preppedServer, player);
+        hackPercentPerThread = ns.formulas.hacking.hackPercent(preppedServer, player);
+
+        // Filter out targets with unreasonably long operation times (> 15 minutes)
+        const MAX_OPERATION_TIME = 15 * 60 * 1000; // 15 minutes in ms
+        const maxTime = Math.max(hackTime, growTime, weakenTime);
+        if (maxTime > MAX_OPERATION_TIME) {
+          ns.print(`⏰ Skipping ${hostname}: operation time ${Math.round(maxTime / 1000 / 60)}min too long`);
+          return null;
+        }
+
+        // Calculate money per second for optimal batching
+        // Use 5% hack ratio (conservative for batching stability)
+        const optimalHackPercent = Math.min(0.05, hackPercentPerThread * 100);
+        const hackThreadsNeeded = Math.ceil(optimalHackPercent / hackPercentPerThread);
+        const moneyPerBatch = maxMoney * optimalHackPercent * hackChance;
+
+        // Batch duration is the longest operation time + safety buffer
+        const batchDuration = Math.max(hackTime, growTime, weakenTime) + 1000; // 1s buffer
+        moneyPerSecond = moneyPerBatch / (batchDuration / 1000);
+
+        if (debugMode) {
+          ns.tprint(`💰 ${hostname}: $${ns.formatNumber(moneyPerSecond)}/s (${Math.round(batchDuration / 1000)}s batches, ${(hackChance * 100).toFixed(1)}% chance)`);
+        }
+
+      } catch (error) {
+        // Fallback to basic calculations if formulas fail
+        hackTime = ns.getHackTime(hostname);
+        growTime = ns.getGrowTime(hostname);
+        weakenTime = ns.getWeakenTime(hostname);
+        hackChance = ns.hackAnalyzeChance(hostname);
+
+        // Filter out targets with unreasonably long operation times (> 15 minutes)
+        const MAX_OPERATION_TIME = 15 * 60 * 1000; // 15 minutes in ms
+        const maxTime = Math.max(hackTime, growTime, weakenTime);
+        if (maxTime > MAX_OPERATION_TIME) {
+          ns.print(`⏰ Skipping ${hostname}: operation time ${Math.round(maxTime / 1000 / 60)}min too long`);
+          return null;
+        }
+
+        // Basic calculation fallback
+        hackPercentPerThread = ns.hackAnalyze(hostname);
+        const optimalHackPercent = Math.min(0.05, hackPercentPerThread * 100);
+        const moneyPerBatch = maxMoney * optimalHackPercent * hackChance;
+        const batchDuration = Math.max(hackTime, growTime, weakenTime) + 1000;
+        moneyPerSecond = moneyPerBatch / (batchDuration / 1000);
+
+        if (debugMode) {
+          ns.tprint(`💰 ${hostname}: $${ns.formatNumber(moneyPerSecond)}/s (fallback calc)`);
+        }
+      }
+
       const securityLevel = ns.getServerSecurityLevel(hostname);
       const minSecurityLevel = ns.getServerMinSecurityLevel(hostname);
-
-      const hackTime = ns.getHackTime(hostname);
-      const growTime = ns.getGrowTime(hostname);
-      const weakenTime = ns.getWeakenTime(hostname);
-      const hackChance = ns.hackAnalyzeChance(hostname);
-
-      // Calculate efficiency score using proper money-per-RAM-second metric
-      // This is the gold standard for target selection used by top community scripts
-
-      // Calculate hack percentage per thread (based on official Bitburner source)
-      const difficultyMult = (100 - minSecurityLevel) / 100;
-      const skillMult = (playerHackLevel - (hackLevel - 1)) / playerHackLevel;
-      // Using standard BitNode multiplier of 1 (adjust per BitNode if needed)
-      const hackPercentPerThread = Math.min(1, Math.max(0,
-        (difficultyMult * skillMult * 1.0) / 240));
-
-      if (hackPercentPerThread <= 0) return null; // Can't hack this server effectively
 
       // Calculate optimal hack percentage (typically 5% of max money for batching)
       const optimalHackPercent = Math.min(0.05, hackPercentPerThread * 100); // 5% or max possible
@@ -610,14 +670,11 @@ class BotnetUtilities {
       const totalThreads = hackThreadsNeeded + growThreadsNeeded + weakenHackThreads + weakenGrowThreads;
       const totalRAMCost = totalThreads * 1.75;
 
-      // Money gained per batch
-      const moneyGained = maxMoney * optimalHackPercent * hackChance;
-
       // HWGW operations run in parallel, so use the slowest operation time
       const batchCompletionTime = Math.max(hackTime, growTime, weakenTime);
 
-      // Calculate the gold standard metric: money per RAM-second
-      const efficiencyScore = (moneyGained / totalRAMCost) / (batchCompletionTime / 1000);
+      // Use money per second as the primary efficiency metric (money per second per GB RAM)
+      const efficiencyScore = moneyPerSecond / totalRAMCost;
 
       const isOptimal = currentMoneyRatio >= MONEY_OPTIMAL_RATIO &&
         securityLevel <= minSecurityLevel + SECURITY_OPTIMAL_THRESHOLD;
@@ -635,7 +692,7 @@ class BotnetUtilities {
         weakenTime,
         hackChance,
         efficiencyScore,
-        moneyPerSecond: (moneyGained / totalRAMCost) * 1000, // Money per RAM per second
+        moneyPerSecond,
         isOptimal
       };
     } catch (error) {
@@ -1444,6 +1501,11 @@ class BotnetBatchExecutor {
       const timing = BotnetUtilities.calculateProfessionalTiming(this.ns, target, BASE_TIME_DELAY, Date.now());
       const threads = BotnetUtilities.calculateHWGWThreads(this.ns, target, batchSize, this.config);
 
+      // DEBUG: Check timing values
+      const now = Date.now();
+      // this.ns.print(`DEBUG Timing: hackTime=${timing.hackTime}ms, batchDuration=${timing.batchDuration}ms`);
+      // this.ns.print(`DEBUG: now=${now}, expectedComplete=${now + timing.batchDuration + BATCH_TIMEOUT_BUFFER}`);
+
       const batchId = `${target}-${Date.now()}`;
       const batch: BatchTracker = {
         id: batchId,
@@ -1464,10 +1526,11 @@ class BotnetBatchExecutor {
       };
 
       // Launch all operations with proper timing
-      const hackPid = this.ns.exec('/remote/hk.js', server, threads.hackThreads, batchId, timing.hackStartDelay);
-      const growPid = this.ns.exec('/remote/gr.js', server, threads.growThreads, batchId, timing.growStartDelay);
-      const weakenHackPid = this.ns.exec('/remote/wk.js', server, threads.weakenHackThreads, batchId + '-hack', timing.weakenHackStartDelay);
-      const weakenGrowPid = this.ns.exec('/remote/wk.js', server, threads.weakenGrowThreads, batchId + '-grow', timing.weakenGrowStartDelay);
+      const batchStartTime = Date.now();
+      const hackPid = this.ns.exec('/remote/hk.js', server, threads.hackThreads, batchId, batchStartTime + timing.hackStartDelay);
+      const growPid = this.ns.exec('/remote/gr.js', server, threads.growThreads, batchId, batchStartTime + timing.growStartDelay);
+      const weakenHackPid = this.ns.exec('/remote/wk.js', server, threads.weakenHackThreads, batchId + '-hack', batchStartTime + timing.weakenHackStartDelay);
+      const weakenGrowPid = this.ns.exec('/remote/wk.js', server, threads.weakenGrowThreads, batchId + '-grow', batchStartTime + timing.weakenGrowStartDelay);
 
       if (hackPid && growPid && weakenHackPid && weakenGrowPid) {
         this.activeBatches.set(batchId, batch);
@@ -1617,12 +1680,14 @@ class BotnetTargetManager {
   private currentTarget: DynamicTarget | null;
   private lastEvaluationTime: number;
   private dynamicBatchSize: number;
+  private debugMode: boolean;
 
   constructor(
     ns: NS,
     logger: Logger,
     config: BotnetConfiguration,
-    targetPerformance: Map<string, TargetPerformance>
+    targetPerformance: Map<string, TargetPerformance>,
+    debugMode: boolean = false
   ) {
     this.ns = ns;
     this.logger = logger;
@@ -1631,6 +1696,7 @@ class BotnetTargetManager {
     this.currentTarget = null;
     this.lastEvaluationTime = 0;
     this.dynamicBatchSize = BASE_BATCH_SIZE;
+    this.debugMode = debugMode;
   }
 
   async evaluateAndSelectTarget(): Promise<void> {
@@ -1643,7 +1709,15 @@ class BotnetTargetManager {
       this.config.targetEvaluationInterval;
 
     // Only evaluate periodically to avoid excessive overhead
-    if (now - this.lastEvaluationTime < dynamicInterval) {
+    const forceReeval = this.currentTarget &&
+      (this.currentTarget.hostname === 'the-hub' ||
+        this.currentTarget.analysis.moneyPerSecond < 50000);
+
+    if (forceReeval && this.currentTarget) {
+      if (this.debugMode) {
+        this.ns.tprint(`🔄 FORCED RE-EVALUATION: Current target ${this.currentTarget.hostname} is suboptimal`);
+      }
+    } else if (now - this.lastEvaluationTime < dynamicInterval) {
       return;
     }
 
@@ -1654,7 +1728,7 @@ class BotnetTargetManager {
 
     // Analyze all potential targets
     for (const hostname of servers) {
-      const analysis = BotnetUtilities.analyzeTarget(this.ns, hostname, this.config);
+      const analysis = BotnetUtilities.analyzeTarget(this.ns, hostname, this.config, this.debugMode);
       if (analysis) {
         candidates.push({
           hostname,
@@ -1664,8 +1738,8 @@ class BotnetTargetManager {
       }
     }
 
-    // Sort by efficiency score
-    candidates.sort((a, b) => b.analysis.efficiencyScore - a.analysis.efficiencyScore);
+    // Sort by money per second (highest first) - prioritize the most profitable targets
+    candidates.sort((a, b) => b.analysis.moneyPerSecond - a.analysis.moneyPerSecond);
 
     if (candidates.length === 0) {
       this.logger.warn('No viable targets found');
@@ -1673,6 +1747,18 @@ class BotnetTargetManager {
     }
 
     const bestCandidate = candidates[0];
+
+    // Show top 3 candidates for comparison if forced re-evaluation
+    if (forceReeval && this.currentTarget && this.debugMode) {
+      this.ns.tprint(`🏆 TOP TARGETS:`);
+      for (let i = 0; i < Math.min(3, candidates.length); i++) {
+        const candidate = candidates[i];
+        const indicator = candidate.hostname === this.currentTarget.hostname ? ' ← CURRENT' : '';
+        this.ns.tprint(`   ${i + 1}. ${candidate.hostname}: $${this.ns.formatNumber(candidate.analysis.moneyPerSecond)}/s${indicator}`);
+      }
+    }
+
+    this.logger.info(`🎯 Best target: ${bestCandidate.hostname} ($${this.ns.formatNumber(bestCandidate.analysis.moneyPerSecond)}/s, ${Math.round(bestCandidate.analysis.hackTime / 1000)}s hack time)`);
 
     // Check if we should switch targets
     if (this.shouldSwitchTarget(bestCandidate)) {
@@ -1684,6 +1770,13 @@ class BotnetTargetManager {
 
       if (oldTarget !== bestCandidate.hostname) {
         const switchReason = this.getTargetSwitchReason(bestCandidate);
+        if (this.debugMode) {
+          this.ns.tprint(`🚀 ===== TARGET SWITCH =====`);
+          this.ns.tprint(`🚀 ${oldTarget} → ${bestCandidate.hostname}`);
+          this.ns.tprint(`🚀 Reason: ${switchReason}`);
+          this.ns.tprint(`🚀 New Money/s: $${this.ns.formatNumber(bestCandidate.analysis.moneyPerSecond)}/s`);
+          this.ns.tprint(`🚀 ========================`);
+        }
         this.logger.info(`🎯 TARGET SWITCH: ${oldTarget} → ${bestCandidate.hostname}`);
         this.logger.info(`   Reason: ${switchReason}`);
         this.logger.info(`   New target efficiency: ${bestCandidate.analysis.efficiencyScore.toFixed(1)}`);
@@ -1704,6 +1797,12 @@ class BotnetTargetManager {
     const improvementThreshold = utilizationRatio < 0.6 ?
       TARGET_IMPROVEMENT_THRESHOLD * 0.8 : // Lower bar when underutilized
       TARGET_IMPROVEMENT_THRESHOLD;
+
+    // Debug info for target switching decision
+    if (candidate.hostname !== this.currentTarget.hostname && this.debugMode) {
+      this.ns.tprint(`🤔 Evaluating switch: ${this.currentTarget.hostname} (${currentEfficiency.toFixed(1)}) vs ${candidate.hostname} (${candidateEfficiency.toFixed(1)})`);
+      this.ns.tprint(`🤔 Need ${improvementThreshold.toFixed(2)}x improvement, candidate is ${(candidateEfficiency / currentEfficiency).toFixed(2)}x`);
+    }
 
     // Switch if candidate is significantly better
     if (candidateEfficiency > currentEfficiency * improvementThreshold) {
@@ -2058,7 +2157,7 @@ class BotnetController {
     );
 
     this.targetManager = new BotnetTargetManager(
-      ns, this.logger, this.config, this.targetPerformance
+      ns, this.logger, this.config, this.targetPerformance, debugMode
     );
 
     this.batchExecutor = new BotnetBatchExecutor(
