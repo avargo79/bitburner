@@ -175,7 +175,7 @@ const DEFAULT_BOTNET_CONFIG: BotnetConfiguration = {
   maxBatches: 400,                  // Maximum overlapping batches
   maxRAMUtilization: 0.8,           // Use 80% of available RAM
   cycleTimingDelay: 1000,           // 1s interval between batch starts
-  maxEventsPerCycle: 100,           // Events processed per cycle
+  maxEventsPerCycle: 500,           // Events processed per cycle (increased from 100 to prevent backlog)
 
   // Target Management (4 parameters)
   targetServer: '',                 // Target server hostname (empty = auto-select)
@@ -234,7 +234,7 @@ class BotnetPerformanceTracker {
     return `│ ${content}`;
   }
 
-  async showDashboard(targetManager: BotnetTargetManager, dynamicMaxBatches?: number): Promise<void> {
+  async showDashboard(targetManager: BotnetTargetManager, dynamicMaxBatches?: number, eventQueueSize?: number): Promise<void> {
     const now = Date.now();
 
     // Show dashboard every cycle when interval is reached
@@ -270,6 +270,13 @@ class BotnetPerformanceTracker {
 
       this.ns.print('┌─ BOTNET PERFORMANCE DASHBOARD');
       this.ns.print(this.formatDashboardLine(`Runtime: ${uptime.toFixed(1)}min | Active Batches: ${batchCapacityText} | Events/Cycle: ${this.stats.eventsThisCycle}`));
+      
+      // CRITICAL FIX: Show event queue size with warning if high
+      if (eventQueueSize !== undefined) {
+        const queueWarning = eventQueueSize > 5000 ? ' ⚠️ HIGH' : eventQueueSize > 8000 ? ' 🚨 CRITICAL' : '';
+        this.ns.print(this.formatDashboardLine(`📥 Event Queue: ${eventQueueSize}${queueWarning}`));
+      }
+      
       if (isScalingDynamic) {
         this.ns.print(this.formatDashboardLine(`🔢 Dynamic Scaling: ${maxBatches} batches (${((maxBatches / this.config.maxBatches - 1) * 100).toFixed(0)}% vs base)`));
       }
@@ -1910,14 +1917,27 @@ class BotnetEventProcessor {
     this.stats = stats;
   }
 
+  /**
+   * Get current event queue size for monitoring
+   */
+  getEventQueueSize(): number {
+    return this.eventQueue.length;
+  }
+
   async processEvents(): Promise<void> {
     let eventsProcessed = 0;
     this.stats.eventsThisCycle = 0;
 
+    // CRITICAL FIX: Limit event queue size to prevent memory exhaustion
+    const MAX_QUEUE_SIZE = 10000; // Hard limit on queue size
+    const MAX_PORT_READS = 500;   // Max events to read from port per cycle
+
     // Read real events from port 20 (published by remote scripts)
     const port = this.ns.getPortHandle(20);
     let eventsRead = 0;
-    while (!port.empty() && eventsProcessed < this.config.maxEventsPerCycle) {
+    
+    // CRITICAL FIX: Drain port aggressively to prevent port overflow
+    while (!port.empty() && eventsRead < MAX_PORT_READS && this.eventQueue.length < MAX_QUEUE_SIZE) {
       const rawEvent = port.read() as string;
       this.logger.debug(`Raw event received: ${rawEvent}`);
       const event = this.parseEvent(rawEvent);
@@ -1928,8 +1948,23 @@ class BotnetEventProcessor {
       }
     }
 
+    // CRITICAL FIX: Warn if queue is getting too large
+    if (this.eventQueue.length > MAX_QUEUE_SIZE * 0.8) {
+      this.logger.warn(`⚠️ Event queue near capacity: ${this.eventQueue.length}/${MAX_QUEUE_SIZE} - consider reducing maxBatches`);
+    }
+
+    // CRITICAL FIX: Drain port completely if overflowing (discard excess to prevent crash)
+    let discardedEvents = 0;
+    while (!port.empty() && this.eventQueue.length >= MAX_QUEUE_SIZE) {
+      port.read(); // Discard event
+      discardedEvents++;
+    }
+    if (discardedEvents > 0) {
+      this.logger.error(`🚨 EMERGENCY: Discarded ${discardedEvents} events - event queue at capacity! Reduce maxBatches immediately.`);
+    }
+
     if (eventsRead > 0) {
-      this.logger.info(`Read ${eventsRead} events from port 20`);
+      this.logger.info(`Read ${eventsRead} events from port 20 (queue: ${this.eventQueue.length})`);
     }
 
     // Process a limited number of events per cycle to maintain performance
@@ -2472,11 +2507,18 @@ class BotnetController {
     // Calculate theoretical maximum batches (use configured RAM utilization for safety)
     const theoreticalMaxBatches = Math.floor((availableRAMForHWGW * this.config.maxRAMUtilization) / batchRAMCost);
 
-    // Apply safety limits to prevent game-breaking scenarios
+    // CRITICAL FIX: Apply strict safety limits to prevent browser crashes
+    // Even with massive RAM, limit batches to prevent event queue overflow
     const safeMinBatches = Math.max(50, this.config.maxBatches); // Never go below reasonable minimum
-    const safeMaxBatches = Math.min(theoreticalMaxBatches, 10000); // Cap at reasonable maximum
+    const ABSOLUTE_MAX_BATCHES = 2000; // HARD CAP to prevent browser crashes
+    const safeMaxBatches = Math.min(theoreticalMaxBatches, ABSOLUTE_MAX_BATCHES); // Cap at absolute maximum
 
-    const dynamicMaxBatches = Math.max(safeMinBatches, safeMaxBatches);
+    const dynamicMaxBatches = Math.max(safeMinBatches, Math.min(safeMaxBatches, ABSOLUTE_MAX_BATCHES));
+
+    // Warn if we're hitting the absolute cap
+    if (theoreticalMaxBatches > ABSOLUTE_MAX_BATCHES) {
+      this.logger.warn(`⚠️ Theoretical max batches (${theoreticalMaxBatches}) exceeds safety limit - capping at ${ABSOLUTE_MAX_BATCHES} to prevent browser crashes`);
+    }
 
     // Smart logging - only log when batch count actually changes significantly
     const batchCountChanged = Math.abs(dynamicMaxBatches - this.lastDynamicBatchCount) > Math.max(50, this.config.maxBatches * 0.1);
@@ -2579,7 +2621,11 @@ class BotnetController {
         await this.executePrepSystem();
 
         // Show dashboard with dynamic batch information
-        await this.performanceTracker.showDashboard(this.targetManager, dynamicMaxBatches);
+        await this.performanceTracker.showDashboard(
+          this.targetManager, 
+          dynamicMaxBatches, 
+          this.eventProcessor.getEventQueueSize()
+        );
 
         // Wait before next cycle
         await this.ns.sleep(this.config.mainLoopDelay);
