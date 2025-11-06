@@ -270,13 +270,13 @@ class BotnetPerformanceTracker {
 
       this.ns.print('┌─ BOTNET PERFORMANCE DASHBOARD');
       this.ns.print(this.formatDashboardLine(`Runtime: ${uptime.toFixed(1)}min | Active Batches: ${batchCapacityText} | Events/Cycle: ${this.stats.eventsThisCycle}`));
-      
+
       // CRITICAL FIX: Show event queue size with warning if high
       if (eventQueueSize !== undefined) {
         const queueWarning = eventQueueSize > 5000 ? ' ⚠️ HIGH' : eventQueueSize > 8000 ? ' 🚨 CRITICAL' : '';
         this.ns.print(this.formatDashboardLine(`📥 Event Queue: ${eventQueueSize}${queueWarning}`));
       }
-      
+
       if (isScalingDynamic) {
         this.ns.print(this.formatDashboardLine(`🔢 Dynamic Scaling: ${maxBatches} batches (${((maxBatches / this.config.maxBatches - 1) * 100).toFixed(0)}% vs base)`));
       }
@@ -1935,7 +1935,7 @@ class BotnetEventProcessor {
     // Read real events from port 20 (published by remote scripts)
     const port = this.ns.getPortHandle(20);
     let eventsRead = 0;
-    
+
     // CRITICAL FIX: Drain port aggressively to prevent port overflow
     while (!port.empty() && eventsRead < MAX_PORT_READS && this.eventQueue.length < MAX_QUEUE_SIZE) {
       const rawEvent = port.read() as string;
@@ -2310,6 +2310,93 @@ class BotnetController {
   }
 
   /**
+   * Attempt to crack a single server using available exploits
+   * Returns true if root access was gained (or already had), false otherwise
+   */
+  private attemptCrackServer(hostname: string): boolean {
+    // Skip if already rooted
+    if (this.ns.hasRootAccess(hostname)) {
+      return true;
+    }
+
+    // Check if we meet hacking level requirement
+    const server = this.ns.getServer(hostname);
+    if (server.requiredHackingSkill && server.requiredHackingSkill > this.ns.getPlayer().skills.hacking) {
+      return false; // Can't hack yet
+    }
+
+    let portsOpened = 0;
+    const portsRequired = server.numOpenPortsRequired || 0;
+
+    // Try all available port-opening programs
+    try { this.ns.brutessh(hostname); portsOpened++; } catch {}
+    try { this.ns.ftpcrack(hostname); portsOpened++; } catch {}
+    try { this.ns.relaysmtp(hostname); portsOpened++; } catch {}
+    try { this.ns.httpworm(hostname); portsOpened++; } catch {}
+    try { this.ns.sqlinject(hostname); portsOpened++; } catch {}
+
+    // Check if we have enough ports open
+    if (portsOpened < portsRequired) {
+      return false; // Not enough ports
+    }
+
+    // Attempt nuke
+    try {
+      this.ns.nuke(hostname);
+      return this.ns.hasRootAccess(hostname);
+    } catch (error) {
+      this.logger.warn(`Failed to nuke ${hostname}: ${error}`);
+      return false;
+    }
+  }
+
+  /**
+   * Scan network and automatically crack all available servers
+   * Runs periodically to catch new servers and level-ups
+   */
+  private lastCrackingTime: number = 0;
+  private readonly CRACKING_INTERVAL = 60000; // Check every 60 seconds
+
+  async autoCrackServers(): Promise<void> {
+    const now = Date.now();
+    
+    // Only run every 60 seconds
+    if (now - this.lastCrackingTime < this.CRACKING_INTERVAL) {
+      return;
+    }
+
+    this.lastCrackingTime = now;
+
+    // Get all servers in network
+    const allServers = this.getAllAccessibleServers();
+    const unrootedServers = allServers.filter(s => !this.ns.hasRootAccess(s));
+
+    if (unrootedServers.length === 0) {
+      return; // All servers already rooted
+    }
+
+    let crackedCount = 0;
+    let failedCount = 0;
+
+    for (const server of unrootedServers) {
+      const success = this.attemptCrackServer(server);
+      if (success) {
+        crackedCount++;
+        this.logger.info(`🔓 Cracked server: ${server}`);
+      } else {
+        failedCount++;
+      }
+    }
+
+    if (crackedCount > 0) {
+      this.logger.info(`🔐 Auto-crack complete: ${crackedCount} servers rooted, ${failedCount} failed (need more ports/levels)`);
+      
+      // Re-deploy scripts to newly rooted servers
+      await this.deployRemoteScripts();
+    }
+  }
+
+  /**
    * Manage share scripts on servers with excess RAM
    */
   async manageShareScripts(): Promise<void> {
@@ -2542,6 +2629,10 @@ class BotnetController {
     // Deploy remote scripts to all servers FIRST
     await this.deployRemoteScripts();
 
+    // AUTO-CRACK: Immediately attempt to root all available servers
+    this.logger.info('🔐 Scanning network for unrooted servers...');
+    await this.autoCrackServers();
+
     // Initialize target if not set
     if (!this.config.targetServer) {
       await this.targetManager.evaluateAndSelectTarget();
@@ -2617,13 +2708,16 @@ class BotnetController {
         // Manage share scripts on servers with excess RAM
         await this.manageShareScripts();
 
+        // AUTO-CRACK: Periodically scan and root new servers
+        await this.autoCrackServers();
+
         // Execute prep system for non-targeted servers needing preparation  
         await this.executePrepSystem();
 
         // Show dashboard with dynamic batch information
         await this.performanceTracker.showDashboard(
-          this.targetManager, 
-          dynamicMaxBatches, 
+          this.targetManager,
+          dynamicMaxBatches,
           this.eventProcessor.getEventQueueSize()
         );
 
