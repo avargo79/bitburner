@@ -576,6 +576,7 @@ export default class CasinoBotV2 {
 
 // MAIN SCRIPT - Ultra-fast casino automation with maximum speed
 export async function main(ns: NS): Promise<void> {
+  ns.disableLog('ALL');
   const debugMode = ns.args.includes('debug');
 
   // Auto-tail on every startup

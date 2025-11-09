@@ -22,22 +22,22 @@ export async function main(ns: NS): Promise<void> {
                 ns.tprint("Training Strength");
                 currentState = STATES.TRAINING_STRENGTH
             }
-        } else if (player.skills.defense < 30) {
+        } else if (player.skills.defense < 50) {
             if (currentState != STATES.TRAINING_DEFENSE && ns.singularity.gymWorkout("Powerhouse Gym", "def")) {
                 ns.tprint("Training Defense");
                 currentState = STATES.TRAINING_DEFENSE
             }
-        } else if (player.skills.dexterity < 30) {
+        } else if (player.skills.dexterity < 50) {
             if (currentState != STATES.TRAINING_DEXTERITY && ns.singularity.gymWorkout("Powerhouse Gym", "dex")) {
                 ns.tprint("Training Dexterity");
                 currentState = STATES.TRAINING_DEXTERITY
             }
-        } else if (player.skills.agility < 30) {
+        } else if (player.skills.agility < 50) {
             if (currentState != STATES.TRAINING_AGILITY && ns.singularity.gymWorkout("Powerhouse Gym", "agi")) {
                 ns.tprint("Training Agility");
                 currentState = STATES.TRAINING_AGILITY
             }
-        } else if (player.skills.hacking < 30) {
+        } else if (player.skills.hacking < 20) {
             if (currentState != STATES.STUDY && ns.singularity.universityCourse("Rothman University", "Computer Science")) {
                 ns.tprint("Studying Hacking");
                 currentState = STATES.STUDY
@@ -56,7 +56,8 @@ export async function main(ns: NS): Promise<void> {
             ns.tprint("Gambling at the casino until 10b");
             ns.exec("casino-bot.js", "home", 1);
             ns.exec("contracts.js", "home", 1);
-            // ns.exec("server-manager.js", "home", 1);
+            ns.exec("gangs.js", "home", 1);
+            ns.exec("server-manager.js", "home", 1);
             ns.exec("botnet.js", "home", 1);
             break;
         }

@@ -1,0 +1,22 @@
+## 1. Implementation
+- [ ] 1.1 Scaffold new script: src/x.ts
+- [ ] 1.2 Implement React dialog component
+- [ ] 1.3 Integrate dialog with Bitburner UI (open on script run)
+- [ ] 1.4 Add menu-driven navigation for game/script actions
+- [ ] 1.5 Implement "Stage 0" button: train combat stats to 50, then mug until $200k
+- [ ] 1.6 Add additional menu buttons for:
+      - Stat training (choose stat/target)
+      - Crime selection (choose crime/goal)
+      - Script runner (pick and launch script)
+      - Server manager (scan/analyze/deploy)
+      - Contract solver
+      - Faction/augmentation progress
+      - Gang/corp automation
+      - Stock automation
+      - Hacknet manager
+      - Casino automation
+      - Reputation farming
+      - Scheduler for recurring tasks
+- [ ] 1.7 Validate dialog opens and interacts as expected
+- [ ] 1.8 Document usage and extensibility
+- [ ] 1.9 Validate with openspec strict mode

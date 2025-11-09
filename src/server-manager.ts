@@ -3,15 +3,19 @@ import { AutocompleteData, NS } from "@ns";
 interface ServerStats {
     totalServers: number;
     rootedServers: number;
-    backdooredServers: number;
     purchasedServers: number;
     totalRam: number;
+    purchasedRam: number;
+    lowestRam: number;
+    highestRam: number;
+    nextUpgradeCost: number;
+    serversAtTarget: number;
 }
 
 const CONFIG = {
     PURCHASED_SERVER_START_RAM: 2,
     MAX_PURCHASED_SERVERS: 25,
-    TARGET_RAM_POWER: 20, // 2^20 = 1TB max per server
+    TARGET_RAM_POWER: 12, // 2^12 = 4096GB = 4TB max per server
 };
 
 export function autocomplete(data: AutocompleteData, _args: any) {
@@ -21,31 +25,20 @@ export function autocomplete(data: AutocompleteData, _args: any) {
 export async function main(ns: NS): Promise<void> {
     ns.disableLog('ALL');
 
-    const args = ns.flags([
-        ['no-backdoors', false],
-        ['no-dashboard', false]
-    ]);
-
-    const enableBackdoors = !args['no-backdoors'] && !!ns.singularity;
-    const showDashboard = !args['no-dashboard'];
-
     while (true) {
-        const stats = await manageAllServers(ns, enableBackdoors);
-        
-        if (showDashboard) {
-            displayStats(ns, stats);
-        }
+        const stats = await manageAllServers(ns);
 
-        await ns.sleep(5000);
+        displayStats(ns, stats);
+
+        await ns.sleep(1000);
     }
 }
 
-async function manageAllServers(ns: NS, enableBackdoors: boolean): Promise<ServerStats> {
+async function manageAllServers(ns: NS): Promise<ServerStats> {
     const allServers = getAllServers(ns);
     const playerHackLevel = ns.getHackingLevel();
-    
+
     let rootedCount = 0;
-    let backdooredCount = 0;
     let totalRam = 0;
     let purchasedCount = 0;
 
@@ -65,18 +58,38 @@ async function manageAllServers(ns: NS, enableBackdoors: boolean): Promise<Serve
                 rootedCount++;
             }
         }
+    }
 
-        // Backdoor if possible
-        if (enableBackdoors && 
-            server.hasAdminRights && 
-            !server.backdoorInstalled &&
-            (server.requiredHackingSkill || 0) <= playerHackLevel &&
-            hostname !== 'home') {
-            
-            if (await backdoorServer(ns, hostname)) {
-                backdooredCount++;
-            }
+    // Collect purchased server stats
+    const purchasedServers = ns.getPurchasedServers();
+    const maxRam = Math.pow(2, CONFIG.TARGET_RAM_POWER);
+    let purchasedRam = 0;
+    let lowestRam = Infinity;
+    let highestRam = 0;
+    let serversAtTarget = 0;
+    let lowestRamServer: string | null = null;
+
+    for (const hostname of purchasedServers) {
+        const server = ns.getServer(hostname);
+        const currentRam = server.maxRam;
+        purchasedRam += currentRam;
+
+        if (currentRam < lowestRam) {
+            lowestRam = currentRam;
+            lowestRamServer = hostname;
         }
+        if (currentRam > highestRam) {
+            highestRam = currentRam;
+        }
+        if (currentRam >= maxRam) {
+            serversAtTarget++;
+        }
+    }
+
+    // Calculate next upgrade cost
+    let nextUpgradeCost = 0;
+    if (lowestRamServer && lowestRam < maxRam) {
+        nextUpgradeCost = ns.getPurchasedServerUpgradeCost(lowestRamServer, lowestRam * 2);
     }
 
     // Manage purchased servers
@@ -85,9 +98,13 @@ async function manageAllServers(ns: NS, enableBackdoors: boolean): Promise<Serve
     return {
         totalServers: allServers.length,
         rootedServers: allServers.filter(h => ns.getServer(h).hasAdminRights).length,
-        backdooredServers: allServers.filter(h => ns.getServer(h).backdoorInstalled).length,
         purchasedServers: purchasedCount,
-        totalRam
+        totalRam,
+        purchasedRam,
+        lowestRam: lowestRam === Infinity ? 0 : lowestRam,
+        highestRam,
+        nextUpgradeCost,
+        serversAtTarget
     };
 }
 
@@ -132,37 +149,13 @@ function rootServer(ns: NS, hostname: string): boolean {
     }
 }
 
-async function backdoorServer(ns: NS, hostname: string): Promise<boolean> {
-    if (!ns.singularity) return false;
-    
-    try {
-        const path = findPath(ns, hostname);
-        if (!path) return false;
-
-        // Navigate to server
-        for (const server of path.slice(1)) {
-            await ns.singularity.connect(server);
-        }
-
-        // Install backdoor
-        await ns.singularity.installBackdoor();
-        
-        // Return home
-        await ns.singularity.connect('home');
-        return true;
-    } catch (e) {
-        try { await ns.singularity.connect('home'); } catch (e2) { /* ignore */ }
-        return false;
-    }
-}
-
 function findPath(ns: NS, target: string): string[] | null {
     const visited = new Set<string>();
     const queue = [{ hostname: 'home', path: ['home'] }];
 
     while (queue.length > 0) {
         const { hostname, path } = queue.shift()!;
-        
+
         if (hostname === target) return path;
         if (visited.has(hostname)) continue;
         visited.add(hostname);
@@ -187,36 +180,78 @@ async function managePurchasedServers(ns: NS): Promise<void> {
     if (purchasedServers.length < CONFIG.MAX_PURCHASED_SERVERS) {
         const startRam = Math.pow(2, CONFIG.PURCHASED_SERVER_START_RAM);
         const cost = ns.getPurchasedServerCost(startRam);
-        
+
         if (playerMoney > cost * 2) { // Keep some money buffer
             const name = `pserv-${purchasedServers.length}`;
             ns.purchaseServer(name, startRam);
         }
     }
 
-    // Upgrade one server per cycle if affordable
-    for (const hostname of purchasedServers) {
-        const server = ns.getServer(hostname);
-        const currentRam = server.maxRam;
+    // Upgrade the server with lowest RAM if affordable
+    if (purchasedServers.length > 0) {
+        // Find server with lowest RAM that can be upgraded
         const maxRam = Math.pow(2, CONFIG.TARGET_RAM_POWER);
-        
-        if (currentRam < maxRam) {
-            const newRam = currentRam * 2;
-            const cost = ns.getPurchasedServerUpgradeCost(hostname, newRam);
-            
-            if (cost > 0 && playerMoney > cost * 2) {
-                ns.upgradePurchasedServer(hostname, newRam);
-                break; // Only upgrade one per cycle
+        let lowestRamServer: string | null = null;
+        let lowestRam = Infinity;
+
+        for (const hostname of purchasedServers) {
+            const server = ns.getServer(hostname);
+            const currentRam = server.maxRam;
+
+            if (currentRam < maxRam && currentRam < lowestRam) {
+                lowestRam = currentRam;
+                lowestRamServer = hostname;
             }
+        }
+
+        // If no server needs upgrading, all are at target - exit script
+        if (!lowestRamServer) {
+            ns.tprint(`SUCCESS: All ${purchasedServers.length} purchased servers have reached target RAM (${ns.formatRam(maxRam)})`);
+            ns.exit();
+        }
+
+        // Upgrade the lowest RAM server if affordable
+        const newRam = lowestRam * 2;
+        const cost = ns.getPurchasedServerUpgradeCost(lowestRamServer, newRam);
+
+        if (cost > 0 && playerMoney > cost * 2) {
+            ns.upgradePurchasedServer(lowestRamServer, newRam);
         }
     }
 }
 
 function displayStats(ns: NS, stats: ServerStats): void {
+    const maxRam = Math.pow(2, CONFIG.TARGET_RAM_POWER);
+    const playerMoney = ns.getServerMoneyAvailable('home');
+    const canAffordUpgrade = stats.nextUpgradeCost > 0 && playerMoney > stats.nextUpgradeCost * 2;
+
     ns.clearLog();
-    ns.print('┌─ SERVER MANAGER');
-    ns.print(`│ Network: ${stats.totalServers} total | ${stats.rootedServers} rooted | ${stats.backdooredServers} backdoored`);
-    ns.print(`│ Purchased: ${stats.purchasedServers}/${CONFIG.MAX_PURCHASED_SERVERS} servers`);
-    ns.print(`│ RAM: ${ns.formatNumber(stats.totalRam)}GB total`);
-    ns.print('└─────────────────────────');
+    ns.print('┌─────────────────────────────────────────');
+    ns.print('│ SERVER MANAGER');
+    ns.print('├─────────────────────────────────────────');
+    ns.print(`│ Network Servers: ${stats.totalServers} total | ${stats.rootedServers} rooted`);
+    ns.print(`│ Total RAM: ${ns.formatRam(stats.totalRam)}`);
+    ns.print('├─────────────────────────────────────────');
+    ns.print(`│ Purchased Servers: ${stats.purchasedServers}/${CONFIG.MAX_PURCHASED_SERVERS}`);
+
+    if (stats.purchasedServers > 0) {
+        ns.print(`│ Purchased RAM: ${ns.formatRam(stats.purchasedRam)}`);
+        ns.print(`│ RAM Range: ${ns.formatRam(stats.lowestRam)} - ${ns.formatRam(stats.highestRam)}`);
+        ns.print(`│ Target: ${ns.formatRam(maxRam)} (${stats.serversAtTarget}/${stats.purchasedServers} complete)`);
+
+        if (stats.nextUpgradeCost > 0) {
+            const upgradeStatus = canAffordUpgrade ? '✓' : '✗';
+            ns.print('├─────────────────────────────────────────');
+            ns.print(`│ Next Upgrade: ${ns.formatRam(stats.lowestRam)} → ${ns.formatRam(stats.lowestRam * 2)}`);
+            ns.print(`│ Cost: ${ns.formatNumber(stats.nextUpgradeCost)} ${upgradeStatus}`);
+            ns.print(`│ Money: ${ns.formatNumber(playerMoney)}`);
+        }
+    } else if (stats.purchasedServers === 0) {
+        const startRam = Math.pow(2, CONFIG.PURCHASED_SERVER_START_RAM);
+        const cost = ns.getPurchasedServerCost(startRam);
+        const canBuy = playerMoney > cost * 2;
+        ns.print(`│ First Server Cost: ${ns.formatNumber(cost)} ${canBuy ? '✓' : '✗'}`);
+    }
+
+    ns.print('└─────────────────────────────────────────');
 }
