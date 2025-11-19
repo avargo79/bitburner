@@ -13,6 +13,7 @@ enum STATES {
 }
 
 export async function main(ns: NS): Promise<void> {
+    ns.disableLog("ALL");
     let currentState = STATES.START as STATES;
 
     while (true) {
@@ -37,7 +38,7 @@ export async function main(ns: NS): Promise<void> {
                 ns.tprint("Training Agility");
                 currentState = STATES.TRAINING_AGILITY
             }
-        } else if (player.skills.hacking < 20) {
+        } else if (player.skills.hacking < 10) {
             if (currentState != STATES.STUDY && ns.singularity.universityCourse("Rothman University", "Computer Science")) {
                 ns.tprint("Studying Hacking");
                 currentState = STATES.STUDY
@@ -56,7 +57,9 @@ export async function main(ns: NS): Promise<void> {
             ns.tprint("Gambling at the casino until 10b");
             ns.exec("casino-bot.js", "home", 1);
             ns.exec("contracts.js", "home", 1);
+            ns.exec("sleeve.js", "home", 1);
             ns.exec("gangs.js", "home", 1);
+            // ns.exec("corp.js", "home", 1);
             ns.exec("server-manager.js", "home", 1);
             ns.exec("botnet.js", "home", 1);
             break;

@@ -1,4 +1,5 @@
 // @ts-nocheck
+// Script Version: v0.2.0
 /**
  * Corporation Autopilot Script
  * Based on: https://github.com/mirkoconsiglio/Bitburner-scripts
@@ -19,6 +20,9 @@
  */
 
 import type { NS } from '@ns';
+
+const SCRIPT_VERSION = '0.2.0';
+const DEBUG_CONFIG = { enabled: false };
 
 // Employee Wellness Configuration
 const WELLNESS_CONFIG = {
@@ -72,6 +76,26 @@ const ADVERT_CONFIG = {
     popularityAwarenessTarget: 0.85,
     popularityFloor: 5e3,
     minAdVertSpacing: 2,
+};
+
+const SMART_SUPPLY_CONFIG = {
+    fundsBufferMultiplier: 1.25,
+    reservePerCityMultiplier: 1.1,
+    minReserveAfterUnlock: 35e9,
+    minCitiesBeforeUnlock: 1,
+    profitFloor: 5e6,
+    requirePositiveProfit: true,
+    waitLogEvery: 5,
+    maxWaitCycles: 120,
+};
+
+const BOOTSTRAP_CONFIG = {
+    minFundsPerCity: 25e9,
+    materialBudgetPerEmployee: 2e9,
+    waitLogEvery: 5,
+    bootstrapFraction: 0.6,
+    absoluteMinimum: 6e9,
+    maxWaitCycles: 120,
 };
 
 const DEFAULT_OFFICE_DISTRIBUTIONS = {
@@ -158,8 +182,14 @@ function getSupportMultiplier(division, stage) {
  * @returns {Promise<void>}
  */
 export async function main(ns: NS): Promise<void> {
+    ns.clearLog();
+    const flags = ns.flags([
+        ['debug', false],
+    ]);
+    DEBUG_CONFIG.enabled = Boolean(flags.debug);
     ns.disableLog('ALL');
     initDashboard(ns);
+    ns.tprint(`corp2 initializing version ${SCRIPT_VERSION} (debug=${DEBUG_CONFIG.enabled})`);
     const corp = ns.corporation;
 
     // Check if Corporation API is available
@@ -226,6 +256,10 @@ export async function main(ns: NS): Promise<void> {
     const jobs = getJobs();
     const division1 = 'Agriculture';
     const division2 = 'Tobacco';
+    const smartSupplyReady = tryUnlockSmartSupplyEarly(ns);
+    if (!smartSupplyReady) {
+        ns.print(`Smart Supply too expensive to buy upfront; continuing bootstrap and deferring the unlock.`);
+    }
     // Part 1
     await part1(ns, cities, jobs, division1);
     // Part 2
@@ -249,22 +283,20 @@ export async function part1(ns, cities, jobs, division) {
     const plan = getDivisionPlan(division);
     const starterTemplate = getOfficeTemplate(division, 'starter') ?? { size: 3, distribution: DEFAULT_OFFICE_DISTRIBUTIONS.starter };
     const foundationMultiplier = plan.supportStages?.foundation ?? MATERIAL_CONFIG.stageMultipliers.foundation;
+    const orderedCities = prioritizeCities(cities, plan.mainCity);
+    debugLog(ns, 'Part1 start', { division, funds: corp.getCorporation().funds, orderedCities });
     // Expand to Agriculture division
     await expandIndustry(ns, 'Agriculture', division);
-    // Unlock Smart Supply
-    await unlockUpgrade(ns, 'Smart Supply');
-    // Turn on Smart Supply (requires Warehouse API access)
-    try {
-        corp.setSmartSupply(division, 'Sector-12', true);
-    } catch {
-        ns.print('Smart Supply purchased but API not available yet (requires Warehouse API)');
-    }
-    // Expand
-    for (let city of cities) {
+    // Expand city-by-city, deferring Smart Supply until funds and profits stabilize
+    for (let index = 0; index < orderedCities.length; index++) {
+        const city = orderedCities[index];
+        await waitForCityBootstrapFunds(ns, division, city, starterTemplate);
+        debugLog(ns, 'Part1 city setup', { division, city });
         // Expand to city
         await expandCity(ns, division, city);
         // Purchase warehouse
         await purchaseWarehouse(ns, division, city);
+        enableSmartSupply(ns, division, city, true);
         const starterSize = starterTemplate.size ?? 3;
         const positions = buildPositionsWithInterns(jobs, starterSize, starterTemplate.distribution ?? DEFAULT_OFFICE_DISTRIBUTIONS.starter);
         await upgradeOffice(ns, division, city, starterSize, positions);
@@ -272,9 +304,25 @@ export async function part1(ns, cities, jobs, division) {
         corp.sellMaterial(division, city, 'Food', 'MAX', 'MP');
         corp.sellMaterial(division, city, 'Plants', 'MAX', 'MP');
         await stockSupportMaterials(ns, division, city, foundationMultiplier);
+        const builtCities = index + 1;
+        const remainingCities = orderedCities.length - builtCities;
+        await ensureSmartSupplyUnlocked(ns, division, {
+            builtCities,
+            remainingCities,
+            templateSize: starterTemplate.size,
+            reason: `post-${city}`,
+            wait: false,
+        });
     }
+    await ensureSmartSupplyUnlocked(ns, division, {
+        builtCities: orderedCities.length,
+        remainingCities: 0,
+        templateSize: starterTemplate.size,
+        reason: 'post-foundation',
+        wait: true,
+    });
     // Upgrade warehouse upto level 2
-    for (let city of cities) {
+    for (let city of orderedCities) {
         await upgradeWarehouseUpto(ns, division, city, 2);
     }
     // Hire advert
@@ -291,6 +339,13 @@ export async function part1(ns, cities, jobs, division) {
  */
 export async function part2(ns, cities, jobs, division) {
     const branchTemplate = getOfficeTemplate(division, 'branch') ?? { size: 9, distribution: DEFAULT_OFFICE_DISTRIBUTIONS.branch };
+    await ensureSmartSupplyUnlocked(ns, division, {
+        builtCities: getDivisionSafe(ns, division)?.cities?.length ?? 0,
+        remainingCities: 0,
+        templateSize: branchTemplate.size,
+        reason: 'pre-part2-scaling',
+        wait: true,
+    });
     // Get upgrades
     let upgrades = [
         { name: 'FocusWires', level: 2 },
@@ -359,6 +414,7 @@ export async function part3(ns, cities, jobs, division, mainCity = null) {
         await expandCity(ns, division, city);
         // Purchase warehouse
         await purchaseWarehouse(ns, division, city);
+        enableSmartSupply(ns, division, city, true);
         if (city === productCity) {
             const hqSize = hqTemplate.size ?? 30;
             const positions = buildPositionsWithInterns(jobs, hqSize, hqTemplate.distribution ?? DEFAULT_OFFICE_DISTRIBUTIONS.hq, { forceHighInterns: shouldUseHighInternRatio(ns, division, city) });
@@ -511,12 +567,19 @@ export async function autopilot(ns, cities, jobs, division, mainCity = null) {
         // If public
         if (corpStats.public) {
             // Sell a small amount of shares when they amount to more cash than we have on hand
-            if (corpStats.shareSaleCooldown <= 0 &&
-                corpStats.sharePrice * 1e6 > ns.getPlayer().money) corp.sellShares(1e6);
-            // Buyback shares when we can
-            else if (corpStats.issuedShares > 0 &&
-                ns.getPlayer().money > 2 * corpStats.issuedShares * corpStats.sharePrice)
-                corp.buyBackShares(corpStats.issuedShares);
+            const sellAmount = Math.min(1e6, Math.max(0, corpStats.numShares));
+            if (sellAmount > 0 && corpStats.shareSaleCooldown <= 0 &&
+                corpStats.sharePrice * sellAmount > ns.getPlayer().money) {
+                corp.sellShares(sellAmount);
+            }
+            // Buyback shares when we can (uses corporation funds, not player funds)
+            else if (corpStats.issuedShares > 0) {
+                const buybackCost = corpStats.issuedShares * corpStats.sharePrice;
+                const corpFunds = corpStats.funds;
+                if (corpFunds > buybackCost * 1.1) {
+                    corp.buyBackShares(corpStats.issuedShares);
+                }
+            }
             // Check if we can unlock Shady Accounting
             try {
                 const cost1 = corp.getUnlockCost('Shady Accounting');
@@ -593,7 +656,7 @@ function renderDashboard(ns, payload) {
     const { corpStats, divisionInfo, telemetry, products } = payload;
     ns.clearLog();
     const lines = [];
-    lines.push('=== Corporation Autopilot Dashboard ===');
+    lines.push(`=== Corporation Autopilot Dashboard v${SCRIPT_VERSION} ===`);
     lines.push(`Corp  | Funds ${formatMoney(ns, corpStats.funds)} | Profit ${formatMoney(ns, corpStats.revenue - corpStats.expenses)} | Research ${formatNumber(ns, divisionInfo.researchPoints)}`);
     const ratio = telemetry?.latest?.ratio ?? 0;
     const ratioTrend = telemetry?.ratioTrend ?? 0;
@@ -615,6 +678,16 @@ function renderDashboard(ns, payload) {
     const uptimeMinutes = (Date.now() - DASHBOARD_STATE.startTime) / 60000;
     lines.push(`Uptime| ${uptimeMinutes.toFixed(1)} min`);
     for (const line of lines) ns.print(line);
+}
+
+function debugLog(ns, message, detail) {
+    if (!DEBUG_CONFIG.enabled) return;
+    const suffix = detail === undefined ? '' : (typeof detail === 'string' ? ` ${detail}` : ` ${JSON.stringify(detail)}`);
+    const line = `[DEBUG] ${message}${suffix}`;
+    ns.print(line);
+    try {
+        ns.tprint(`corp2 ${line}`);
+    } catch { /* ignore tprint errors (e.g., tail-only) */ }
 }
 
 function trackProductInvestment(name, design, marketing) {
@@ -799,9 +872,11 @@ async function moneyForAmount(ns, amount) {
 function hireMaxEmployees(ns, division, city) {
     const corp = ns.corporation;
     ns.print(`Hiring employees for ${division} (${city})`);
+    debugLog(ns, 'hireMaxEmployees start', { division, city });
     while (corp.getOffice(division, city).numEmployees < corp.getOffice(division, city).size) {
         corp.hireEmployee(division, city);
     }
+    debugLog(ns, 'hireMaxEmployees complete', { division, city, size: corp.getOffice(division, city).size });
 }
 
 /**
@@ -814,10 +889,12 @@ function hireMaxEmployees(ns, division, city) {
 async function upgradeUpto(ns, upgrades) {
     const corp = ns.corporation;
     for (let upgrade of upgrades) {
+        debugLog(ns, 'upgradeUpto target', { upgrade: upgrade.name, level: upgrade.level });
         while (corp.getUpgradeLevel(upgrade.name) < upgrade.level) {
             await moneyFor(ns, corp.getUpgradeLevelCost, upgrade.name);
             corp.levelUpgrade(upgrade.name);
             ns.print(`Upgraded ${upgrade.name} to level ${corp.getUpgradeLevel(upgrade.name)}`);
+            debugLog(ns, 'upgradeUpto tick', { upgrade: upgrade.name, level: corp.getUpgradeLevel(upgrade.name) });
         }
     }
 }
@@ -833,23 +910,46 @@ async function upgradeUpto(ns, upgrades) {
  */
 async function buyMaterialsUpto(ns, division, city, materials) {
     const corp = ns.corporation;
+    debugLog(ns, 'buyMaterialsUpto enter', { division, city, materials });
+    logMaterialStatus(ns, division, city, materials, 'pre-purchase');
+    const fallbackMaterials = [];
     for (let material of materials) {
-        const curQty = corp.getMaterial(division, city, material.name).qty;
-        if (curQty < material.qty) {
-            ns.print(`Buying ${material.name} for ${division} (${city})`);
-            corp.buyMaterial(division, city, material.name, (material.qty - curQty) / 10);
+        const matInfo = corp.getMaterial(division, city, material.name);
+        const curQty = matInfo?.qty ?? 0;
+        const targetQty = material.qty ?? 0;
+        const needed = Math.max(0, targetQty - curQty);
+        if (needed <= 0) continue;
+        try {
+            corp.bulkPurchase(division, city, material.name, needed);
+            ns.tprint(`Bulk purchased ${round3(needed)} ${material.name} for ${division}/${city}`);
+            debugLog(ns, 'buyMaterialsUpto bulkPurchase', { division, city, material: material.name, needed });
+        } catch (error) {
+            ns.print(`bulkPurchase failed for ${material.name} (${division}/${city}); falling back to buy rate. Error: ${String(error)}`);
+            debugLog(ns, 'buyMaterialsUpto bulkPurchase-error', { division, city, material: material.name, error: String(error) });
+            fallbackMaterials.push(material);
+            const rate = needed / 10;
+            ns.tprint(`Setting buy rate ${round3(rate)} for ${material.name} (${division}/${city}) target ${round3(targetQty)} current ${round3(curQty)}`);
+            corp.buyMaterial(division, city, material.name, rate);
         }
     }
-    while (true) {
-        let breakOut = true;
-        for (let material of materials) {
-            const curQty = corp.getMaterial(division, city, material.name).qty;
-            if (curQty >= material.qty) corp.buyMaterial(division, city, material.name, 0);
-            else breakOut = false;
+    if (fallbackMaterials.length > 0) {
+        while (true) {
+            let breakOut = true;
+            for (let material of fallbackMaterials) {
+                const curQty = corp.getMaterial(division, city, material.name).qty;
+                if (curQty >= material.qty) {
+                    corp.buyMaterial(division, city, material.name, 0);
+                } else {
+                    breakOut = false;
+                }
+            }
+            logMaterialStatus(ns, division, city, fallbackMaterials, 'tick');
+            if (breakOut) break;
+            await corp.nextUpdate();
         }
-        if (breakOut) break;
-        await corp.nextUpdate();
     }
+    logMaterialStatus(ns, division, city, materials, 'complete');
+    debugLog(ns, 'buyMaterialsUpto complete', { division, city });
 }
 
 function buildSupportMaterialTargets(ns, division, city, multiplier = 1) {
@@ -892,10 +992,118 @@ function buildSupportMaterialTargets(ns, division, city, multiplier = 1) {
     return targets;
 }
 
+function logMaterialStatus(ns, division, city, materials, label = '') {
+    const corp = ns.corporation;
+    const snapshots = materials.map(material => {
+        const mat = safeGetMaterial(corp, division, city, material.name);
+        const currentQty = round3(mat.qty);
+        const targetQty = round3(material.qty ?? 0);
+        return {
+            name: material.name,
+            qty: currentQty,
+            target: targetQty,
+            buyRate: round3(mat.buy ?? 0),
+            prodRate: round3(mat.prod ?? 0),
+            desiredRate: round3(((material.qty ?? 0) - currentQty) / 10),
+        };
+    });
+    const prefix = label ? `Material status [${label}]` : 'Material status';
+    ns.tprint(`${prefix} ${division}/${city}: ${JSON.stringify(snapshots)}`);
+    debugLog(ns, 'materialStatus snapshot', { division, city, label, snapshots });
+}
+
+function safeGetMaterial(corp, division, city, materialName) {
+    try {
+        return corp.getMaterial(division, city, materialName) ?? { qty: 0 };
+    } catch {
+        return { qty: 0 };
+    }
+}
+
+function round3(value) {
+    const num = Number(value);
+    if (Number.isFinite(num)) {
+        return Number(num.toFixed(3));
+    }
+    return 0;
+}
+
 async function stockSupportMaterials(ns, division, city, multiplier = 1) {
     const targets = buildSupportMaterialTargets(ns, division, city, multiplier);
     if (targets.length === 0) return;
+    debugLog(ns, 'stockSupportMaterials targets', { division, city, multiplier, count: targets.length });
     await buyMaterialsUpto(ns, division, city, targets);
+}
+
+function prioritizeCities(cities, mainCity) {
+    const unique = Array.from(new Set(cities));
+    if (!mainCity || !unique.includes(mainCity)) return unique;
+    return [mainCity, ...unique.filter(city => city !== mainCity)];
+}
+
+function estimateCitySetupCost(ns, templateSize = 3) {
+    const constants = ns.corporation.getConstants();
+    const baseCost = constants.officeInitialCost + constants.warehouseInitialCost;
+    const materialBudget = (templateSize ?? 3) * BOOTSTRAP_CONFIG.materialBudgetPerEmployee;
+    return baseCost + materialBudget;
+}
+
+function getDivisionSafe(ns, division) {
+    const corp = ns.corporation;
+    try {
+        return corp.getDivision(division);
+    } catch {
+        return null;
+    }
+}
+
+async function waitForCityBootstrapFunds(ns, division, city, template) {
+    const corp = ns.corporation;
+    let divisionInfo = null;
+    try {
+        divisionInfo = corp.getDivision(division);
+    } catch { /* division not created yet */ }
+    debugLog(ns, 'Bootstrap helper entry', { division, city, existingCities: divisionInfo?.cities ?? [] });
+    if (divisionInfo?.cities?.includes(city)) {
+        debugLog(ns, 'Bootstrap helper skip-existing', { division, city });
+        return;
+    }
+    const targetSize = template?.size ?? 3;
+    const constants = corp.getConstants();
+    const baseCost = constants.officeInitialCost + constants.warehouseInitialCost;
+    const estimatedCost = estimateCitySetupCost(ns, targetSize);
+    const corpStats = corp.getCorporation();
+    const corpFunds = corpStats.funds;
+    const cityCount = divisionInfo?.cities?.length ?? 0;
+    const dynamicFloor = Math.max(
+        BOOTSTRAP_CONFIG.absoluteMinimum,
+        Math.min(BOOTSTRAP_CONFIG.minFundsPerCity, corpFunds * (BOOTSTRAP_CONFIG.bootstrapFraction ?? 1))
+    );
+    let minFunds = Math.max(estimatedCost, dynamicFloor);
+    const canForceFirstCity = cityCount === 0 && corpFunds >= baseCost;
+    if (canForceFirstCity && corpFunds < minFunds) {
+        ns.print(`Bootstrap: forcing first city ${city} with limited funds ${formatMoney(ns, corpFunds)} (target was ${formatMoney(ns, minFunds)})`);
+        debugLog(ns, 'Bootstrap force-first-city', { division, city, corpFunds, minFunds, estimatedCost });
+        return;
+    }
+    let cycles = 0;
+    debugLog(ns, 'Bootstrap wait start', { division, city, minFunds, dynamicFloor, estimatedCost });
+    while (corp.getCorporation().funds < minFunds) {
+        if (cycles >= (BOOTSTRAP_CONFIG.maxWaitCycles ?? 120)) {
+            const stats = corp.getCorporation();
+            ns.print(`Bootstrap: timed out waiting for ${formatMoney(ns, minFunds)}; proceeding with ${formatMoney(ns, stats.funds)}`);
+            debugLog(ns, 'Bootstrap wait timeout', { division, city, funds: stats.funds, target: minFunds });
+            break;
+        }
+        if (cycles % BOOTSTRAP_CONFIG.waitLogEvery === 0) {
+            const stats = corp.getCorporation();
+            ns.print(`Bootstrap: waiting for ${formatMoney(ns, minFunds)} before expanding ${division} to ${city} (funds ${formatMoney(ns, stats.funds)}, profit ${formatMoney(ns, stats.revenue - stats.expenses)})`);
+            debugLog(ns, 'Bootstrap wait tick', { division, city, funds: stats.funds, target: minFunds });
+        }
+        cycles++;
+        await corp.nextUpdate();
+    }
+    debugLog(ns, 'Bootstrap wait satisfied', { division, city, funds: corp.getCorporation().funds, target: minFunds });
 }
 
 function calculateProductBudget(ns, division, version) {
@@ -928,10 +1136,12 @@ function shouldPrioritizeAdvertising(divisionInfo) {
  */
 async function upgradeWarehouseUpto(ns, division, city, level) {
     const corp = ns.corporation;
+    debugLog(ns, 'upgradeWarehouse enter', { division, city, targetLevel: level });
     while (corp.getWarehouse(division, city).level < level) {
         await moneyFor(ns, corp.getUpgradeWarehouseCost, division, city);
         corp.upgradeWarehouse(division, city);
         ns.print(`Upgraded warehouse in ${division} (${city}) to level ${corp.getWarehouse(division, city).level}`);
+        debugLog(ns, 'upgradeWarehouse tick', { division, city, level: corp.getWarehouse(division, city).level });
     }
 }
 
@@ -945,10 +1155,12 @@ async function upgradeWarehouseUpto(ns, division, city, level) {
  */
 async function hireAdVertUpto(ns, division, level) {
     const corp = ns.corporation;
+    debugLog(ns, 'hireAdVert enter', { division, targetLevel: level });
     while (corp.getHireAdVertCount(division) < level) {
         await moneyFor(ns, corp.getHireAdVertCost, division);
         corp.hireAdVert(division);
         ns.print(`Hired AdVert in ${division} to level ${level}`);
+        debugLog(ns, 'hireAdVert tick', { division, currentLevel: corp.getHireAdVertCount(division) });
     }
 }
 
@@ -967,13 +1179,18 @@ async function upgradeOffice(ns, division, city, size, positions) {
     const upgradeSize = size - corp.getOffice(division, city).size;
     if (upgradeSize > 0) {
         ns.print(`Upgrading office in ${division} (${city}) to ${size}`);
+        debugLog(ns, 'upgradeOffice wait-funds', { division, city, size, upgradeSize });
         await moneyFor(ns, corp.getOfficeSizeUpgradeCost, division, city, upgradeSize);
         corp.upgradeOfficeSize(division, city, upgradeSize);
+        debugLog(ns, 'upgradeOffice resized', { division, city, size });
     }
     hireMaxEmployees(ns, division, city);
     const allPositions = getPositions(ns, division, city);
     for (let position of positions) {
-        if (allPositions[position.job] !== position.num) await corp.setAutoJobAssignment(division, city, position.job, position.num);
+        if (allPositions[position.job] !== position.num) {
+            await corp.setAutoJobAssignment(division, city, position.job, position.num);
+            debugLog(ns, 'upgradeOffice assign-job', { division, city, job: position.job, count: position.num });
+        }
     }
 }
 
@@ -1154,15 +1371,19 @@ function manageEmployeeWellness(ns, cities, division) {
 async function investmentOffer(ns, amount, round = 5) {
     const corp = ns.corporation;
     ns.print(`Waiting for investment offer of ${formatMoney(ns, amount)} (target round ${round})`);
+    debugLog(ns, 'investmentOffer start', { amount, round });
     while (true) {
         const offer = corp.getInvestmentOffer();
+        debugLog(ns, 'investmentOffer tick', { currentRound: offer.round, funds: offer.funds });
         if (offer.round > round) {
             ns.print(`Investment round ${round} already passed (current round ${offer.round}).`);
+            debugLog(ns, 'investmentOffer missed', { amount, round, currentRound: offer.round });
             return;
         }
         if (offer.funds >= amount) {
             ns.print(`Accepted investment offer of ${formatMoney(ns, offer.funds)} in round ${offer.round}`);
             corp.acceptInvestmentOffer();
+            debugLog(ns, 'investmentOffer accepted', { amount: offer.funds, round: offer.round });
             return;
         }
         await ns.corporation.nextUpdate();
@@ -1182,6 +1403,7 @@ async function investmentOffer(ns, amount, round = 5) {
  */
 async function makeProduct(ns, division, city, name, design = 0, marketing = 0) {
     const corp = ns.corporation;
+    debugLog(ns, 'makeProduct enter', { division, city, name, design, marketing });
     const products = corp.getDivision(division).products;
     const proposedVersion = parseVersion(name);
     let currentBestVersion = 0;
@@ -1194,7 +1416,11 @@ async function makeProduct(ns, division, city, name, design = 0, marketing = 0) 
         corp.makeProduct(division, city, name, design, marketing);
         ns.print(`Started to make ${name} in ${division} (${city}) with ${formatMoney(ns, design)} for design and ${formatMoney(ns, marketing)} for marketing`);
         trackProductInvestment(name, design, marketing);
-    } else ns.print(`Already making/made ${name} in ${division} (${city})`);
+        debugLog(ns, 'makeProduct started', { division, city, name, design, marketing });
+    } else {
+        ns.print(`Already making/made ${name} in ${division} (${city})`);
+        debugLog(ns, 'makeProduct skipped-existing', { division, city, name });
+    }
 }
 
 /**
@@ -1257,28 +1483,34 @@ function parseVersion(name) {
  */
 async function expandIndustry(ns, industry, division) {
     const corp = ns.corporation;
+    debugLog(ns, 'expandIndustry enter', { industry, division });
     // Be explicit: check if a division with this type or name already exists
     const divisions = corp.getCorporation().divisions || [];
     const hasType = divisions.some(d => d.type === industry);
     const hasName = divisions.some(d => d.name === division);
     if (hasType || hasName) {
         ns.print(`Already expanded: industry=${industry} (exists=${hasType}), name=${division} (exists=${hasName})`);
+        debugLog(ns, 'expandIndustry skip-existing', { industry, division, hasType, hasName });
         return;
     }
 
     ns.print(`Expanding to ${industry} industry: ${division}`);
+    debugLog(ns, 'expandIndustry wait-funds', { industry, division });
     const cost = corp.getIndustryData(industry).startingCost;
     await moneyForAmount(ns, cost);
     try {
         corp.expandIndustry(industry, division);
+        debugLog(ns, 'expandIndustry success', { industry, division });
     } catch (err) {
         // The game's API can throw when the requested division name is already in use by another
         // script or when race conditions occur. If that's the case, detect and ignore it; otherwise rethrow.
         const msg = String(err || '');
         if (msg.toLowerCase().includes('already in use') || msg.toLowerCase().includes('already exists')) {
             ns.print(`expandIndustry: Division name ${division} already in use; skipping.`);
+            debugLog(ns, 'expandIndustry name-conflict', { industry, division, message: msg });
             return;
         }
+        debugLog(ns, 'expandIndustry error', { industry, division, message: msg });
         throw err;
     }
 }
@@ -1294,12 +1526,18 @@ async function expandIndustry(ns, industry, division) {
  */
 async function expandCity(ns, division, city) {
     const corp = ns.corporation;
+    debugLog(ns, 'expandCity enter', { division, city });
     if (!corp.getDivision(division).cities.includes(city)) {
         const cost = corp.getConstants().officeInitialCost;
+        debugLog(ns, 'expandCity wait-funds', { division, city, cost });
         await moneyForAmount(ns, cost);
         corp.expandCity(division, city);
         ns.print(`Expanded to ${city} for ${division}`);
-    } else ns.print(`Already expanded to ${city} for ${division}`);
+        debugLog(ns, 'expandCity success', { division, city });
+    } else {
+        ns.print(`Already expanded to ${city} for ${division}`);
+        debugLog(ns, 'expandCity skip-existing', { division, city });
+    }
 }
 
 /**
@@ -1312,12 +1550,151 @@ async function expandCity(ns, division, city) {
  */
 async function purchaseWarehouse(ns, division, city) {
     const corp = ns.corporation;
+    debugLog(ns, 'purchaseWarehouse enter', { division, city });
     if (!corp.hasWarehouse(division, city)) {
         const cost = corp.getConstants().warehouseInitialCost;
+        debugLog(ns, 'purchaseWarehouse wait-funds', { division, city, cost });
         await moneyForAmount(ns, cost);
         corp.purchaseWarehouse(division, city);
         ns.print(`Purchased warehouse in ${division} (${city})`);
-    } else ns.print(`Already purchased warehouse in ${city} for ${division}`);
+        debugLog(ns, 'purchaseWarehouse success', { division, city });
+    } else {
+        ns.print(`Already purchased warehouse in ${city} for ${division}`);
+        debugLog(ns, 'purchaseWarehouse skip-existing', { division, city });
+    }
+}
+
+function tryUnlockSmartSupplyEarly(ns) {
+    if (isSmartSupplyUnlocked(ns)) {
+        return true;
+    }
+    const corp = ns.corporation;
+    let cost = 0;
+    try {
+        cost = corp.getUnlockCost('Smart Supply');
+    } catch {
+        return false;
+    }
+    if (!(cost > 0 && cost < Infinity)) {
+        return isSmartSupplyUnlocked(ns);
+    }
+    const funds = corp.getCorporation().funds;
+    const reserveFloor = Math.max(
+        SMART_SUPPLY_CONFIG.minReserveAfterUnlock ?? 0,
+        BOOTSTRAP_CONFIG.absoluteMinimum ?? 0,
+    );
+    if (funds - cost < reserveFloor) {
+        ns.print(`Smart Supply costs ${formatMoney(ns, cost)} but only ${formatMoney(ns, funds)} available; deferring unlock.`);
+        return false;
+    }
+    try {
+        corp.purchaseUnlock('Smart Supply');
+        ns.print(`Smart Supply unlocked before bootstrap (cost ${formatMoney(ns, cost)})`);
+        return true;
+    } catch (error) {
+        ns.print(`Smart Supply purchase attempt failed: ${String(error)}`);
+        return false;
+    }
+}
+
+function isSmartSupplyUnlocked(ns) {
+    const corp = ns.corporation;
+    try {
+        if (typeof corp.hasUnlockUpgrade === 'function' && corp.hasUnlockUpgrade('Smart Supply')) {
+            return true;
+        }
+    } catch {
+        // Ignore and fall back to cost probe
+    }
+    try {
+        const cost = corp.getUnlockCost('Smart Supply');
+        return !(cost > 0 && cost < Infinity);
+    } catch {
+        return true;
+    }
+}
+
+function evaluateSmartSupplyUnlock(ns, division, context = {}) {
+    if (isSmartSupplyUnlocked(ns)) {
+        return { ready: true, needsPurchase: false, reason: 'already-unlocked' };
+    }
+    const corp = ns.corporation;
+    let cost = 0;
+    try {
+        cost = corp.getUnlockCost('Smart Supply');
+    } catch {
+        return { ready: true, needsPurchase: false, reason: 'cost-unavailable' };
+    }
+    if (!(cost > 0 && cost < Infinity)) {
+        return { ready: true, needsPurchase: true, reason: 'no-cost' };
+    }
+    const corpStats = corp.getCorporation();
+    const fundsAfter = corpStats.funds - cost;
+    const templateSize = context.templateSize ?? 3;
+    const perCityBudget = estimateCitySetupCost(ns, templateSize);
+    const remainingCities = Math.max(0, context.remainingCities ?? 0);
+    const reserveNeed = Math.max(
+        SMART_SUPPLY_CONFIG.minReserveAfterUnlock,
+        cost * SMART_SUPPLY_CONFIG.fundsBufferMultiplier,
+        perCityBudget * remainingCities * SMART_SUPPLY_CONFIG.reservePerCityMultiplier,
+    );
+    const divisionInfo = getDivisionSafe(ns, division);
+    const builtCities = Math.max(context.builtCities ?? 0, divisionInfo?.cities?.length ?? 0);
+    if (builtCities < SMART_SUPPLY_CONFIG.minCitiesBeforeUnlock) {
+        return { ready: false, needsPurchase: true, reason: 'city-threshold', details: { builtCities } };
+    }
+    if (fundsAfter < reserveNeed) {
+        return { ready: false, needsPurchase: true, reason: 'reserve', details: { fundsAfter, reserveNeed } };
+    }
+    if (SMART_SUPPLY_CONFIG.requirePositiveProfit) {
+        const profit = (divisionInfo?.lastCycleRevenue ?? 0) - (divisionInfo?.lastCycleExpenses ?? 0);
+        if (profit < SMART_SUPPLY_CONFIG.profitFloor) {
+            return { ready: false, needsPurchase: true, reason: 'profit', details: { profit } };
+        }
+    }
+    return { ready: true, needsPurchase: true, reason: 'requirements-met', details: { fundsAfter, reserveNeed } };
+}
+
+async function ensureSmartSupplyUnlocked(ns, division, context = {}) {
+    const corp = ns.corporation;
+    const waitForUnlock = Boolean(context.wait);
+    let cycles = 0;
+    while (true) {
+        const assessment = evaluateSmartSupplyUnlock(ns, division, context);
+        if (assessment.ready) {
+            if (assessment.needsPurchase && !isSmartSupplyUnlocked(ns)) {
+                await unlockUpgrade(ns, 'Smart Supply');
+                ns.print(`Smart Supply unlocked (${context.reason ?? 'auto'})`);
+                debugLog(ns, 'smartSupply unlocked', { reason: context.reason, details: assessment.details });
+            }
+            return true;
+        }
+        if (!waitForUnlock) {
+            debugLog(ns, 'smartSupply deferral', { reason: assessment.reason, context, details: assessment.details });
+            return false;
+        }
+        if (cycles >= (SMART_SUPPLY_CONFIG.maxWaitCycles ?? 120)) {
+            ns.print(`Smart Supply gating timed out (${assessment.reason}); unlocking to avoid stall.`);
+            await unlockUpgrade(ns, 'Smart Supply');
+            return true;
+        }
+        if (cycles % (SMART_SUPPLY_CONFIG.waitLogEvery ?? 5) === 0) {
+            const corpStats = corp.getCorporation();
+            ns.print(`Smart Supply waiting (${assessment.reason}) | Funds ${formatMoney(ns, corpStats.funds)}`);
+            debugLog(ns, 'smartSupply waiting', { reason: assessment.reason, details: assessment.details });
+        }
+        cycles++;
+        await corp.nextUpdate();
+    }
+}
+
+function enableSmartSupply(ns, division, city, enabled = true) {
+    const corp = ns.corporation;
+    try {
+        corp.setSmartSupply(division, city, enabled);
+    } catch {
+        // Warehouse API may be missing temporarily; swallow and continue.
+    }
 }
 
 /**
@@ -1329,18 +1706,23 @@ async function purchaseWarehouse(ns, division, city) {
  */
 async function unlockUpgrade(ns, upgrade) {
     const corp = ns.corporation;
+    debugLog(ns, 'unlockUpgrade enter', { upgrade });
     // Check if already purchased by trying to get the cost (will be 0 or Infinity if owned)
     try {
         const cost = corp.getUnlockCost(upgrade);
         if (cost > 0 && cost < Infinity) {
+            debugLog(ns, 'unlockUpgrade wait-funds', { upgrade, cost });
             await moneyForAmount(ns, cost);
             corp.purchaseUnlock(upgrade);
             ns.print(`Purchased ${upgrade}`);
+            debugLog(ns, 'unlockUpgrade success', { upgrade });
         } else {
             ns.print(`Already purchased ${upgrade}`);
+            debugLog(ns, 'unlockUpgrade skip-existing', { upgrade });
         }
     } catch {
         ns.print(`Already purchased ${upgrade}`);
+        debugLog(ns, 'unlockUpgrade skip-existing', { upgrade, via: 'exception' });
     }
 }
 

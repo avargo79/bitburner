@@ -281,6 +281,7 @@ npx eslint src/           # Lint source code
 - **AGENTS.md**: Complete development guide and architecture overview
 - **Feature Specs**: Detailed specifications in `features/` directory
 - **Browser API Guide**: Complete reference in README Browser API section
+- **Corporation Strategy Guide**: Comprehensive strategies and automation best practices for Bitburner Corporation gameplay ([docs/corporation-strategy.md](docs/corporation-strategy.md))
 
 ### Getting Help
 - `/help` - Get help with opencode usage

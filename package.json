@@ -20,6 +20,7 @@
     "concurrently": "^7.4.0",
     "eslint": "^8.22.0",
     "fast-glob": "^3.2.12",
+    "openspec": "^0.0.0",
     "sync-directory": "^5.1.7",
     "typescript": "^4.7.4"
   }
