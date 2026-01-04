@@ -141,6 +141,28 @@ Corporation actions run in a repeating 10-second cycle:
 
 ---
 
+### Vertical Integration (The "Meta" Strategy)
+
+This strategy maximizes the quality of your products (Tobacco) by feeding them high-quality raw materials (Plants) from your own Agriculture division. High quality inputs = High quality products = Massive Sales.
+
+**1. Setup Agriculture (The Supplier)**
+   - Goal: Produce massive amounts of high-quality **Plants**.
+   - Maximize "Real Estate" in Agriculture warehouses to boost production multiplier.
+   - Invest in upgrades: FocusWires, Neural Accelerators, Speech Processor Implants.
+
+**2. Setup Tobacco (The Producer)**
+   - Goal: Produce high-quality Tobacco products using your own Plants.
+   - **CRITICAL STEP**: Go to your **Agriculture** division. In the "Export" tab (or via script), set up an export of **Plants** to your **Tobacco** division.
+   - **Export Amount**: Set to `MAX` or use a negative value in scripts (e.g., maintain 0 stock).
+   - Tobacco products created using high-quality internal inputs will have vastly superior stats compared to those made with bought materials.
+
+**3. The Loop**
+   - Quality Plants from Agriculture -> Tobacco Warehouse.
+   - Tobacco converts Plants -> High Quality Products.
+   - High Rating Products -> Exponentially higher sales price.
+
+---
+
 ### Late Game / Endgame
 
 **1. Go Public (IPO) & Issue Dividends**
@@ -181,8 +203,21 @@ Corporation actions run in a repeating 10-second cycle:
 ### Incremental Automation Script Ideas
 
 **1. Employee Morale & Energy Maintainer**
-- Script to buy tea and throw parties if morale/energy < 100%.
-- Run every cycle or as needed.
+```javascript
+/** @param {NS} ns */
+export async function main(ns) {
+    const div = "Agriculture";
+    const cities = ["Sector-12", "Aevum", "Volhaven", "Chongqing", "New Tokyo", "Ishima"];
+    while (true) {
+        for (const city of cities) {
+            const office = ns.corporation.getOffice(div, city);
+            if (office.avgMorale < 98) ns.corporation.throwParty(div, city, 500_000);
+            if (office.avgEnergy < 98) ns.corporation.buyTea(div, city);
+        }
+        await ns.sleep(10000); // Check every 10 seconds
+    }
+}
+```
 
 **2. Set All Cities Buy/Sell Amounts**
 - Command-line utility to set buy/sell orders for all cities in a division.
@@ -281,6 +316,12 @@ Corporation actions run in a repeating 10-second cycle:
 - **Selling Shares Too Early**: Selling too many shares in early investment rounds reduces future dividend income.
 
 ---
+
+### Troubleshooting Common Script Errors
+
+- **`NS_ERROR: not enough funds`**: Your script is trying to buy something (like an upgrade or material) but your corporation lacks funds. *Fix*: Add `if (ns.corporation.getCorporation().funds > cost) { ... }` checks.
+- **`function is not defined`**: You likely forgot to unlock the Corporation API. *Fix*: Go to the Corporation tab -> Management -> API and purchase access.
+- **`Division not found`**: Check your capitalization! "agriculture" != "Agriculture".
 
 ### Research Priorities
 

@@ -60,7 +60,9 @@ export async function main(ns: NS): Promise<void> {
             ns.exec("sleeve.js", "home", 1);
             ns.exec("gangs.js", "home", 1);
             // ns.exec("corp.js", "home", 1);
+            ns.exec("bladeburner.js", "home", 1);
             ns.exec("server-manager.js", "home", 1);
+            ns.exec("hacknet.js", "home", 1);
             ns.exec("botnet.js", "home", 1);
             break;
         }

@@ -16,7 +16,7 @@ import { NS, BladeburnerActionName, BladeburnerActionType, BladeburnerSkillName,
  * Key Parameters:
  * - Chaos threshold: 50 (triggers city switch or diplomacy)
  * - City switch threshold: 20 chaos improvement required
- * - Stamina threshold: 70% (triggers healing)
+ * - Stamina threshold: 80% (triggers healing; configurable in code)
  * - Health threshold: 50% (triggers healing)
  * - Training threshold: 100 (minimum stat level)
  * - Success rate min: 70% (operations/contracts), 99% (Black Ops)
@@ -296,8 +296,21 @@ function selectAction(ns: NS): BladeburnerAction {
     ns.print("Selecting Best ROI action: " + bestActions[0].name);
     action = bestActions[0];
   } else {
-    ns.print("No valid ROI actions, defaulting to Training, Field Analysis, or Recruitment");
-    action = trainingAction ?? researchAction ?? recruitAction;
+    ns.print("No valid ROI actions, applying fallback order (Training, Research, Recruit, only Rest if needed)");
+    // Fallback preference: Train > Research > Recruit > (only rest if tired) > anything available
+    if (trainingAction && (!isTrained(ns) || trainingAction.remainingCount > 0)) {
+      action = trainingAction;
+    } else if (researchAction) {
+      action = researchAction;
+    } else if (recruitAction) {
+      action = recruitAction;
+    } else if (healAction && isTired(ns)) {
+      action = healAction; // Only rest if actually tired
+    } else {
+      // As absolute fallback, pick anything available that is NOT resting unless nothing else exists
+      const actionsExcludingRest = bestActions.filter(a => a.name !== "Hyperbolic Regeneration Chamber");
+      action = actionsExcludingRest[0] ?? bestActions[0] ?? (evaluateActions(ns).filter(a => a.name !== "Hyperbolic Regeneration Chamber")[0]) ?? (evaluateActions(ns)[0] as BladeburnerAction);
+    }
   }
 
   // Safety check: ensure action exists
@@ -310,13 +323,15 @@ function selectAction(ns: NS): BladeburnerAction {
 
 /**
  * Checks if player needs healing based on stamina and health levels
- * Returns true if current stamina is below 70% of maximum OR health is below 50%
+ * Returns true if current stamina is below the rest threshold (default 80% of max) OR health is not full
  */
+// Only heal if stamina is below threshold or HP is not full
+const STAMINA_REST_THRESHOLD = 0.8; // Rest if stamina is below 80% of max (adjustable)
 function isTired(ns: NS): boolean {
   const [currentStamina, maxStamina] = ns.bladeburner.getStamina();
   const player = ns.getPlayer();
-  // Only heal if stamina or HP is not full
-  const needsStamina = currentStamina < maxStamina;
+  // Only heal if stamina is below threshold (configurable) or HP is not full
+  const needsStamina = currentStamina < STAMINA_REST_THRESHOLD * maxStamina;
   const needsHealth = player.hp.current < player.hp.max;
   return needsStamina || needsHealth;
 }

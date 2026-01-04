@@ -4,6 +4,23 @@
 ## Phase 1: Early Game Foundation (BitNode 1 Start)
 
 ### Step 1: Initial Setup - Choose Your Path
+
+```mermaid
+graph TD
+    Start[Start Game] --> Choice{Choose Path}
+    Choice -->|Combat/Crime| Crime[Crime Path]
+    Choice -->|Hacking/Job| Job[Job Path]
+    
+    Crime --> Shoplift[Shoplifting Route]
+    Crime --> Mug[Mugging Route]
+    
+    Job --> Uni[Study CS]
+    Job --> Work[Work at Joe's Guns]
+    
+    Shoplift --> EarlyMoney[Quick Early Money]
+    Mug --> CombatStats[Combat Stats + Money]
+    Work --> Stable[Stable Income]
+```
 - **Goal**: Build basic stats and money
 - **Option A - Crime Path** (Popular early strategy):
   
@@ -34,6 +51,9 @@
   1. Study Computer Science at university until Hacking 50
   2. Work at Joe's Guns for steady income ($110/sec) while doing other activities
 - **Both paths**: Build Hacknet nodes for passive income once you have some starting capital
+
+> [!TIP]
+> **Automation Potential**: While you can't automate gym training or crime early on (requires Singularity API), you *can* and *should* automate the creation of hacking scripts. Even in BN1, your home computer can run scripts to hack servers while you manually do crimes.
 
 ### Step 2: First Faction - CyberSec
 - **Requirements**: 
@@ -77,6 +97,9 @@
 - **Key Augmentations**: 
   - Hacknet Node CPU Architecture (+20% hacknet production)
   - Hacknet Node NIC Architecture (+20% hacknet production)
+
+> [!TIP]
+> **Automation Potential**: Hacknet Nodes are the easiest thing to automate early. Write a script using `hacknet.purchaseNode()`, `hacknet.upgradeLevel()`, etc., to manage this entirely in the background.
 
 ### Step 5: First Company Job
 - **Recommended Company**: ECorp or MegaCorp

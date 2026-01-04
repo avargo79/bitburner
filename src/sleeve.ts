@@ -10,9 +10,9 @@ const CONFIG = {
     SYNC_TARGET: 100,
 
     // Stat training phases
+    STAT_TARGET: 100,                // Train all stats to this level before karma grinding
     GYM_TRAINING_MIN: 10,            // Use gym until stats reach this, then switch to crimes
     CRIME_TRAINING_MAX: 50,          // Use crimes until this level, then back to gym
-    MIN_CRIME_STATS: 20,            // Minimum stats before karma grinding
     AUG_PURCHASE_THRESHOLD: 40,     // Train stats to this level before buying augs
 
     // Karma and gang
@@ -78,12 +78,10 @@ function getGangFaction(ns: NS): string | null {
 // ============================================================================
 
 /**
- * Get the lowest stat from a sleeve's skills
+ * Get the lowest combat stat from a sleeve's skills (for Bladeburner)
  */
 function getLowestStat(skills: SleeveStats): number {
     return Math.min(
-        skills.hacking,
-        skills.charisma,
         skills.strength,
         skills.defense,
         skills.dexterity,
@@ -92,17 +90,28 @@ function getLowestStat(skills: SleeveStats): number {
 }
 
 /**
- * Identify which stat is the lowest
+ * Get the lowest combat stat from the player
+ */
+function getPlayerLowestCombatStat(ns: NS): number {
+    const player = ns.getPlayer();
+    return Math.min(
+        player.skills.strength,
+        player.skills.defense,
+        player.skills.dexterity,
+        player.skills.agility
+    );
+}
+
+/**
+ * Identify which combat stat is the lowest (for Bladeburner)
  */
 function identifyLowestStatName(skills: SleeveStats): keyof SleeveStats {
     const lowest = getLowestStat(skills);
-    // Check in priority order: combat stats first, then social/mental
+    // Check combat stats only
     if (skills.agility === lowest) return "agility";
     if (skills.defense === lowest) return "defense";
     if (skills.dexterity === lowest) return "dexterity";
     if (skills.strength === lowest) return "strength";
-    if (skills.charisma === lowest) return "charisma";
-    if (skills.hacking === lowest) return "hacking";
     return "agility"; // Fallback to agility
 }
 
@@ -121,12 +130,13 @@ function shouldDoCrimeTraining(lowestStat: number): boolean {
 }
 
 /**
- * Check if sleeve should grind karma for gang unlock
+ * Check if sleeve should grind karma for gang unlock (based on PLAYER stats)
  */
-function shouldGrindKarma(ns: NS, lowestStat: number): boolean {
+function shouldGrindKarma(ns: NS): boolean {
+    const playerLowestStat = getPlayerLowestCombatStat(ns);
     return (
         ns.getResetInfo().currentNode !== 2 &&
-        lowestStat >= CONFIG.MIN_CRIME_STATS &&
+        playerLowestStat >= CONFIG.STAT_TARGET &&
         ns.heart.break() > CONFIG.GANG_REQUIRED_KARMA
     );
 }
@@ -240,18 +250,6 @@ function assignStatTraining(ns: NS, sleeveIndex: number, skills: SleeveStats): v
                 ns.print(`Sleeve ${sleeveIndex}: ✓ Training Agility`);
             }
             break;
-        case "charisma":
-            if (!isDoingTask(SleeveActivity.UNIVERSITY, "Leadership")) {
-                ns.sleeve.setToUniversityCourse(sleeveIndex, "Rothman University", "Leadership");
-                ns.print(`Sleeve ${sleeveIndex}: ✓ Training Charisma`);
-            }
-            break;
-        case "hacking":
-            if (!isDoingTask(SleeveActivity.UNIVERSITY, "Algorithms")) {
-                ns.sleeve.setToUniversityCourse(sleeveIndex, "Rothman University", "Algorithms");
-                ns.print(`Sleeve ${sleeveIndex}: ✓ Training Hacking`);
-            }
-            break;
     }
 }
 
@@ -319,35 +317,38 @@ function manageSleeve(ns: NS, sleeveIndex: number): void {
     }
 
     const lowestStat = getLowestStat(sleeve.skills);
+    const playerKarma = ns.heart.break();
+    const playerLowestStat = getPlayerLowestCombatStat(ns);
 
-    // Try to buy augmentations if stats are high enough
-    tryPurchaseAugmentations(ns, sleeveIndex, lowestStat);
+    ns.print(`Sleeve ${sleeveIndex}: Str=${sleeve.skills.strength} Def=${sleeve.skills.defense} Dex=${sleeve.skills.dexterity} Agi=${sleeve.skills.agility} | Lowest=${lowestStat}`);
+    ns.print(`Player Stats: Lowest=${playerLowestStat} | Karma=${playerKarma.toFixed(0)}`);
 
-    // Priority 3: Karma grinding (if needed for gang)
-    if (shouldGrindKarma(ns, lowestStat)) {
-        assignKarmaGrinding(ns, sleeveIndex);
-        return;
-    }
-
-    // Priority 4: Faction work (if stats are high and player has joined factions)
-    if (tryAssignFactionWork(ns, sleeveIndex, lowestStat)) {
-        return;
-    }
-
-    // Priority 5: Gym training (very early game, stats < 10)
-    if (shouldUseGymTraining(lowestStat)) {
+    // Priority 3: If player stats < 100, train sleeve combat stats or do crimes
+    if (playerLowestStat < CONFIG.STAT_TARGET) {
         assignStatTraining(ns, sleeveIndex, sleeve.skills);
         return;
     }
 
-    // Priority 6: Crime-based training (early-mid game, free stats)
-    if (shouldDoCrimeTraining(lowestStat)) {
-        assignCrimeTraining(ns, sleeveIndex, sleeve.skills);
+    // Priority 4: Karma grinding (homicide until -54,000 karma)
+    if (shouldGrindKarma(ns)) {
+        assignKarmaGrinding(ns, sleeveIndex);
         return;
     }
 
-    // Priority 7: Gym/University stat training (high-level training)
-    assignStatTraining(ns, sleeveIndex, sleeve.skills);
+    // Priority 5: Try to buy augmentations if available
+    tryPurchaseAugmentations(ns, sleeveIndex, lowestStat);
+
+    // Priority 6: Faction work (mimic player activity)
+    if (tryAssignFactionWork(ns, sleeveIndex, lowestStat)) {
+        return;
+    }
+
+    // Priority 7: Crime for money (post-karma grinding)
+    const currentTask = ns.sleeve.getTask(sleeveIndex);
+    if (currentTask?.type !== SleeveActivity.CRIME || currentTask.crimeType !== "Homicide") {
+        ns.sleeve.setToCommitCrime(sleeveIndex, "Homicide");
+        ns.print(`Sleeve ${sleeveIndex}: Crime for money (Homicide)`);
+    }
 }
 
 // ============================================================================
