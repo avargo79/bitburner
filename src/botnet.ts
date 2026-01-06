@@ -2,6 +2,57 @@ import { NS } from '@ns';
 import { Logger, LogLevel } from '/lib/logger';
 
 /**
+ * Check if botnet script prerequisites are met
+ * @param {NS} ns - Netscript API
+ * @returns {{ready: boolean, reason?: string}} Prerequisite check result
+ */
+export function checkPrerequisites(ns: NS): { ready: boolean; reason?: string } {
+    // Check home RAM (need at least 64GB)
+    const homeServer = ns.getServer('home');
+    const homeRAM = homeServer.maxRam;
+    
+    if (homeRAM < 64) {
+        return { ready: false, reason: `Insufficient home RAM (need 64GB, have ${homeRAM}GB)` };
+    }
+    
+    // Check total network RAM
+    const servers = getAllServersForPrereq(ns);
+    let totalRAM = 0;
+    
+    for (const hostname of servers) {
+        const server = ns.getServer(hostname);
+        if (server.hasAdminRights && server.maxRam > 0) {
+            totalRAM += server.maxRam;
+        }
+    }
+    
+    if (totalRAM < 100) {
+        return { ready: false, reason: `Insufficient total network RAM (need 100GB, have ${totalRAM.toFixed(0)}GB)` };
+    }
+    
+    return { ready: true };
+}
+
+/**
+ * Get all servers in the network (for prerequisite check)
+ */
+function getAllServersForPrereq(ns: NS): string[] {
+    const visited = new Set<string>();
+    const queue = ['home'];
+    
+    while (queue.length > 0) {
+        const current = queue.shift()!;
+        if (visited.has(current)) continue;
+        
+        visited.add(current);
+        const neighbors = ns.scan(current);
+        queue.push(...neighbors.filter(n => !visited.has(n)));
+    }
+    
+    return Array.from(visited);
+}
+
+/**
  * Botnet: Performance-Optimized Event-Driven HWGW System
  * Advanced performance tracking, smart resource allocation, and real-time dashboard
  */
@@ -2865,6 +2916,14 @@ class BotnetController {
 
 export async function main(ns: NS): Promise<void> {
   ns.disableLog('ALL');
+  
+  // Early exit if prerequisites not met
+  const prereqCheck = checkPrerequisites(ns);
+  if (!prereqCheck.ready) {
+    ns.tprint(`WARN: Botnet script cannot run - ${prereqCheck.reason}`);
+    ns.tprint(`      Consider running server-manager.ts to root more servers or upgrading home RAM`);
+    return;
+  }
 
   // Check for debug flag
   const debugMode = ns.args.includes('--debug') || ns.args.includes('-d');

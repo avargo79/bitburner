@@ -1,5 +1,30 @@
 import { NS } from "@ns";
 
+/**
+ * Check if hacknet script prerequisites are met
+ * @param {NS} ns - Netscript API
+ * @returns {{ready: boolean, reason?: string}} Prerequisite check result
+ */
+export function checkPrerequisites(ns: NS): { ready: boolean; reason?: string } {
+    const player = ns.getPlayer();
+    
+    // Check if hacknet API available
+    if (!ns.hacknet) {
+        return { ready: false, reason: "Hacknet API unavailable" };
+    }
+    
+    // Check minimum money (need at least $10k for first node/upgrade)
+    if (player.money < 10000) {
+        return { ready: false, reason: "Insufficient money for hacknet (need $10k)" };
+    }
+    
+    // Hacknet servers require SF9 or BN9
+    // Standard hacknet nodes are always available
+    // We'll let the script handle this internally
+    
+    return { ready: true };
+}
+
 // Lightweight interfaces for standalone operation
 interface HacknetConfig {
   enabled: boolean;
@@ -149,6 +174,13 @@ export async function main(ns: NS): Promise<void> {
   // Handle help flag
   if (flags.help) {
     showHelp(ns);
+    return;
+  }
+  
+  // Early exit if prerequisites not met
+  const prereqCheck = checkPrerequisites(ns);
+  if (!prereqCheck.ready) {
+    ns.tprint(`WARN: Hacknet script cannot run - ${prereqCheck.reason}`);
     return;
   }
 

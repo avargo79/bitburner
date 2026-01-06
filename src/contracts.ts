@@ -2,6 +2,17 @@
 
 import type { NS } from '@ns'
 
+/**
+ * Check if contracts script prerequisites are met
+ * @param {NS} ns - Netscript API
+ * @returns {{ready: boolean, reason?: string}} Prerequisite check result
+ */
+export function checkPrerequisites(ns: NS): { ready: boolean; reason?: string } {
+	// Contracts use scan, ls, and contract APIs which are always available
+	// No special source files or bitnodes required
+	return { ready: true };
+}
+
 export async function main(ns: NS): Promise<void> {
 	// UNIFIED CONTRACT SOLVER
 	// All functionality inlined - no helper scripts needed

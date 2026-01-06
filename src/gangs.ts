@@ -1,5 +1,47 @@
 import { Gang, NS } from "@ns";
 
+/**
+ * Check if gangs script can run
+ * Requires SF2 (Rise of the Underworld) or currently in BN2
+ * Also requires sufficient karma (<-54000)
+ */
+/**
+ * Check if gang script prerequisites are met
+ * @param {NS} ns - Netscript API
+ * @returns {{ready: boolean, reason?: string}} Prerequisite check result
+ */
+export function checkPrerequisites(ns: NS): { ready: boolean; reason?: string } {
+    const player = ns.getPlayer();
+    const resetInfo = ns.getResetInfo();
+    const currentBN = resetInfo.currentNode;
+    const sourceFiles = ns.singularity.getOwnedSourceFiles();
+    const sf2Level = sourceFiles.find((sf: any) => sf.n === 2)?.lvl ?? 0;
+    
+    // Check if gang API available
+    if (!ns.gang) {
+        if (currentBN !== 2 && sf2Level === 0) {
+            return { ready: false, reason: "Gang API unavailable (need SF2 or BN2)" };
+        }
+        return { ready: false, reason: "Gang API unavailable" };
+    }
+    
+    // Check if already in a gang
+    try {
+        if (ns.gang.inGang()) {
+            return { ready: true };
+        }
+    } catch {
+        return { ready: false, reason: "Gang API error" };
+    }
+    
+    // Check karma requirement for gang creation
+    if (player.karma > -54000) {
+        return { ready: false, reason: `Insufficient karma for gang (need -54000, have ${Math.floor(player.karma)})` };
+    }
+    
+    return { ready: true };
+}
+
 const factionName = "Slum Snakes";
 
 // Configuration constants
@@ -56,6 +98,14 @@ const TASK_WARFARE: TaskInfo = {
 
 export async function main(ns: NS): Promise<void> {
     ns.disableLog("ALL");
+    
+    // Early exit if prerequisites not met
+    const prereqCheck = checkPrerequisites(ns);
+    if (!prereqCheck.ready) {
+        ns.tprint(`WARN: Gang script cannot run - ${prereqCheck.reason}`);
+        return;
+    }
+    
     const gang = ns.gang;
     const myGang = new PlayerGang(ns);
 

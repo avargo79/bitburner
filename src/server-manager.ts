@@ -1,5 +1,16 @@
 import { AutocompleteData, NS } from "@ns";
 
+/**
+ * Check if server-manager script prerequisites are met
+ * @param {NS} ns - Netscript API
+ * @returns {{ready: boolean, reason?: string}} Prerequisite check result
+ */
+export function checkPrerequisites(ns: NS): { ready: boolean; reason?: string } {
+    // Server manager uses scan, getServer, and other basic APIs
+    // These are always available
+    return { ready: true };
+}
+
 interface ServerStats {
     totalServers: number;
     rootedServers: number;

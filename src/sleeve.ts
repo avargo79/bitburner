@@ -1,5 +1,38 @@
 import { NS } from "@ns";
 
+/**
+ * Check if sleeve script can run
+ * Requires SF10 (Digital Carbon) or currently in BN10
+ */
+/**
+ * Check if sleeve script prerequisites are met
+ * @param {NS} ns - Netscript API
+ * @returns {{ready: boolean, reason?: string}} Prerequisite check result
+ */
+export function checkPrerequisites(ns: NS): { ready: boolean; reason?: string } {
+    const resetInfo = ns.getResetInfo();
+    const currentBN = resetInfo.currentNode;
+    const sourceFiles = ns.singularity.getOwnedSourceFiles();
+    const sf10Level = sourceFiles.find((sf: any) => sf.n === 10)?.lvl ?? 0;
+    
+    // Check if in BN10 or have SF10
+    if (currentBN !== 10 && sf10Level === 0) {
+        return { ready: false, reason: "Sleeves unavailable (need SF10 or BN10)" };
+    }
+    
+    // Check if sleeves exist
+    try {
+        const sleeveCount = ns.sleeve.getNumSleeves();
+        if (sleeveCount === 0) {
+            return { ready: false, reason: "No sleeves available" };
+        }
+    } catch {
+        return { ready: false, reason: "Sleeve API unavailable" };
+    }
+    
+    return { ready: true };
+}
+
 // ============================================================================
 // CONFIGURATION
 // ============================================================================
@@ -357,6 +390,13 @@ function manageSleeve(ns: NS, sleeveIndex: number): void {
 
 export async function main(ns: NS): Promise<void> {
     ns.disableLog("ALL");
+    
+    // Early exit if prerequisites not met
+    const prereqCheck = checkPrerequisites(ns);
+    if (!prereqCheck.ready) {
+        ns.tprint(`WARN: Sleeve script cannot run - ${prereqCheck.reason}`);
+        return;
+    }
 
     // Set all sleeves to idle on script exit
     ns.atExit(() => {

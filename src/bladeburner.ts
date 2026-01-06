@@ -1,6 +1,56 @@
 import { NS, BladeburnerActionName, BladeburnerActionType, BladeburnerSkillName, CityName } from '../NetscriptDefinitions';
 
 /**
+ * Check if bladeburner script can run
+ * Requires SF7 (Bladeburners) or currently in BN7
+ * Also requires minimum combat stats (100+)
+ */
+/**
+ * Check if bladeburner script prerequisites are met
+ * @param {NS} ns - Netscript API
+ * @returns {{ready: boolean, reason?: string}} Prerequisite check result
+ */
+export function checkPrerequisites(ns: NS): { ready: boolean; reason?: string } {
+    const player = ns.getPlayer();
+    const resetInfo = ns.getResetInfo();
+    const currentBN = resetInfo.currentNode;
+    const sourceFiles = ns.singularity.getOwnedSourceFiles();
+    const sf7Level = sourceFiles.find((sf: any) => sf.n === 7)?.lvl ?? 0;
+    
+    // Check if bladeburner API available
+    if (!ns.bladeburner) {
+        if (currentBN !== 7 && sf7Level === 0) {
+            return { ready: false, reason: "Bladeburner API unavailable (need SF7 or BN7)" };
+        }
+        return { ready: false, reason: "Bladeburner API unavailable" };
+    }
+    
+    // Check if already in Bladeburner division
+    try {
+        const currentAction = ns.bladeburner.getCurrentAction();
+        if (currentAction) {
+            return { ready: true }; // Already running
+        }
+    } catch {
+        // Not in division yet, which is fine
+    }
+    
+    // Check minimum combat stats (recommended: 100+)
+    const minStat = Math.min(
+        player.skills.strength,
+        player.skills.defense,
+        player.skills.dexterity,
+        player.skills.agility
+    );
+    
+    if (minStat < 100) {
+        return { ready: false, reason: `Low combat stats for Bladeburner (min ${minStat}/100)` };
+    }
+    
+    return { ready: true };
+}
+
+/**
  * Bladeburner Automation Script
  * 
  * Autonomous management of Bladeburner division operations including:
@@ -46,6 +96,13 @@ type BladeburnerAction = {
  */
 export async function main(ns: NS): Promise<void> {
   ns.disableLog("sleep");
+  
+  // Early exit if prerequisites not met
+  const prereqCheck = checkPrerequisites(ns);
+  if (!prereqCheck.ready) {
+    ns.tprint(`WARN: Bladeburner script cannot run - ${prereqCheck.reason}`);
+    return;
+  }
 
   if (ns.bladeburner.joinBladeburnerDivision()) {
     ns.singularity.stopAction();
